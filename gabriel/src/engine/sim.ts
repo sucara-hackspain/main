@@ -1,8 +1,8 @@
 import type { Coordinator, Decision } from "./coordinator";
-import { advance, applyAction, applyMasterAction, createWorld, DEFAULT_CONFIG, summarize } from "./engine";
+import { advance, applyAction, applyMasterAction, createWorld, DEFAULT_CONFIG, replanKnownClosures, summarize } from "./engine";
 import type { Graph } from "./graph";
 import type { Master } from "./master";
-import { createBelief, truthfulObserver, updateBelief, type Observer } from "./observer";
+import { createBelief, FieldObserver, updateBelief, type Observer } from "./observer";
 import { Rng } from "./rng";
 import type { Action, Belief, MasterAction, Report, SimConfig, World, WorldEvent } from "./types";
 
@@ -25,8 +25,8 @@ export interface TickResult {
 }
 
 /**
- * One tick = master changes the world -> world advances 30 s -> coordinator hears
- * the reports and gives orders (only if there is anything new to hear).
+ * One tick = master changes the world -> world advances 30 s -> the observer decides which
+ * reports get through -> coordinator hears them and gives orders (only if there is anything new).
  */
 export class Simulation {
   readonly graph: Graph;
@@ -37,6 +37,7 @@ export class Simulation {
   private readonly observer: Observer;
   private readonly masterRng: Rng;
   private readonly observerRng: Rng;
+  private readonly worldRng: Rng;
   private observedUpTo = 0;
   private nextReportId = 1;
   private injected: MasterAction[] = [];
@@ -46,10 +47,11 @@ export class Simulation {
     const root = new Rng(options.seed ?? 1);
     this.masterRng = root.fork();
     this.observerRng = root.fork();
+    this.worldRng = root.fork();
     this.graph = options.graph;
     this.master = options.master;
     this.coordinator = options.coordinator;
-    this.observer = options.observer ?? truthfulObserver;
+    this.observer = options.observer ?? new FieldObserver();
     this.world = createWorld(options.graph, { ...DEFAULT_CONFIG, ...options.config });
     this.belief = createBelief(this.world);
   }
@@ -70,16 +72,19 @@ export class Simulation {
 
     const masterActions = [...this.injected, ...(await this.master.act(world, graph, this.masterRng))];
     this.injected = [];
-    for (const action of masterActions) applyMasterAction(world, graph, action);
+    for (const action of masterActions) applyMasterAction(world, graph, action, this.worldRng);
 
-    advance(world, graph);
+    advance(world, graph, this.worldRng);
 
     const fresh = world.log.slice(this.observedUpTo);
     this.observedUpTo = world.log.length;
     const reports = this.observer
-      .observe(fresh, world, this.observerRng)
-      .map((report) => ({ ...report, id: this.nextReportId++ }));
-    updateBelief(this.belief, reports, world);
+      .observe(fresh, world, graph, this.observerRng)
+      .map((report) => ({ ...report, tick: world.tick, id: this.nextReportId++ }));
+    updateBelief(this.belief, reports, world, graph);
+    // Drivers plan with what dispatch knows (plus what they have just run into), not with the truth.
+    world.knownClosed = [...new Set([...this.belief.closedEdges, ...world.knownClosed.filter((e) => world.closedEdges.includes(e))])];
+    replanKnownClosures(world, graph);
 
     let decision: Decision | undefined;
     if (reports.length > 0) {
