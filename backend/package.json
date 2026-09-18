@@ -1,0 +1,19 @@
+{
+  "name": "dana-sim",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node --import tsx --test src/*.test.ts",
+    "sim": "tsx src/cli.ts",
+    "map": "tsx src/fetch-map.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module",
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}
