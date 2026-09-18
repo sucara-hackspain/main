@@ -1,0 +1,73 @@
+:root {
+  --bg: #0b1120;
+  --panel: #111a2e;
+  --line: #1f2b45;
+  --text: #e2e8f0;
+  --muted: #8a9ab8;
+  --good: #22c55e;
+  --bad: #ef4444;
+  --warn: #f59e0b;
+  --call: #facc15;
+  --order: #38bdf8;
+  --llm: #a78bfa;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+ul, ol { list-style: none; margin: 0; padding: 0; }
+button, select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+
+.app { display: grid; grid-template-columns: 1fr 400px; height: 100%; }
+.stage { position: relative; min-width: 0; }
+.map, .empty { position: absolute; inset: 0; }
+.empty { display: grid; place-items: center; color: var(--muted); }
+
+.transport { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: rgb(17 26 46 / 0.92); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(6px); }
+.transport .primary { width: 38px; font-size: 14px; }
+.transport .clock { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.scrubber { position: relative; flex: 1; }
+.scrubber input { width: 100%; margin: 0; display: block; accent-color: var(--order); }
+.marks { position: absolute; left: 8px; right: 8px; top: -7px; height: 5px; pointer-events: none; }
+.marks i { position: absolute; width: 3px; height: 5px; margin-left: -1px; border-radius: 1px; background: var(--llm); opacity: 0.8; }
+.marks i.bad { background: var(--bad); height: 8px; top: -3px; }
+.marks i.warn { background: var(--warn); }
+.live { color: var(--muted); white-space: nowrap; }
+.live.on { color: var(--bad); border-color: var(--bad); }
+
+.panel { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
+.panel header { padding: 14px 16px 10px; }
+.panel h1 { margin: 0 0 8px; font-size: 15px; }
+.panel header select { width: 100%; }
+.panel section { padding: 10px 16px; border-top: 1px solid var(--line); }
+.panel h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.kpis div { display: grid; gap: 2px; }
+.kpis b { font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpis span { font-size: 11px; color: var(--muted); }
+.kpis .good b { color: var(--good); }
+.kpis .bad b { color: var(--bad); }
+
+.fleet li, .hospitals li { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.fleet i { width: 14px; height: 14px; border-radius: 50%; border: 3px solid; flex: none; }
+.fleet span { color: var(--muted); }
+.hospitals .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.hospitals .beds { width: 70px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.hospitals .beds i { display: block; height: 100%; background: var(--warn); }
+
+.feed { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.feed ol { flex: 1; overflow-y: auto; margin-right: -8px; padding-right: 8px; }
+.feed li { display: flex; gap: 10px; padding: 5px 0 5px 8px; border-left: 3px solid var(--line); margin-bottom: 3px; }
+.feed time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.feed p { margin: 0; }
+.feed .detail { color: var(--muted); }
+.feed em { font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; color: var(--llm); }
+.feed li.good { border-color: var(--good); }
+.feed li.bad { border-color: var(--bad); }
+.feed li.bad em { color: var(--bad); }
+.feed li.warn { border-color: var(--warn); }
+.feed li.call { border-color: var(--call); }
+.feed li.order { border-color: var(--order); }
+.feed li.llm { border-color: var(--llm); background: rgb(167 139 250 / 0.08); border-radius: 0 6px 6px 0; padding-right: 8px; }
