@@ -1,7 +1,8 @@
 // Traced run, viewable in the UI (pnpm ui) while it runs and afterwards.
 //
-//   pnpm run-sim                                   claude coordinator (haiku), seed 1, 120 ticks
+//   pnpm run-sim                                   DANA story, claude coordinator (haiku), seed 1, 200 ticks
 //   pnpm run-sim --coordinator greedy --tick-ms 300
+//   pnpm run-sim --scenario random                  no story, just dice
 //   pnpm run-sim --model sonnet --seed 7 --ticks 240
 //
 // Writes runs/<id>/: meta.json, ticks.jsonl (state + events per tick), llm.jsonl (full prompts), run.log
@@ -11,6 +12,7 @@ import { ClaudeCliCoordinator } from "./coordinators/claude-cli";
 import {
   clock,
   describe,
+  DanaMaster,
   Graph,
   GreedyCoordinator,
   makeTickRecord,
@@ -25,8 +27,8 @@ const { values } = parseArgs({
   options: {
     map: { type: "string", default: "valencia" },
     seed: { type: "string", default: "1" },
-    ticks: { type: "string", default: "120" },
-    ambulances: { type: "string", default: "5" },
+    ticks: { type: "string", default: "200" },
+    scenario: { type: "string", default: "dana" },
     coordinator: { type: "string", default: "claude" },
     model: { type: "string", default: "haiku" },
     "tick-ms": { type: "string", default: "0" },
@@ -37,7 +39,7 @@ const seed = Number(values.seed);
 const ticks = Number(values.ticks);
 const tickMs = Number(values["tick-ms"]);
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-const id = `${stamp}-${values.coordinator}-s${seed}`;
+const id = `${stamp}-${values.scenario}-${values.coordinator}-s${seed}`;
 const dir = `runs/${id}`;
 mkdirSync(dir, { recursive: true });
 
@@ -58,9 +60,8 @@ const graph = new Graph(JSON.parse(readFileSync(`data/${values.map}.json`, "utf8
 const sim = new Simulation({
   graph,
   seed,
-  master: new RandomMaster(),
+  master: values.scenario === "random" ? new RandomMaster() : new DanaMaster(),
   coordinator,
-  config: { ambulances: Number(values.ambulances) },
 });
 
 const meta: RunMeta = {
@@ -68,10 +69,11 @@ const meta: RunMeta = {
   map: values.map,
   seed,
   ticks,
+  scenario: values.scenario,
   coordinator: coordinator.name,
   model: coordinator instanceof ClaudeCliCoordinator ? coordinator.model : null,
   config: sim.world.config,
-  hospitals: sim.world.hospitals.map(({ id, name, node, capacity }) => ({ id, name, node, capacity })),
+  hospitals: sim.world.hospitals.map(({ id, name, node, capacity, specialties, helipad }) => ({ id, name, node, capacity, specialties, helipad })),
   startedAt: new Date().toISOString(),
   status: "running",
   summary: null,
@@ -86,7 +88,7 @@ let llmCost = 0;
 try {
   for (let i = 0; i < ticks; i++) {
     const result = await sim.step();
-    appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(makeTickRecord(result, sim.world, graph)) + "\n");
+    appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(makeTickRecord(result, sim.world, sim.belief, graph)) + "\n");
     const at = `${clock(result.tick, sim.world.config.tickSeconds)} t${result.tick}`;
     const d = result.decision;
     if (d && d.source !== "rules") {
@@ -109,6 +111,6 @@ saveMeta();
 const s = meta.summary;
 log(
   `RESULT ${s.saved} saved, ${s.dead} dead, ${s.waiting + s.inAmbulance} open of ${s.patients}` +
-    ` | survival ${(s.survivalRate * 100).toFixed(0)}% | ${llmCalls} LLM calls, $${llmCost.toFixed(3)}`,
+    ` | survival ${(s.survivalRate * 100).toFixed(0)}% | ${s.points}/${s.maxPoints} pts | ${llmCalls} LLM calls, $${llmCost.toFixed(3)}`,
 );
 log(`trace: ${dir}`);

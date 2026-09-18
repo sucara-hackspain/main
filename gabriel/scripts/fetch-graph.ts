@@ -4,7 +4,7 @@
 //   pnpm fetch-graph                                   -> valencia (default bbox)
 //   pnpm fetch-graph madrid 40.38,-3.75,40.48,-3.63    -> bbox is south,west,north,east
 import { writeFileSync } from "node:fs";
-import type { EdgeData, GraphData, HospitalData, LonLat } from "../src/engine/types";
+import type { EdgeData, GraphData, HospitalData, LonLat, StationData } from "../src/engine/types";
 
 const OVERPASS = "https://overpass-api.de/api/interpreter";
 
@@ -126,6 +126,11 @@ async function main() {
     `[out:json][timeout:60];nwr["amenity"="hospital"](${bbox});out center tags;`,
   );
 
+  console.log("Fetching fire and police stations...");
+  const stationPois = await overpass<OsmPoi>(
+    `[out:json][timeout:60];nwr["amenity"~"^(fire_station|police)$"](${bbox});out center tags;`,
+  );
+
   const coords = new Map<number, LonLat>();
   const ways: OsmWay[] = [];
   for (const el of elements) {
@@ -244,10 +249,20 @@ async function main() {
     });
   }
 
-  const graph: GraphData = { name, bbox: [s, w, n, e], nodes, edges, hospitals };
+  const stations: StationData[] = [];
+  for (const poi of stationPois) {
+    const lon = poi.lon ?? poi.center?.lon;
+    const lat = poi.lat ?? poi.center?.lat;
+    if (lon === undefined || lat === undefined) continue;
+    const kind = poi.tags?.amenity === "fire_station" ? "fire" : "police";
+    stations.push({ kind, name: poi.tags?.name ?? (kind === "fire" ? "Parque de bomberos" : "Comisaría"), lon, lat, node: nearest([lon, lat]) });
+  }
+
+  const graph: GraphData = { name, bbox: [s, w, n, e], nodes, edges, hospitals, stations };
   const out = `data/${name}.json`;
   writeFileSync(out, JSON.stringify(graph));
-  console.log(`${out}: ${nodes.length} nodes, ${edges.length} edges, ${hospitals.length} hospitals`);
+  console.log(`${out}: ${nodes.length} nodes, ${edges.length} edges, ${hospitals.length} hospitals, ${stations.length} stations`);
+  for (const st of stations) console.log(`  [${st.kind}] ${st.name}`);
   for (const h of hospitals) console.log(`  ${h.emergency ? "[ER]" : "    "} ${h.name}`);
 }
 

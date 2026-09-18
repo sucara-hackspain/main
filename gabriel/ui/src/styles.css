@@ -71,3 +71,20 @@ button, select { font: inherit; color: var(--text); background: var(--panel); bo
 .feed li.call { border-color: var(--call); }
 .feed li.order { border-color: var(--order); }
 .feed li.llm { border-color: var(--llm); background: rgb(167 139 250 / 0.08); border-radius: 0 6px 6px 0; padding-right: 8px; }
+
+.toggle { display: flex; margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.toggle button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 5px 6px; font-size: 12px; }
+.toggle button.on { background: var(--order); color: var(--bg); font-weight: 600; }
+.kpis small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.fleet { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; }
+.fleet li { min-width: 0; }
+.fleet span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.fleet b { font-size: 12px; }
+.hospitals em { font-style: normal; font-size: 10px; margin-left: 5px; padding: 0 4px; border-radius: 3px; background: var(--line); color: var(--text); }
+.hospitals li.offline { opacity: 0.45; text-decoration: line-through; }
+.fronts li { padding: 2px 0; font-size: 12px; color: var(--muted); }
+.fronts li b { color: var(--text); }
+.fronts li.unknown { opacity: 0.5; font-style: italic; }
+.panel { overflow-y: auto; }
+.feed { min-height: 260px; }
+.feed li.alert { border-color: var(--bad); background: rgb(239 68 68 / 0.1); border-radius: 0 6px 6px 0; font-weight: 600; }
