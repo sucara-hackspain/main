@@ -15,6 +15,8 @@ export function describeAction(a: Action): string {
       return `${a.unitId} → llevar paciente a ${a.hospitalId}`;
     case "reposition":
       return `${a.unitId} → reubicar en nodo ${a.node}`;
+    case "scout":
+      return `${a.unitId} → reconocer nodo ${a.node}${a.incidentId ? ` (${a.incidentId})` : ""}`;
   }
 }
 
@@ -64,6 +66,25 @@ export function describe(e: ObservedEvent): string {
       return `${e.unitId} no tiene ruta conocida${e.incidentId ? ` hasta ${e.incidentId}` : " a su destino"} y se detiene`;
     case "unit_arrived":
       return `${e.unitId} libre en nodo ${e.node}`;
+    case "area_surveyed":
+      return `[REAL] ${e.unitId} tiene a la vista ${e.sceneIds.length} escena(s) y ${e.closedEdges.length + e.floodedEdges.length} tramo(s) cortado(s)`;
+    case "drone_report": {
+      const how = e.quality >= 0.85 ? "se ve bien" : e.quality >= 0.65 ? "se ve regular" : "se ve mal";
+      if (e.sightings.length === 0) {
+        return `${e.unitId} sobrevuela el nodo ${e.node} (${how}): no ve a nadie${e.water ? ", hay agua debajo" : ""}. No prueba que no haya nadie.`;
+      }
+      const what = e.sightings
+        .map((v) => {
+          const kind = v.kind ? SCENES[v.kind].label : "no distingue qué ha pasado";
+          const people = v.people === null ? "no puede contarlos" : `${v.people} persona(s)`;
+          const still = v.still === null ? "" : `, ${v.still} sin moverse`;
+          const trapped = v.trapped === "yes" ? ", parecen atrapados" : "";
+          const water = v.inWater === "yes" ? ", rodeados de agua" : "";
+          return `nodo ${v.node} ±${v.locationErrorM} m: ${kind}, ${people}${still}${trapped}${water}`;
+        })
+        .join("; ");
+      return `${e.unitId} sobrevuela el nodo ${e.node} (${how}): ${what}`;
+    }
     case "hospital_full":
       return `${e.hospitalId} lleno: rechaza a ${e.unitId}`;
     case "action_applied":

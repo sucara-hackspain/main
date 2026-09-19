@@ -22,6 +22,8 @@ export interface RandomMasterConfig {
   /** Per moving ambulance per tick. */
   pPuncture: number;
   punctureTicks: [number, number];
+  /** Share of scenes nobody calls 112 about: only a unit sent to look ever finds them. */
+  pSilent: number;
 }
 
 export const DEFAULT_MASTER: RandomMasterConfig = {
@@ -31,6 +33,7 @@ export const DEFAULT_MASTER: RandomMasterConfig = {
   pReopen: 0.01,
   pPuncture: 0.002,
   punctureTicks: [10, 30],
+  pSilent: 0.12,
 };
 
 export class RandomMaster implements Master {
@@ -46,7 +49,7 @@ export class RandomMaster implements Master {
 
     if (rng.chance(cfg.pScene)) {
       const kind = pickSceneKind(rng, "city");
-      actions.push({ type: "spawn_scene", kind, node: rng.int(0, graph.nodeCount - 1), victims: makeSceneVictims(kind, rng) });
+      actions.push({ type: "spawn_scene", kind, node: rng.int(0, graph.nodeCount - 1), victims: makeSceneVictims(kind, rng), silent: rng.chance(cfg.pSilent) });
     }
 
     if (rng.chance(cfg.pRoadClosure)) {
@@ -94,6 +97,10 @@ export interface DanaMasterConfig {
   /** Once the water is out: share of scenes at its advancing edge, and share inside it (nobody can drive there). */
   floodShare: number;
   inWaterShare: number;
+  /** Share of scenes nobody calls about: ordinary ones, at the water's edge, and inside the water. */
+  pSilent: number;
+  pSilentFlood: number;
+  pSilentInWater: number;
   floods: FloodPlan[];
 }
 
@@ -103,6 +110,10 @@ export const DEFAULT_DANA: DanaMasterConfig = {
   peakTick: 120,
   floodShare: 0.5,
   inWaterShare: 0.25,
+  // Inside the water nobody calls: the line is down, the phone is gone, or nobody is left conscious.
+  pSilent: 0.1,
+  pSilentFlood: 0.25,
+  pSilentInWater: 0.6,
   // Rough stand-ins for 29 Oct 2024: water coming up from the south of the city.
   floods: [
     { tick: 15, name: "Barranco sur · La Torre", lon: -0.398, lat: 39.438, radiusM: 250, growthM: 6, maxRadiusM: 1300 },
@@ -137,6 +148,7 @@ export class DanaMaster implements Master {
     if (rng.chance(cfg.pSceneStart + (cfg.pScenePeak - cfg.pSceneStart) * ramp)) {
       let node = rng.int(0, graph.nodeCount - 1);
       let where: "flood" | "city" = "city";
+      let pSilent = cfg.pSilent;
       const roll = rng.next();
       if (world.floods.length > 0 && roll < cfg.floodShare + cfg.inWaterShare) {
         const flood = rng.pick(world.floods);
@@ -154,10 +166,11 @@ export class DanaMaster implements Master {
         if (candidates.length > 0) {
           node = rng.pick(candidates);
           where = "flood";
+          pSilent = roll < cfg.inWaterShare ? cfg.pSilentInWater : cfg.pSilentFlood;
         }
       }
       const kind = pickSceneKind(rng, where);
-      actions.push({ type: "spawn_scene", kind, node, victims: makeSceneVictims(kind, rng) });
+      actions.push({ type: "spawn_scene", kind, node, victims: makeSceneVictims(kind, rng), silent: rng.chance(pSilent) });
     }
     return actions;
   }

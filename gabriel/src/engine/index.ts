@@ -6,6 +6,7 @@ export * from "./master";
 export * from "./victims";
 export * from "./observer";
 export * from "./incidents";
+export * from "./recon";
 export * from "./water";
 export * from "./coordinator";
 export * from "./sim";

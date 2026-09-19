@@ -88,6 +88,11 @@ export interface Scene {
   victimIds: string[];
   /** A crew has been here and nobody is left waiting. */
   resolved: boolean;
+  /**
+   * Nobody calls 112 about this one: no witness, no coverage, no phone, nobody left conscious.
+   * Dispatch only learns it exists if it sends someone to look.
+   */
+  silent: boolean;
 }
 
 /**
@@ -107,15 +112,17 @@ export interface Flood {
 
 // ---------- Resources ----------
 
-export type Mission = "idle" | "to_scene" | "to_hospital" | "reposition";
+export type Mission = "idle" | "to_scene" | "to_hospital" | "reposition" | "to_observe";
 
 /**
  * ambulance: carries one victim to hospital, by road.
  * fire: frees trapped victims so that someone else can carry them. Carries nobody.
  * rescue: high-clearance/amphibious crew. Slow, but drives through flooded streets: the only road unit that reaches people inside the water.
  * helicopter: flies straight, fast, ignores streets and water. One victim, and only to hospitals with a helipad.
+ * drone: flies, carries nobody, rescues nobody. Its whole job is to go and look: it is the only way to
+ *        learn about a place nobody has called about, and it never sees everything.
  */
-export type UnitKind = "ambulance" | "fire" | "rescue" | "helicopter";
+export type UnitKind = "ambulance" | "fire" | "rescue" | "helicopter" | "drone";
 
 export interface Unit {
   id: string;
@@ -163,6 +170,7 @@ export interface SimConfig {
   fireUnits: number;
   rescueUnits: number;
   helicopters: number;
+  drones: number;
   /** Max hospitals taken from the map (emergency ones first). */
   hospitals: number;
   hospitalCapacity: number;
@@ -176,6 +184,10 @@ export interface SimConfig {
   extricateTicks: number;
   /** How far from the reported spot a crew will look for the scene. */
   searchRadiusM: number;
+  /** How far around itself an aerial observer can make anything out. */
+  scoutRadiusM: number;
+  /** Ticks it spends over the area before the report goes out. */
+  scoutTicks: number;
 }
 
 export interface World {
@@ -203,7 +215,7 @@ export interface World {
 // ---------- What the master can do to the world ----------
 
 export type MasterAction =
-  | { type: "spawn_scene"; kind: SceneKind; node: number; victims: VictimSpec[] }
+  | { type: "spawn_scene"; kind: SceneKind; node: number; victims: VictimSpec[]; silent?: boolean }
   | { type: "start_flood"; name: string; node: number; radiusM: number; growthM: number; maxRadiusM: number }
   | { type: "close_road"; edge: number }
   | { type: "open_road"; edge: number }
@@ -220,7 +232,12 @@ export type Action =
   /** Send a loaded ambulance to a hospital. */
   | { type: "transport"; unitId: string; hospitalId: string }
   /** Move an empty ambulance to a node (staging). Also the way to call one off. */
-  | { type: "reposition"; unitId: string; node: number };
+  | { type: "reposition"; unitId: string; node: number }
+  /**
+   * Send an observer (drone, helicopter) to look at a place. It rescues nobody: it comes back with a
+   * report of what it thinks is there. The answer to "I am deciding blind here".
+   */
+  | { type: "scout"; unitId: string; node: number; incidentId?: string };
 
 // ---------- Event log (ground truth) ----------
 
@@ -252,6 +269,11 @@ type EventBody =
   /** A crew runs into streets it thought were open. `edges` = what it can see closed from there. */
   | { type: "road_blocked_found"; unitId: string; node: number; edges: number[]; flooded: boolean }
   | { type: "unit_arrived"; unitId: string; node: number }
+  /**
+   * Ground truth of what was actually within sight of an observer. Nobody hears this: the observer
+   * turns it into a report, and a report is always worse than the truth.
+   */
+  | { type: "area_surveyed"; unitId: string; node: number; radiusM: number; sceneIds: string[]; closedEdges: number[]; floodedEdges: number[] }
   | { type: "hospital_full"; hospitalId: string; unitId: string }
   | { type: "action_applied"; action: Action; etaTicks: number }
   | { type: "action_rejected"; action: Action; reason: string };
@@ -287,12 +309,47 @@ export interface Call {
   text: string;
 }
 
+/**
+ * One thing an aerial observer believes it has seen. Every field can be wrong or missing: it is a
+ * camera at 100 m through rain, not a crew on the ground.
+ */
+export interface AerialSighting {
+  /** Where the observer places it. */
+  node: number;
+  locationErrorM: number;
+  /** What it looks like from above. null = cannot tell what happened. */
+  kind: SceneKind | null;
+  /** People made out. null = "there is somebody, cannot count". */
+  people: number | null;
+  /** Of those, how many are not moving. null = cannot tell. */
+  still: number | null;
+  trapped: Answer;
+  inWater: Answer;
+}
+
 export type ObservedEvent =
   | WorldEvent
   | { type: "call_received"; tick: number; call: Call }
+  /**
+   * What an observer radioes back after looking at a place. `quality` (0-1) is how good the look was:
+   * with a bad one it misses whole scenes, and an empty `sightings` never proves there is nobody there.
+   */
+  | {
+      type: "drone_report";
+      tick: number;
+      unitId: string;
+      node: number;
+      radiusM: number;
+      quality: number;
+      sightings: AerialSighting[];
+      closedEdges: number[];
+      floodedEdges: number[];
+      /** It can see water below it. */
+      water: boolean;
+    }
   /** Official flood map. Reliable, but it shows the water as it was `asOfTick`, not now. */
   | { type: "flood_bulletin"; tick: number; asOfTick: number; floods: { id: string; name: string; node: number; radiusM: number }[] };
-export type ReportSource = "call_112" | "ambulance" | "hospital" | "traffic" | "system";
+export type ReportSource = "call_112" | "ambulance" | "hospital" | "traffic" | "system" | "drone";
 
 /** The coordinator never reads the world, only reports. */
 export interface Report {
@@ -328,6 +385,11 @@ export interface Incident {
   locationErrorM: number;
   /** A crew has confirmed the exact spot. */
   located: boolean;
+  /** Last tick an observer looked at it from the air, and who. Worse than a crew, far better than a call. */
+  seenTick: number | null;
+  seenBy: string | null;
+  /** People an observer counted from the air, when it could count them. */
+  peopleSeen: Sourced<number> | null;
   sceneId: string | null;
   callIds: string[];
   mechanism: Sourced<SceneKind> | null;
@@ -381,5 +443,7 @@ export interface Belief {
   closedEdges: number[];
   /** Known closures that are water: rescue units are routed through them. */
   floodedEdges: number[];
+  /** Places already looked at from the air, and how good that look was. Ageing information, not proof. */
+  scouts: { tick: number; node: number; radiusM: number; quality: number; from: string; found: number }[];
   nextIncidentNum: number;
 }

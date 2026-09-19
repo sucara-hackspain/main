@@ -18,6 +18,11 @@ export class Rng {
     return this.next() < p;
   }
 
+  /** Float in [min, max). */
+  range(min: number, max: number): number {
+    return min + this.next() * (max - min);
+  }
+
   /** Integer in [min, max]. */
   int(min: number, max: number): number {
     return min + Math.floor(this.next() * (max - min + 1));

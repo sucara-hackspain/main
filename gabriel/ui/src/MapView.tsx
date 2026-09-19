@@ -12,8 +12,8 @@ export interface MapHandle {
 
 const STYLE = "https://tiles.openfreemap.org/styles/dark";
 const FONT = ["Noto Sans Regular"];
-export const KIND_COLORS = { ambulance: "#f8fafc", fire: "#ef4444", rescue: "#3b82f6", helicopter: "#e879f9" } as const;
-export const KIND_LABELS = { ambulance: "Ambulancia", fire: "Bomberos", rescue: "Rescate acuático", helicopter: "Helicóptero" } as const;
+export const KIND_COLORS = { ambulance: "#f8fafc", fire: "#ef4444", rescue: "#3b82f6", helicopter: "#e879f9", drone: "#a3e635" } as const;
+export const KIND_LABELS = { ambulance: "Ambulancia", fire: "Bomberos", rescue: "Rescate acuático", helicopter: "Helicóptero", drone: "Dron" } as const;
 export const AMBULANCE_COLORS = ["#38bdf8", "#a78bfa", "#f472b6", "#34d399", "#fbbf24", "#fb923c", "#22d3ee", "#e879f9"];
 const DEAD_VISIBLE_TICKS = 20;
 export const PRIORITY_COLORS = ["#ef4444", "#f97316", "#facc15", "#4ade80"];
@@ -47,6 +47,7 @@ export function ambulanceState(a: UnitFrame): { label: string; color: string } {
   if (a.mission === "to_scene") return { label: `va al incidente ${a.incidentId}`, color: "#38bdf8" };
   if (a.mission === "to_hospital") return { label: `lleva ${a.victimId} → ${a.hospitalId}`, color: "#22c55e" };
   if (a.mission === "reposition") return { label: "reubicándose", color: "#94a3b8" };
+  if (a.mission === "to_observe") return { label: `va a mirar${a.incidentId ? ` ${a.incidentId}` : ""}`, color: "#a3e635" };
   if (a.victimId) return { label: `con ${a.victimId}, sin destino`, color: "#f59e0b" };
   return { label: "libre", color: "#94a3b8" };
 }
@@ -95,6 +96,14 @@ export const MapView = forwardRef<MapHandle, { graph: GraphData; meta: RunMeta }
     const knownWater = frame.knownWater.zones.map((z) => disc(graph.nodes[z.node], z.radiusM, {}));
     const sightings = frame.knownWater.sightings.map((w) => point(graph.nodes[w.node], { kind: w.kind, fresh: w.ageTicks <= 30 ? 1 : 0 }));
 
+    // Where the coordinator has already looked (fading as it goes stale) and where it is still blind.
+    const looked = (frame.recon?.scouts ?? [])
+      .filter((s) => s.ageTicks <= 60)
+      .map((s) => disc(graph.nodes[s.node], s.radiusM, { fresh: Math.max(0.12, (1 - s.ageTicks / 60) * s.quality) }));
+    const gaps = (frame.recon?.gaps ?? []).map((g) =>
+      point(graph.nodes[g.node], { label: g.kind === "silence" ? `${g.id} · silencio` : `${g.id} · a ciegas`, silence: g.kind === "silence" ? 1 : 0 }),
+    );
+
     // What the coordinator believes: incidents, each with how unsure it is about where.
     const incidents: Feature[] = [];
     const zones: Feature[] = [];
@@ -138,6 +147,8 @@ export const MapView = forwardRef<MapHandle, { graph: GraphData; meta: RunMeta }
     (m.getSource("floods") as GeoJSONSource).setData(collection(floods));
     (m.getSource("knownWater") as GeoJSONSource).setData(collection(knownWater));
     (m.getSource("sightings") as GeoJSONSource).setData(collection(sightings));
+    (m.getSource("looked") as GeoJSONSource).setData(collection(mode === "belief" ? looked : []));
+    (m.getSource("gaps") as GeoJSONSource).setData(collection(mode === "belief" ? gaps : []));
     (m.getSource("zones") as GeoJSONSource).setData(collection(zones));
     (m.getSource("incidents") as GeoJSONSource).setData(collection(incidents));
     (m.getSource("victims") as GeoJSONSource).setData(collection(victims));
@@ -160,7 +171,7 @@ export const MapView = forwardRef<MapHandle, { graph: GraphData; meta: RunMeta }
     m.addControl(new NavigationControl({ showCompass: false }), "top-left");
 
     m.on("load", () => {
-      for (const id of ["floods", "knownWater", "sightings", "zones", "routes", "closed", "hospitals", "incidents", "victims", "ambulances"]) {
+      for (const id of ["floods", "knownWater", "looked", "gaps", "sightings", "zones", "routes", "closed", "hospitals", "incidents", "victims", "ambulances"]) {
         m.addSource(id, { type: "geojson", data: collection([]) });
       }
       m.addLayer({
@@ -175,6 +186,14 @@ export const MapView = forwardRef<MapHandle, { graph: GraphData; meta: RunMeta }
         type: "line",
         source: "knownWater",
         paint: { "line-color": "#22d3ee", "line-width": 2, "line-dasharray": [3, 2] },
+      });
+      // Everything already looked at from the air: it fades as the look ages and with how bad it was.
+      m.addLayer({ id: "looked", type: "fill", source: "looked", paint: { "fill-color": "#a3e635", "fill-opacity": ["*", ["get", "fresh"], 0.14] } });
+      m.addLayer({
+        id: "looked-edge",
+        type: "line",
+        source: "looked",
+        paint: { "line-color": "#a3e635", "line-width": 1, "line-dasharray": [1, 3], "line-opacity": ["get", "fresh"] },
       });
       m.addLayer({
         id: "zones",
@@ -250,6 +269,20 @@ export const MapView = forwardRef<MapHandle, { graph: GraphData; meta: RunMeta }
         source: "incidents",
         layout: { "text-field": ["get", "label"], "text-font": FONT, "text-size": 11, "text-offset": [0, -1.5], "text-allow-overlap": true },
         paint: { "text-color": ["get", "color"], "text-halo-color": "#0b1120", "text-halo-width": 2 },
+      });
+      // Holes in the picture: a blind incident, or a piece of the city that has gone quiet.
+      m.addLayer({
+        id: "gaps",
+        type: "symbol",
+        source: "gaps",
+        layout: {
+          "text-field": ["concat", ["case", ["==", ["get", "silence"], 1], "🔇 ", "👁 "], ["get", "label"]],
+          "text-font": FONT,
+          "text-size": 11,
+          "text-offset": [0, 2.4],
+          "text-allow-overlap": true,
+        },
+        paint: { "text-color": "#a3e635", "text-halo-color": "#0b1120", "text-halo-width": 2 },
       });
       m.addLayer({
         id: "victims",

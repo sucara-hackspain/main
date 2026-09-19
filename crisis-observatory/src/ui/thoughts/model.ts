@@ -20,6 +20,7 @@ export function actionText(a: Action) {
   if (a.type === "dispatch")
     return `${a.unitId} → ${a.incidentId}${a.hospitalId ? ` → ${a.hospitalId}` : ""}`;
   if (a.type === "transport") return `${a.unitId} → trasladar a ${a.hospitalId}`;
+  if (a.type === "scout") return `${a.unitId} → reconocer${a.incidentId ? ` ${a.incidentId}` : " la zona"}`;
   return `${a.unitId} → reubicar`;
 }
 const count = (n: number, one: string, many: string) =>
@@ -67,6 +68,13 @@ export function eventText(e: ObservedEvent, seconds: number): string {
       return `${e.unitId} sin ruta conocida${e.incidentId ? ` hacia ${e.incidentId}` : ""}`;
     case "unit_arrived":
       return `${e.unitId} llega a destino`;
+    case "area_surveyed":
+      return `${e.unitId} sobrevuela la zona · ${count(e.sceneIds.length, "escena a la vista", "escenas a la vista")}`;
+    // What the observer believes it saw: a read, never a confirmation.
+    case "drone_report":
+      return e.sightings.length === 0
+        ? `${e.unitId} no ve a nadie${e.water ? ", hay agua debajo" : ""} · no prueba que no haya nadie`
+        : `${e.unitId} informa desde el aire · ${count(e.sightings.length, "avistamiento", "avistamientos")} · ${e.quality >= 0.85 ? "se ve bien" : e.quality >= 0.65 ? "se ve regular" : "se ve mal"}`;
     case "hospital_full":
       return `${e.hospitalId} lleno · rechaza a ${e.unitId}`;
     case "action_applied":

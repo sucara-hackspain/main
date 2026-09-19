@@ -14,6 +14,7 @@ import {
   type MasterAction,
   type SceneKind,
   type VictimSpec,
+  infoGaps,
 } from "../src/engine";
 
 /** n x n grid, 100 m two-way streets at 36 km/h = 10 s per edge. Node id = row * n + col. */
@@ -38,7 +39,7 @@ function scripted(script: Record<number, MasterAction[]>): Master {
   return { act: (world) => script[world.tick] ?? [] };
 }
 
-const CONFIG = { ambulances: 1, fireUnits: 0, rescueUnits: 0, helicopters: 0, ambulanceSpeedFactor: 1, pickupTicks: 0, dropoffTicks: 0, treatTicks: 0, extricateTicks: 0 };
+const CONFIG = { ambulances: 1, fireUnits: 0, rescueUnits: 0, helicopters: 0, drones: 0, ambulanceSpeedFactor: 1, pickupTicks: 0, dropoffTicks: 0, treatTicks: 0, extricateTicks: 0 };
 
 function victim(injury: InjuryKind, ttl: number | null = null): VictimSpec {
   return { ...makeVictim(injury, new Rng(1)), ttl, trapped: false };
@@ -308,5 +309,118 @@ describe("units", () => {
     await s.run(6);
     expect(s.world.units[0].route).toEqual([]);
     expect(s.summary().saved).toBe(1);
+  });
+});
+
+describe("reconocimiento", () => {
+  /** One drone, nothing else: the only way anything gets known is by going to look. */
+  const silentRun = (seed: number) =>
+    new Simulation({
+      graph: grid(9),
+      seed,
+      // Nobody calls about this one. It sits 5 blocks from where the drone is parked.
+      master: scripted({ 0: [{ type: "spawn_scene", kind: "traffic", node: 40, victims: [victim("polytrauma", 300)], silent: true }] }),
+      coordinator: { name: "idle", decide: () => [] },
+      observer: new CallObserver({ callers: ["family"] }),
+      config: { ...CONFIG, ambulances: 0, drones: 1 },
+    });
+
+  it("una escena muda no genera ni una llamada: el coordinador no sabe que existe", async () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const s = silentRun(seed);
+      await s.run(40);
+      expect(s.belief.calls).toEqual([]);
+      expect(s.belief.incidents).toEqual([]);
+      expect(s.world.victims[0].status).toBe("waiting");
+    }
+  });
+
+  it("un dron encuentra lo que nadie ha llamado, pero nunca lo confirma", async () => {
+    const found = [];
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const s = silentRun(seed);
+      // Four passes over the same spot: even a good camera misses things on a single look.
+      for (let pass = 0; pass < 4; pass++) {
+        s.order({ type: "scout", unitId: "D1", node: 40 });
+        await s.run(6);
+      }
+      if (s.belief.incidents.length === 0) continue;
+      found.push(seed);
+      const incident = s.belief.incidents[0];
+      // An aerial sighting opens the incident without ever confirming it: no triage, no exact spot.
+      expect(incident.located).toBe(false);
+      expect(incident.victims).toEqual([]);
+      expect(incident.locationErrorM).toBeGreaterThan(0);
+      expect(incident.seenTick).not.toBeNull();
+      expect(incident.history.some((h) => h.from === "dron D1")).toBe(true);
+    }
+    expect(found.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("lo que ve el dron no siempre es lo mismo ni siempre es todo", async () => {
+    const reads = [];
+    for (let seed = 1; seed <= 12; seed++) {
+      const s = new Simulation({
+        graph: grid(9),
+        seed,
+        master: scripted({
+          0: [
+            // Three people outdoors and one inside a flooded ground floor: the second is far harder to see.
+            { type: "spawn_scene", kind: "traffic", node: 40, victims: [victim("polytrauma", 300), victim("fracture"), victim("minor")], silent: true },
+            { type: "spawn_scene", kind: "flooded_home", node: 42, victims: [victim("hypothermia", 300)], silent: true },
+          ],
+        }),
+        coordinator: { name: "idle", decide: () => [] },
+        config: { ...CONFIG, ambulances: 0, drones: 1 },
+      });
+      s.order({ type: "scout", unitId: "D1", node: 40 });
+      await s.run(6);
+      // The world log holds the truth of what was in sight; the belief only ever gets the read of it.
+      expect(s.world.log.some((e) => e.type === "area_surveyed")).toBe(true);
+      expect(JSON.stringify(s.world.log)).not.toContain("drone_report");
+      reads.push({ seen: s.belief.incidents.length, people: s.belief.incidents.map((i) => i.peopleSeen?.value ?? null) });
+    }
+    // The same flight over the same place is not the same report twice: sometimes both scenes, sometimes one, sometimes a different count.
+    expect(new Set(reads.map((r) => r.seen)).size).toBeGreaterThan(1);
+    expect(new Set(reads.map((r) => JSON.stringify(r.people))).size).toBeGreaterThan(1);
+  });
+
+  it("lee el silencio de una zona como un hueco que hay que ir a mirar", async () => {
+    const s = new Simulation({
+      graph: grid(14),
+      seed: 3,
+      // Everything that happens, and therefore every call, is in one corner of the map.
+      master: scripted({
+        0: [scene(15, [victim("polytrauma", 400)])],
+        4: [scene(17, [victim("fracture")])],
+        8: [scene(31, [victim("minor")])],
+      }),
+      coordinator: { name: "idle", decide: () => [] },
+      observer: new CallObserver({ callers: ["family"] }),
+      config: { ...CONFIG, ambulances: 0, drones: 1 },
+    });
+    await s.run(30);
+    const gaps = infoGaps(s.belief, s.graph, s.world.tick);
+    const silence = gaps.filter((g) => g.kind === "silence");
+    expect(silence.length).toBeGreaterThan(0);
+    expect(silence[0].why).toContain("alrededor sí llaman");
+    // The heuristic says out loud that silence has two readings, and that only a look tells them apart.
+    expect(silence[0].why).toContain("cobertura");
+  });
+
+  it("el coordinador greedy manda el dron a mirar en vez de dejarlo parado", async () => {
+    const s = new Simulation({
+      graph: grid(9),
+      seed: 2,
+      master: scripted({ 0: [scene(40, [victim("polytrauma", 400)])] }),
+      coordinator: new GreedyCoordinator(),
+      // A passer-by: the location is vague, which is exactly when looking first pays off.
+      observer: new CallObserver({ callers: ["driver"] }),
+      config: { ...CONFIG, ambulances: 1, drones: 1 },
+    });
+    await s.run(12);
+    const scouts = s.world.log.filter((e) => e.type === "action_applied" && e.action.type === "scout");
+    expect(scouts.length).toBeGreaterThan(0);
+    expect(s.world.log.some((e) => e.type === "area_surveyed")).toBe(true);
   });
 });

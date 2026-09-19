@@ -1,5 +1,5 @@
 import type { Graph } from "./graph";
-import type { AssessedVictim, Unit, UnitKind, Belief, Breathing, Call, Incident, Priority, Report, Sourced, World } from "./types";
+import type { AerialSighting, AssessedVictim, Unit, UnitKind, Belief, Breathing, Call, Incident, Priority, Report, Sourced, World } from "./types";
 import { INJURIES, SCENES } from "./victims";
 import { addSighting, applyBulletin, impliesWater } from "./water";
 
@@ -21,6 +21,7 @@ export function createBelief(world: Readonly<World>): Belief {
     floods: [],
     closedEdges: [],
     floodedEdges: [],
+    scouts: [],
     nextIncidentNum: 1,
   };
 }
@@ -42,6 +43,15 @@ export function updateBelief(belief: Belief, reports: Report[], world: Readonly<
       case "flood_bulletin":
         applyBulletin(belief, event, graph);
         break;
+      case "drone_report": {
+        belief.scouts.push({ tick, node: event.node, radiusM: event.radiusM, quality: event.quality, from: event.unitId, found: event.sightings.length });
+        belief.closedEdges.push(...event.closedEdges.filter((e) => !belief.closedEdges.includes(e)));
+        belief.closedEdges.push(...event.floodedEdges.filter((e) => !belief.closedEdges.includes(e)));
+        belief.floodedEdges.push(...event.floodedEdges.filter((e) => !belief.floodedEdges.includes(e)));
+        if (event.water) addSighting(belief, tick, event.node, `dron ${event.unitId}`, event.floodedEdges.length ? "blocked" : "wet");
+        for (const sighting of event.sightings) attachSighting(belief, sighting, event.unitId, tick, graph);
+        break;
+      }
       case "road_blocked_found":
         belief.closedEdges.push(...event.edges.filter((e) => !belief.closedEdges.includes(e)));
         if (event.flooded) belief.floodedEdges.push(...event.edges.filter((e) => !belief.floodedEdges.includes(e)));
@@ -128,6 +138,9 @@ function newIncident(belief: Belief, tick: number, node: number, errorM: number)
     node,
     locationErrorM: errorM,
     located: false,
+    seenTick: null,
+    seenBy: null,
+    peopleSeen: null,
     sceneId: null,
     callIds: [],
     mechanism: null,
@@ -202,6 +215,62 @@ function attachCall(belief: Belief, call: Call, graph: Graph): void {
     note(incident, call.tick, "nº heridos", String(call.victims), call.id);
   }
   refresh(incident, call.tick);
+}
+
+/**
+ * What an observer radioes in about one spot. It is worth much more than a call (the location is good
+ * and the count is a count, not a guess) and much less than a crew: it never confirms an incident, it
+ * only makes it less blind. A sighting that matches nothing open opens a new incident — which is the
+ * whole point of flying over a neighbourhood nobody has called from.
+ */
+function attachSighting(belief: Belief, sighting: AerialSighting, unitId: string, tick: number, graph: Graph): void {
+  const from = `dron ${unitId}`;
+  let best: Incident | null = null;
+  let bestM = Infinity;
+  for (const incident of belief.incidents) {
+    if (incident.status !== "open" || incident.mergedInto) continue;
+    if (sighting.kind && incident.mechanism && sighting.kind !== incident.mechanism.value) continue;
+    const d = graph.distanceM(sighting.node, incident.node);
+    if (d <= sighting.locationErrorM + incident.locationErrorM + ATTACH_SLACK_M && d < bestM) {
+      best = incident;
+      bestM = d;
+    }
+  }
+  const incident = best ?? newIncident(belief, tick, sighting.node, sighting.locationErrorM);
+  if (!best) note(incident, tick, "origen", "abierto por avistamiento aéreo, sin ninguna llamada", from);
+
+  incident.seenTick = tick;
+  incident.seenBy = unitId;
+  if (!incident.located && sighting.locationErrorM < incident.locationErrorM) {
+    incident.node = sighting.node;
+    incident.locationErrorM = sighting.locationErrorM;
+    note(incident, tick, "ubicación", `nodo ${sighting.node} ±${sighting.locationErrorM} m (desde el aire)`, from);
+  }
+
+  const src = <T>(value: T): Sourced<T> => ({ value, from, tick });
+  if (sighting.kind && !incident.mechanism) {
+    incident.mechanism = src(sighting.kind);
+    note(incident, tick, "mecanismo", SCENES[sighting.kind].label, from);
+  }
+  if (sighting.people !== null) {
+    incident.peopleSeen = src(sighting.people);
+    if (sighting.people > (incident.victimsReported?.value ?? 0)) incident.victimsReported = src(sighting.people);
+    note(incident, tick, "gente vista", `${sighting.people}${sighting.still !== null ? `, ${sighting.still} sin moverse` : ""}`, from);
+  }
+  // "Not moving" from the air is not a diagnosis: it is the reason to treat it as if it were the worst.
+  if (sighting.still !== null && sighting.still > 0 && incident.conscious?.value !== "no") {
+    incident.conscious = src("no");
+    note(incident, tick, "consciente", "no (visto inmóvil desde el aire)", from);
+  }
+  if (sighting.trapped !== "unknown" && incident.trapped?.value !== "yes") {
+    incident.trapped = src(sighting.trapped);
+    note(incident, tick, "atrapado", sighting.trapped === "yes" ? "sí" : "no", from);
+  }
+  if (sighting.inWater === "yes" && !incident.unreachable) {
+    incident.unreachable = true;
+    note(incident, tick, "acceso", "rodeado de agua según el dron: rescate acuático o aéreo", from);
+  }
+  refresh(incident, tick);
 }
 
 function breathingRank(b: Breathing | undefined): number {
@@ -316,9 +385,19 @@ export function incidentLine(incident: Incident): string {
     if (incident.trapped?.value === "yes") signs.push("ATRAPADO");
     if (incident.ageGroup && incident.ageGroup.value !== "adult") signs.push(incident.ageGroup.value === "child" ? "niño" : "mayor");
     parts.push(signs.join(", "));
-    parts.push(incident.victimsReported ? `${incident.victimsReported.value} herido(s) según llamadas` : "nº heridos desconocido");
+    const fromAir = (source: string) => source.startsWith("dron");
+    parts.push(
+      incident.victimsReported
+        ? `${incident.victimsReported.value} herido(s) ${fromAir(incident.victimsReported.from) ? "contados desde el aire" : "según llamadas"}`
+        : "nº heridos desconocido",
+    );
     parts.push(`ubicación ±${incident.locationErrorM} m`);
   }
-  parts.push(`${incident.callIds.length} llamada(s)`);
+  // An incident nobody ever called about is the whole point of having sent someone to look.
+  parts.push(
+    incident.callIds.length === 0 && incident.seenTick !== null
+      ? `SIN NINGUNA LLAMADA · lo abrió ${incident.seenBy} desde el aire`
+      : `${incident.callIds.length} llamada(s)`,
+  );
   return parts.join(" · ");
 }
