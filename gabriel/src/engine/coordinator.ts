@@ -24,6 +24,14 @@ export interface Decision {
   situation?: string;
   /** What the coordinator is trying to do over the next few minutes, in its own words (its notebook). */
   plan?: string;
+  /** What it is keeping an eye on, and what it will do if it happens. */
+  watch?: string;
+  /** What was new or pressing when it decided: the handful of facts the decision answers to. */
+  saw?: string[];
+  /** Units it is holding back as of this decision. */
+  holds?: Hold[];
+  /** What the rule-based dispatcher would have ordered from the same picture: shows where judgement was used. */
+  baseline?: Action[];
   /** Why each action, same order as `actions`. */
   reasons?: string[];
   /** Doctrine ids (from the agent's memory) cited for each action, same order as `actions`. */

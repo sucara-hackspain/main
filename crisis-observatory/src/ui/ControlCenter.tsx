@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ClipboardList,
   GitBranch,
+  Scale,
   Layers,
   Map as MapIcon,
   Pause,
@@ -34,6 +35,8 @@ import {
   type SituationFilter,
 } from "./situation/model";
 import ThoughtsView from "./thoughts/ThoughtsView";
+import DecisionPanel, { DecisionStrip } from "./decisions/DecisionPanel";
+import { decisionCards } from "./decisions/model";
 import { auditItems, laneName } from "./thoughts/model";
 import DecisionBanner from "./interventions/DecisionBanner";
 import DecisionRoom, { PendingDecisionBar } from "./interventions/DecisionRoom";
@@ -107,7 +110,8 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"map" | "flow" | "tickets">("map"),
+    [view, setView] = useState<"map" | "flow" | "tickets" | "decisions">("map"),
+    [orderFocus, setOrderFocus] = useState<string | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
@@ -188,6 +192,9 @@ function RunSession({
   const visible = useMemo(() => ticks.slice(0, index + 1), [ticks, index]);
   const all = useMemo(() => auditItems(visible), [visible]);
   const tickets = useMemo(() => buildTickets(visible, seconds), [visible, seconds]);
+  // Decisions are read with hindsight: what came of each order is looked up in the ticks that followed.
+  const cards = useMemo(() => (graph && meta ? decisionCards(ticks, graph, meta) : []), [ticks, graph, meta]);
+  const card = useMemo(() => [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0] ?? null, [cards, current]);
   const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
   const selection =
     entity && selectionExists(entity, current, meta) ? entity : null;
@@ -355,6 +362,18 @@ function RunSession({
               <GitBranch size={14} />
               Actividad de los agentes
             </button>
+            <button
+              aria-pressed={view === "decisions"}
+              className={view === "decisions" ? "is-active" : ""}
+              onClick={() => {
+                setView("decisions");
+                const nearest = [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0];
+                if (nearest) seekTick(nearest.tick);
+              }}
+            >
+              <Scale size={14} />
+              Decisiones
+            </button>
           </div>
           {current && (
             <InterventionInbox
@@ -436,11 +455,19 @@ function RunSession({
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
-          ) : view === "map" ? (
+          ) : view === "map" || view === "decisions" ? (
             graph &&
             meta && (
               <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
+                {view === "decisions" && <DecisionStrip cards={cards} active={card} onGo={(c) => seekTick(c.tick)} />}
                 <RunMap
+                  explain={view === "decisions" && card ? {
+                    orders: card.orders.map((o) => ({ key: o.key, kind: o.kind, from: o.from, to: o.to, own: card.compared && !o.shared })),
+                    rules: card.rulesOnly.map((o) => ({ from: o.from, to: o.to })),
+                    held: card.holds.map((h) => h.unitId),
+                    waterAhead: card.waterAhead,
+                    focus: orderFocus,
+                  } : null}
                   graph={graph}
                   meta={meta}
                   record={current}
@@ -556,7 +583,7 @@ function RunSession({
         </div>
       </section>
       <div className="app-sidebar-slot" inert={blocked}>
-        {view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
+        {view === "decisions" ? <DecisionPanel cards={cards} card={card} seconds={seconds} focus={orderFocus} onFocus={setOrderFocus} onGo={(c) => seekTick(c.tick)} /> : view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
           onLocate={locateTicket} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} /> : <SituationSidebar
           id={id}
           runs={runs}

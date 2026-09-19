@@ -1,5 +1,6 @@
 // One game: a scenario, a coordinator, and the count of who did not make it.
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { ExplainedRules } from "../coordinators/explained";
 import { HappyRobotCoordinator } from "../coordinators/happyrobot";
 import { CallObserver, GreedyCoordinator, makeTickRecord, Simulation, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
 import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
@@ -87,7 +88,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     });
     coordinator = scenario.handover ? new Handover(agent, scenario.handover.tick, scenario.handover.decisions) : agent;
   } else {
-    coordinator = new GreedyCoordinator(undefined, policy.kind === "registry");
+    coordinator = policy.kind === "registry" ? new ExplainedRules() : new GreedyCoordinator();
   }
 
   const sim = new Simulation({

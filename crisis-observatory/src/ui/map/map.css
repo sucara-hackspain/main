@@ -166,3 +166,12 @@
 .run-site[data-state="moving"] { --site:#2563eb; }
 .run-site[data-state="clear"] { --site:#16a34a; opacity:.75; }
 .run-site[data-state="caught"] { --site:#dc2626; }
+
+/* A unit the coordinator is holding in reserve, while one of its decisions is being read. */
+.is-held { outline:2px dashed var(--info); outline-offset:3px; border-radius:50%; }
+.map-explain-legend { position:absolute; left:12px; bottom:12px; z-index:2; display:flex; flex-direction:column; gap:3px; padding:8px 10px; font-size:11px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--popover); box-shadow:var(--dropdown-shadow); }
+.map-explain-legend span { display:flex; align-items:center; gap:7px; }
+.map-explain-legend i { width:22px; height:0; border-top:3px solid var(--foreground); }
+.map-explain-legend i.own { border-top-color:var(--info); }
+.map-explain-legend i.rules { border-top:2px dotted var(--muted-foreground); }
+.map-explain-legend i.water { border-top:2px dashed var(--info); }

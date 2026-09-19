@@ -1,5 +1,5 @@
 import { HappyRobotClient } from "@happyrobot-ai/sdk";
-import { buildBriefing, GreedyCoordinator, holdOn, remainingTicks, type Coordinator, type DecideInput, type Decision, type Hold } from "../engine";
+import { buildBriefing, GreedyCoordinator, holdOn, remainingTicks, whatWasSeen, type Coordinator, type DecideInput, type Decision, type Hold } from "../engine";
 import { runAndReadNode } from "./hr-wait";
 import { composePrompt, readOutput, toActions, toStanding, type LlmTrace } from "./protocol";
 
@@ -143,7 +143,7 @@ export class HappyRobotCoordinator implements Coordinator {
           orders: [...actions.map((a, n) => ({ unitId: a.unitId, text: `${a.type} ${a.unitId}${"incidentId" in a && a.incidentId ? ` → ${a.incidentId}` : ""}: ${reasons[n]}` })), ...standing.notes.map((text) => ({ unitId: text.split(" ")[1], text }))],
         };
       }
-      return { actions, reasons, applies, source: "llm", situation: output.situation, plan: output.plan || undefined, ms };
+      return { actions, reasons, applies, source: "llm", situation: output.situation, plan: output.plan || undefined, watch: output.watch || undefined, saw: whatWasSeen(input), holds: planning ? [...this.holds] : undefined, baseline: this.fallback.decide(input), ms };
     } catch (err) {
       // The platform is down or the workflow is misconfigured: keep the city covered with the rule-based dispatcher.
       const error = err instanceof Error ? err.message : String(err);

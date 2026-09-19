@@ -39,6 +39,14 @@ const area = (ring: [number, number][], properties = {}): GeoJSON.Feature => ({
 });
 const worst = ["red", "yellow", "green", "black"] as const;
 
+export interface MapExplanation {
+  orders: { key: string; kind: string; from: [number, number] | null; to: [number, number] | null; own: boolean }[];
+  rules: { from: [number, number] | null; to: [number, number] | null }[];
+  held: string[];
+  waterAhead: { at: [number, number]; radiusM: number }[];
+  focus: string | null;
+}
+
 export default function RunMap({
   graph,
   meta,
@@ -49,7 +57,10 @@ export default function RunMap({
   related,
   matches,
   filtered,
+  explain,
 }: {
+  /** A decision being read: its orders as arrows, what the rules would have done instead, the held units and the water ten ticks on. */
+  explain?: MapExplanation | null;
   graph: GraphData;
   meta: RunMeta;
   record: TickRecord;
@@ -125,6 +136,10 @@ export default function RunMap({
         "cuts-unknown",
         "cuts-known",
         "sightings",
+        "explain-water",
+        "explain-rules",
+        "explain-orders",
+        "explain-calls",
       ])
         m.addSource(id, { type: "geojson", data: empty });
       m.addLayer({
@@ -202,6 +217,20 @@ export default function RunMap({
           "line-opacity": 0.85,
         },
       });
+      m.addLayer({ id: "explain-water", type: "line", source: "explain-water", paint: { "line-color": color("--info"), "line-width": 1.5, "line-dasharray": [4, 3], "line-opacity": 0.9 } });
+      m.addLayer({ id: "explain-rules", type: "line", source: "explain-rules", layout: { "line-cap": "round" }, paint: { "line-color": color("--muted-foreground"), "line-width": 2, "line-dasharray": [1, 2], "line-opacity": 0.8 } });
+      m.addLayer({
+        id: "explain-orders",
+        type: "line",
+        source: "explain-orders",
+        layout: { "line-cap": "round" },
+        paint: {
+          "line-color": ["case", ["boolean", ["get", "own"], false], color("--info"), color("--foreground")],
+          "line-width": ["case", ["boolean", ["get", "focus"], false], 5, 3],
+          "line-opacity": ["case", ["boolean", ["get", "dim"], false], 0.25, 0.95],
+        },
+      });
+      m.addLayer({ id: "explain-calls", type: "circle", source: "explain-calls", paint: { "circle-radius": ["case", ["boolean", ["get", "focus"], false], 16, 11], "circle-color": color("--info"), "circle-opacity": 0.18, "circle-stroke-color": color("--info"), "circle-stroke-width": 2 } });
       m.addLayer({
         id: "sightings",
         type: "circle",
@@ -358,6 +387,7 @@ export default function RunMap({
       label.className = "unit-number";
       label.textContent = u.id;
       el.append(label);
+      if (explain?.held.includes(u.id)) el.classList.add("is-held");
       marker(el, u.pos, `${u.id} · ${unitKind[u.kind].label} · ${unitStatus(u)}`, {
         kind: "unit",
         id: u.id,
@@ -406,6 +436,16 @@ export default function RunMap({
         })),
       ),
     );
+    // Reading a decision: straight arrows say "who was sent where" better than the street route does.
+    const drawn = explain?.orders.filter((o) => o.to) ?? [];
+    (m.getSource("explain-orders") as ml.GeoJSONSource).setData(
+      collection(drawn.filter((o) => o.from).map((o) => line([o.from!, o.to!], { own: o.own, focus: explain!.focus === o.key, dim: explain!.focus !== null && explain!.focus !== o.key }))),
+    );
+    (m.getSource("explain-calls") as ml.GeoJSONSource).setData(
+      collection(drawn.filter((o) => !o.from).map((o) => ({ type: "Feature", properties: { focus: explain!.focus === o.key }, geometry: { type: "Point", coordinates: o.to! } }))),
+    );
+    (m.getSource("explain-rules") as ml.GeoJSONSource).setData(collection((explain?.rules ?? []).filter((o) => o.from && o.to).map((o) => line([o.from!, o.to!]))));
+    (m.getSource("explain-water") as ml.GeoJSONSource).setData(collection((explain?.waterAhead ?? []).map((w) => line(circle(w.at, w.radiusM)))));
     (m.getSource("incident-area") as ml.GeoJSONSource).setData(
       collection(
         frame.incidents
@@ -413,11 +453,19 @@ export default function RunMap({
           .map((i) => area(circle(graph.nodes[i.node], i.locationErrorM), { priority: i.priority })),
       ),
     );
-  }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered]);
+  }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered, explain]);
 
   return (
     <div className="app-map-wrap operational-map">
       <div ref={host} className="operational-map-canvas" />
+      {explain && (
+        <div className="map-explain-legend" aria-label="Cómo leer la decisión">
+          <span><i />orden que también darían las reglas</span>
+          <span><i className="own" />decisión propia</span>
+          <span><i className="rules" />lo que habrían hecho las reglas</span>
+          <span><i className="water" />dónde estará el agua en 10 ticks</span>
+        </div>
+      )}
       <div className="operational-map-heading">
         <strong>Valencia</strong>
         <small>Posiciones registradas · cada {seconds} s</small>
