@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  GitBranch,
   Layers,
   Map as MapIcon,
   Pause,
@@ -33,8 +32,7 @@ import {
   relatedEntities,
   type SituationFilter,
 } from "./situation/model";
-import ThoughtsView from "./thoughts/ThoughtsView";
-import { auditItems, laneName } from "./thoughts/model";
+import { auditItems } from "./audit/model";
 import DecisionBanner from "./interventions/DecisionBanner";
 import DecisionRoom, { PendingDecisionBar } from "./interventions/DecisionRoom";
 import { DecisionReceipt } from "./interventions/DecisionParts";
@@ -78,7 +76,7 @@ export default function ControlCenter() {
           </h1>
           <p>
             {error ||
-              "Aquí aparecerán las ejecuciones y la actividad de los agentes."}
+              "Aquí aparecerán las ejecuciones y sus incidencias."}
           </p>
           {loaded && (
             <p>Los nuevos registros aparecerán aquí automáticamente.</p>
@@ -104,7 +102,7 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"map" | "flow" | "tickets">("map"),
+    [view, setView] = useState<"map" | "tickets">("map"),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
@@ -113,8 +111,6 @@ function RunSession({
     [query, setQuery] = useState(""),
     [showClosed, setShowClosed] = useState(false),
     [focusRequest, setFocusRequest] = useState(0),
-    [lane, setLane] = useState<"master" | "coordinator" | null>(null),
-    [expanded, setExpanded] = useState<string | null>(null),
     [decisionId, setDecisionId] = useState<string | null>(null),
     [held, setHeld] = useState(false),
     // Left the decision room to look around: the request waits in a bar until the operator returns.
@@ -203,19 +199,10 @@ function RunSession({
   useEffect(() => {
     if (entity && current && !selectionExists(entity, current, meta)) setEntity(null);
   }, [current, meta, entity]);
-  const items = all.filter(
-    (x) =>
-      (!lane ||
-        (lane === "master"
-          ? x.lane !== "coordinator"
-          : x.lane === "coordinator")) &&
-      (!selection || x.refs.includes(selection.id)),
-  );
   function seek(i: number) {
     setIndex(i);
     setPlaying(false);
     setFollow(false);
-    setExpanded(null);
     setHeld(false);
   }
   function seekTick(tick: number) {
@@ -239,7 +226,6 @@ function RunSession({
   }
   function chooseEntity(value: Selection | null) {
     setEntity(value);
-    setExpanded(null);
   }
   function chooseIncident(id: string | null) {
     chooseEntity(id ? { kind: "incident", id } : null);
@@ -276,12 +262,6 @@ function RunSession({
         onActive={setDecisionId}
         onDecide={decide}
         onLeave={() => setInvestigating(true)}
-        onOpenThread={(item) => {
-          setInvestigating(true);
-          setView("flow");
-          setLane(null);
-          chooseIncident(item.incidentId);
-        }}
       />
     );
   const banner = iteration === 1 && current && (
@@ -299,10 +279,6 @@ function RunSession({
         chooseIncident(incidentId);
         setView("map");
         setFocusRequest((n) => n + 1);
-      }}
-      onReveal={(auditId) => {
-        setView("flow");
-        setExpanded(auditId);
       }}
     />
   );
@@ -340,14 +316,6 @@ function RunSession({
             >
               <ClipboardList size={14} />
               Incidencias
-            </button>
-            <button
-              aria-pressed={view === "flow"}
-              className={view === "flow" ? "is-active" : ""}
-              onClick={() => setView("flow")}
-            >
-              <GitBranch size={14} />
-              Actividad de los agentes
             </button>
           </div>
           {current && (
@@ -390,10 +358,9 @@ function RunSession({
         {view !== "tickets" && <div className="app-scope">
           <div>
             <button
-              className={!selection && !lane && !filtered ? "is-active" : ""}
+              className={!selection && !filtered ? "is-active" : ""}
               onClick={() => {
                 chooseEntity(null);
-                setLane(null);
                 setFilter("all");
                 setQuery("");
               }}
@@ -407,14 +374,9 @@ function RunSession({
                 <X size={12} />
               </button>
             )}
-            {view === "flow" && (["master", "coordinator"] as const).map((key) => (
-              <button key={key} aria-pressed={lane === key} className={lane === key ? "app-filter" : ""} onClick={() => setLane(lane === key ? null : key)}>{laneName[key]}</button>
-            ))}
           </div>
           <span>
-            {view === "map"
-              ? `${current?.frame.incidents.filter((i) => i.status === "open").length ?? 0} incidentes abiertos`
-              : `${items.length} registros`}{" "}
+            {current?.frame.incidents.filter((i) => i.status === "open").length ?? 0} incidentes abiertos{" "}
             · +{elapsed(current?.tick ?? 0, seconds)}
           </span>
         </div>}
@@ -430,7 +392,7 @@ function RunSession({
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
-          ) : view === "map" ? (
+          ) : (
             graph &&
             meta && (
               <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
@@ -449,15 +411,6 @@ function RunSession({
                 />
               </Suspense>
             )
-          ) : (
-            <ThoughtsView
-              items={items}
-              seconds={seconds}
-              tick={current.tick}
-              autoScroll={playing || follow}
-              expanded={expanded}
-              onExpand={setExpanded}
-            />
           )}
         </div>
         <div className="app-playback">

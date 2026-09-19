@@ -1,0 +1,71 @@
+/* Recorded event and decision details used inside interventions. */
+.app-event-detail { padding:0 12px 12px; border-top:1px solid var(--border); background:var(--sidebar); }
+.app-event-detail label { display:block; font-size:10px; letter-spacing:.5px; font-weight:500; color:var(--muted-foreground); margin:12px 0 5px; }
+.app-event-detail p { font-size:12px; line-height:1.65; color:var(--foreground); margin:0; }
+.run-order {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  margin-bottom: 8px;
+  background: var(--card);
+}
+.run-order strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.run-order > span {
+  font-size: 11px;
+  display: block;
+  margin-top: 6px;
+  color: var(--success-foreground);
+}
+.run-json {
+  margin-top: 12px;
+  font-size: 11px;
+}
+.run-json summary {
+  cursor: pointer;
+}
+.run-json pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 11px/1.5 var(--font-mono);
+}
+.run-call {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--info);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--card);
+  font-size: 12px;
+  line-height: 1.55;
+  font-style: italic;
+}
+.run-assessed {
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.run-assessed li::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+.run-assessed li[data-triage="red"]::before {
+  background: var(--destructive);
+}
+.run-assessed li[data-triage="yellow"]::before {
+  background: var(--warning);
+}
+.run-assessed li[data-triage="green"]::before {
+  background: var(--success);
+}
+.run-assessed li[data-triage="black"]::before {
+  background: var(--foreground);
+}

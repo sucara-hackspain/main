@@ -2,12 +2,12 @@
 
 ## Responsabilidades
 
-- `src/ui/`: aplicación React. `ControlCenter.tsx` coordina la selección de ejecución, el historial, los filtros, el mapa y la actividad.
+- `src/ui/`: aplicación React. `ControlCenter.tsx` coordina la selección de ejecución, el historial, los filtros, el mapa, los tickets y las intervenciones.
 - `server/runsApi.ts`: middleware de Vite que lee registros y mapas. No ejecuta el motor ni modifica sus datos.
 - `gabriel/src/`: motor, coordinadores y runner. Los registros se escriben en `gabriel/runs/` y los mapas se leen de `gabriel/data/`.
 - `backend/`: módulo independiente con CLI y persistencia en `state.json`; no forma parte de esta conexión.
 
-La aplicación tiene una sola UI, servida en `/`. `src/ui/map/` contiene el mapa y `src/ui/thoughts/` el flujo de actividad y `src/ui/situation/` el panel operativo lateral.
+La aplicación tiene una sola UI, servida en `/`. `src/ui/map/` contiene el mapa, `src/ui/tickets/` los tickets de incidencias y `src/ui/situation/` el panel operativo lateral. `src/ui/audit/` reúne la transformación de eventos compartida y el detalle de los registros que se despliegan en las intervenciones.
 
 ## API de lectura
 
@@ -33,7 +33,7 @@ La API funciona dentro del servidor de desarrollo. Para servir el build estátic
 - Hospitales: ocupación confirmada y demanda de víctimas a bordo con ese destino, incluidos los traslados detenidos. El margen previsto descuenta esa demanda de la capacidad libre, puede ser negativo y no representa reservas. Un hospital asignado antes de la recogida no se cuenta como traslado. Se indica si tiene helipuerto.
 - Agua y cortes: las zonas de los mapas oficiales con su radio y antigüedad, los avisos de agua y los tramos cortados que conoce el coordinador, frente a los cortes reales que nadie ha comunicado (supervisión).
 - Mapa: coordenadas registradas de cada unidad con su tipo (ambulancia, bomberos, rescate acuático, helicóptero), incidentes con su prioridad y el área de incertidumbre de su ubicación, agua conocida (zonas y avistamientos), cortes comunicados y geometrías del grafo. «Realidad» añade lo que el coordinador no ve: el agua real, las escenas y los cortes sin comunicar. Las rutas se recortan desde el GPS sin saltarse las curvas de la primera arista.
-- Actividad: distingue entorno, llamadas al 112, evolución de las dotaciones y coordinador. Cada evento guarda sus referencias (llamada, incidente, unidad, escena, víctima, hospital) para filtrar por la selección. El detalle central muestra situación, razones, órdenes, aceptación/rechazo y ETA, además de duración, coste o error cuando existen. Los filtros de Master y Coordinador se muestran únicamente en la vista de actividad. El sidebar contiene el estado operativo, sin tarjetas ni registros de agentes.
+- Registros de incidencias e intervenciones: distinguen entorno, llamadas al 112, evolución de las dotaciones y coordinador. Las referencias de cada evento (llamada, incidente, unidad, escena, víctima, hospital) permiten reconstruir el hilo de una intervención. Su detalle desplegable muestra situación, razones, órdenes, aceptación/rechazo y ETA, además de duración, coste o error cuando existen. Los tickets presentan la cronología de cada incidencia en su lateral.
 
 El resumen global y el balance acumulado, bajo los indicadores, usan exclusivamente el snapshot seleccionado. La interfaz señala cuándo se revisa el pasado. La espera de un incidente se cuenta desde que se abrió. Una selección que todavía no existe al retroceder se elimina.
 
@@ -43,6 +43,6 @@ Las justificaciones se muestran tal como aparecen en los registros. La UI no rec
 
 ## Verificación
 
-`npm test` comprueba la validación de registros, la clasificación de actividad, los estados y plazos de las unidades, la demanda de hospitales, las relaciones y filtros del panel de situación, las geometrías de rutas y la detección y recomendación de intervenciones. `npm run test:ui` simula en memoria ejecuciones del motor (`tests/support/engineRun.ts`) y las sirve a través del contrato incremental de la API; comprueba posiciones, capacidad, historial, expansión del detalle, polling, recuperación tras errores, layout móvil e intervenciones del operador. También comprueba el rechazo explícito del formato anterior.
+`npm test` comprueba la validación de registros, la clasificación de eventos, los estados y plazos de las unidades, la demanda de hospitales, las relaciones y filtros del panel de situación, las geometrías de rutas y la detección y recomendación de intervenciones. `npm run test:ui` simula en memoria ejecuciones del motor (`tests/support/engineRun.ts`) y las sirve a través del contrato incremental de la API; comprueba posiciones, capacidad, historial, expansión del detalle, polling, recuperación tras errores, layout móvil e intervenciones del operador. También comprueba el rechazo explícito del formato anterior.
 
 Estas pruebas no hacen llamadas a modelos reales. Las pruebas de navegador sustituyen el estilo externo por un fondo local para comprobar interacciones sin conexión a las teselas. La aplicación normal carga la cartografía de OpenFreeMap.

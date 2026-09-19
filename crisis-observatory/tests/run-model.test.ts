@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { auditItems } from "../src/ui/thoughts/model";
+import { auditItems } from "../src/ui/audit/model";
 import type { GraphData, TickRecord } from "../src/ui/engineTrace";
 import { remainingRoute } from "../src/ui/map/routes";
 const unit = { pos: [0.5, 0] as [number, number], route: [[0, 1]] as [number, 0 | 1][] };

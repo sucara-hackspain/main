@@ -11,7 +11,7 @@ import {
   type UnitFrame,
   type UnitKind,
 } from "../engineTrace";
-import { actionText } from "../thoughts/model";
+import { actionText } from "../audit/model";
 import type { Router } from "./routing";
 
 // Exceptions the system leaves open and a person should decide on, derived from the records
@@ -73,8 +73,6 @@ export type Prescription = {
   deadlineTick: number | null;
   /** Where the deadline comes from: the water forecast, or the victims' real state in the simulation. */
   deadlineSource?: "water" | "simulation";
-  /** Activity item with the evidence, when there is one. */
-  auditId?: string;
 };
 
 export type OperatorDecision = {
@@ -584,7 +582,6 @@ export function prescribe(
         { ...ESCALATE, label: "Escalar incidencia técnica" },
       ],
       deadlineTick: null,
-      auditId: `${item.openedTick}:d`,
     };
 
   if (item.kind === "rejected")
@@ -593,7 +590,6 @@ export function prescribe(
       rationale: "El coordinador recibe el rechazo como parte y puede corregirlo en su siguiente decisión.",
       options: [{ id: "ack", label: "Dejar que el coordinador lo corrija" }, ESCALATE],
       deadlineTick: null,
-      auditId: `${item.openedTick}:d`,
     };
 
   if (!incident) return null;

@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUpRight,
   Bell,
   BellOff,
   ChevronLeft,
@@ -15,8 +14,8 @@ import {
   type RunMeta,
   type TickRecord,
 } from "../engineTrace";
-import { auditTitle, laneName, type AuditItem } from "../thoughts/model";
-import { AuditDetail, LaneIcon } from "../thoughts/ThoughtsView";
+import { auditTitle, laneName, type AuditItem } from "../audit/model";
+import { AuditDetail, LaneIcon } from "../audit/AuditDetail";
 import type { InterventionView, Option, Pending } from "./model";
 import type { Router } from "./routing";
 import { incidentScene, incidentThread } from "./scene";
@@ -46,8 +45,6 @@ type DecisionRoomProps = {
   onDecide: (item: InterventionView, option: Option, prescribed: Option) => void;
   /** Leave without deciding: the request stays pending in a bar above the page. */
   onLeave: () => void;
-  /** Leave to follow the whole thread in the activity view. */
-  onOpenThread: (item: InterventionView) => void;
 };
 
 /** A request takes over the page: critical ones in red, supervision in amber. Everything needed to
@@ -68,7 +65,6 @@ export default function DecisionRoom({
   onActive,
   onDecide,
   onLeave,
-  onOpenThread,
 }: DecisionRoomProps) {
   const position = Math.max(
     0,
@@ -216,10 +212,6 @@ export default function DecisionRoom({
                   {item.incidentId ? "HILO DEL INCIDENTE" : "HILO DE LA PETICIÓN"} · {thread.length}{" "}
                   {thread.length === 1 ? "registro" : "registros"}
                 </label>
-                <button onClick={() => onOpenThread(item)}>
-                  Abrir en Actividad de los agentes
-                  <ArrowUpRight size={12} />
-                </button>
               </div>
               <ol>
                 {thread.map((x) => (

@@ -2,7 +2,7 @@ import {
   elapsed, injuryLabel, sceneLabel, unitKind,
   type Action, type Call, type CaseEntry, type IncidentFrame, type ObservedEvent, type TickRecord, type UnitFrame,
 } from "../engineTrace";
-import { eventText } from "../thoughts/model";
+import { eventText } from "../audit/model";
 
 export const ticketStates = { triage: "Triage", progress: "Progreso", resolved: "Resuelto" } as const;
 export type TicketState = keyof typeof ticketStates;
