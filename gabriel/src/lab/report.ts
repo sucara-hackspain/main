@@ -2,7 +2,7 @@
 // reloads itself while a run is alive, so it doubles as the live view of the training.
 import { writeFileSync } from "node:fs";
 import { EMPTY, type Doctrine } from "./doctrine";
-import { loadScenarios, type Scenario } from "./scenario";
+import { loadPlayables, type Scenario } from "./scenario";
 import { deathsOn, LAB_DIR, policyKey, readGames, readLedger, readPolicies, readStatus, repNoise, type GameRow, type LedgerEntry, type Trial, type Verdict } from "./store";
 
 type Generation = Extract<LedgerEntry, { type: "generation" }>;
@@ -95,7 +95,7 @@ function heat(value: number, reference: number): string {
 }
 
 export function renderReport(): string {
-  const scenarios = loadScenarios();
+  const scenarios = loadPlayables();
   const games = readGames();
   const ledger = readLedger();
   const policies = readPolicies();

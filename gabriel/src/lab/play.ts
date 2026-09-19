@@ -1,7 +1,7 @@
 // One game: a scenario, a coordinator, and the count of who did not make it.
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { HappyRobotCoordinator } from "../coordinators/happyrobot";
-import { CallObserver, GreedyCoordinator, makeTickRecord, Simulation, type Coordinator, type Graph, type RunMeta, type TickRecord } from "../engine";
+import { CallObserver, GreedyCoordinator, makeTickRecord, Simulation, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
 import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
 import { renderDoctrine, type Doctrine } from "./doctrine";
 import { ScriptedMaster, type Scenario } from "./scenario";
@@ -27,6 +27,35 @@ export interface Game {
   valid: boolean;
   seconds: number;
   findings: Finding[];
+  /** What the agent ordered and why, decision by decision (kept for moments, where there are only a few). */
+  decisions?: { tick: number; situation: string; orders: string[] }[];
+}
+
+/** The dispatcher plays the night, except for a few decisions in the middle that are the agent's. */
+class Handover implements Coordinator {
+  readonly name: string;
+  private readonly rules = new GreedyCoordinator();
+  private left: number;
+  private until: number;
+
+  constructor(
+    private readonly agent: Coordinator,
+    private readonly fromTick: number,
+    decisions: number,
+  ) {
+    this.name = agent.name;
+    this.left = decisions;
+    // If nothing needs deciding for a while, the agent does not keep the city waiting.
+    this.until = fromTick + decisions * 3 + 6;
+  }
+
+  async decide(input: DecideInput): Promise<Decision> {
+    if (input.tick < this.fromTick || input.tick >= this.until) return { actions: this.rules.decide(input), source: "rules" };
+    const decided = await this.agent.decide(input);
+    const decision: Decision = Array.isArray(decided) ? { actions: decided, source: "rules" } : decided;
+    if (decision.source !== "rules" && --this.left === 0) this.until = input.tick + 1;
+    return decision;
+  }
 }
 
 const MAX_FALLBACK_SHARE = 0.2;
@@ -50,6 +79,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
       memory: doctrine ? () => doctrine : undefined,
       onTrace: dir ? (trace) => appendFileSync(`${dir}/llm.jsonl`, JSON.stringify(trace) + "\n") : undefined,
     });
+    if (scenario.handover) coordinator = new Handover(coordinator, scenario.handover.tick, scenario.handover.decisions);
   } else {
     coordinator = new GreedyCoordinator();
   }
@@ -86,8 +116,28 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
   const records: TickRecord[] = [];
   const applications: { ruleId: string; incidentId: string | null }[] = [];
   const known = new Set(policy.kind === "agent" ? policy.doctrine.rules.map((r) => r.id) : []);
+  const decisions: NonNullable<Game["decisions"]> = [];
+  let calls = 0;
+  let fallbacks = 0;
+  let thinkingMs = 0;
   for (let i = 0; i < scenario.ticks; i++) {
     const result = await sim.step();
+    const d = result.decision;
+    if (d && d.source !== "rules") {
+      calls++;
+      if (d.source === "fallback") fallbacks++;
+      else thinkingMs += d.ms ?? 0;
+      if (scenario.handover) decisions.push({ tick: result.tick, situation: d.situation ?? "", orders: d.actions.map((a, n) => `${a.type} ${a.unitId}${"incidentId" in a && a.incidentId ? ` → ${a.incidentId}` : ""}${"hospitalId" in a && a.hospitalId ? ` (${a.hospitalId})` : ""}: ${d.reasons?.[n] ?? ""}`) });
+    }
+    // A moment is mostly the dispatcher replaying the night: the per-tick record is only worth its cost for a whole game.
+    if (scenario.handover && !dir) {
+      options.onTick?.(result.tick, sim.world.victims.filter((v) => v.status === "dead").length);
+      result.decision?.applies?.forEach((ids, n) => {
+        const action = result.decision!.actions[n];
+        for (const ruleId of new Set(ids)) if (known.has(ruleId)) applications.push({ ruleId, incidentId: action.type === "dispatch" ? action.incidentId : null });
+      });
+      continue;
+    }
     const record = makeTickRecord(result, sim.world, sim.belief, graph);
     records.push(record);
     options.onTick?.(result.tick, sim.world.victims.filter((v) => v.status === "dead").length);
@@ -104,7 +154,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     writeFileSync(`${dir}/meta.json`, JSON.stringify({ ...meta, status: "finished", summary: s }, null, 2));
     writeFileSync(`${dir}/evaluation.json`, JSON.stringify(evaluation, null, 2));
   }
-  const { llm, fallback, meanMs } = evaluation.decisions;
+  const from = scenario.handover?.tick ?? 0;
   return {
     scenario: scenario.id,
     rep: options.rep ?? 0,
@@ -114,11 +164,13 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     open: s.waiting + s.inAmbulance,
     inWater: s.inWater,
     counts: evaluation.counts,
-    llm: { calls: llm + fallback, fallbacks: fallback, meanMs },
+    llm: { calls, fallbacks, meanMs: calls > fallbacks ? thinkingMs / (calls - fallbacks) : null },
     ruleUse: evaluation.ruleUse,
-    valid: policy.kind !== "agent" || llm + fallback === 0 || fallback / (llm + fallback) <= MAX_FALLBACK_SHARE,
+    valid: policy.kind !== "agent" || calls === 0 || fallbacks / calls <= MAX_FALLBACK_SHARE,
     seconds: (Date.now() - started) / 1000,
-    findings: evaluation.findings,
+    // In a moment, what happened before the agent took over says nothing about it.
+    findings: evaluation.findings.filter((f) => f.tick >= from),
+    decisions: scenario.handover ? decisions : undefined,
   };
 }
 

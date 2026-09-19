@@ -36,6 +36,8 @@ export interface ResearchInput {
   ruleUse: { ruleId: string; times: number }[];
   past: PastTrial[];
   wanted: number;
+  /** Moments mode: what the agent ordered in each hard moment and how it ended, worst first. */
+  moments?: string[];
 }
 
 export const RESEARCH_PROMPT = `Eres el investigador de un laboratorio que entrena a un coordinador de emergencias (un LLM) durante una DANA en una ciudad. El coordinador manda ambulancias, bomberos, rescate acuático, un helicóptero y drones, y decide con información incompleta: llamadas al 112 vagas o equivocadas, y lo que confirman las dotaciones al llegar. Antes de cada decisión lee una DOCTRINA: una lista corta de reglas. Tu trabajo es descubrir qué doctrina salva más vidas. La única medida es el número de muertos.
@@ -119,6 +121,14 @@ export function buildResearchInput(input: ResearchInput): string {
   lines.push(`CASOS (${Math.min(bad.length, MAX_FINDINGS)} de ${bad.length})`);
   for (const { scenario, finding } of bad.slice(0, MAX_FINDINGS)) lines.push(`- [${scenario}] ${finding.title}. ${finding.detail}${finding.ruleIds.length ? ` Reglas citadas en ese incidente: ${finding.ruleIds.join(", ")}.` : ""}`);
   lines.push("");
+
+  if (input.moments?.length) {
+    lines.push(
+      "MOMENTOS DIFÍCILES (cada partida es un momento de una noche: el despachador por reglas juega hasta ahí, el coordinador toma solo las 3 decisiones siguientes con la doctrina actual y el despachador termina la noche; «reglas» es cuántos mueren si el despachador decide también esas 3)",
+      ...input.moments,
+      "",
+    );
+  }
 
   if (input.past.length) {
     lines.push("HIPÓTESIS YA PROBADAS (Δ = muertos por noche respecto a la doctrina de entonces; negativo es mejor)");

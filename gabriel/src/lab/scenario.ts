@@ -31,6 +31,11 @@ export interface Scenario {
   ticks: number;
   config: Partial<SimConfig>;
   script: { tick: number; action: MasterAction }[];
+  /**
+   * A moment instead of a whole night: the rule-based dispatcher plays up to `tick`, the agent takes the next
+   * `decisions` decisions, and the dispatcher plays the rest. Whatever changes in the count is down to those decisions.
+   */
+  handover?: { tick: number; decisions: number; why: string; night: string };
   stats: { scenes: number; silent: number; victims: number; floods: string[] };
 }
 
@@ -41,6 +46,26 @@ export function loadScenarios(dir = SCENARIO_DIR): Scenario[] {
     .filter((file) => file.endsWith(".json"))
     .sort()
     .map((file) => JSON.parse(readFileSync(`${dir}/${file}`, "utf8")) as Scenario);
+}
+
+export interface MomentRef {
+  id: string;
+  night: string;
+  tick: number;
+  decisions: number;
+  why: string;
+}
+
+/** What the lab plays: whole nights, or (LAB_MOMENTS=<file>) the hard moments picked out of them. */
+export function loadPlayables(): Scenario[] {
+  const nights = loadScenarios();
+  const file = process.env.LAB_MOMENTS;
+  if (!file) return nights;
+  const moments = JSON.parse(readFileSync(file, "utf8")) as MomentRef[];
+  return moments.map((m) => {
+    const night = nights.find((n) => n.id === m.night)!;
+    return { ...night, id: m.id, title: `${night.title} · tick ${m.tick} · ${m.why}`, handover: { tick: m.tick, decisions: m.decisions, why: m.why, night: night.id } };
+  });
 }
 
 /** Plays a scenario back. It never looks at the world, so it cannot react to the coordinator. */
@@ -62,6 +87,8 @@ export interface ScenarioSpec {
   floods: number[];
   dana?: Partial<DanaMasterConfig>;
   config?: Partial<SimConfig>;
+  /** How many emergencies can break out in the same tick: 1 is a bad night, 6 is the 29th of October 2024. */
+  intensity?: number;
 }
 
 const EVENT_TICKS = 40;
@@ -88,7 +115,10 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
 
   const script: Scenario["script"] = [];
   for (let tick = 0; tick < TICKS; tick++) {
-    const actions = master.act(world, graph, masterRng).filter((a) => tick < EVENT_TICKS || a.type !== "spawn_scene");
+    const actions = master.act(world, graph, masterRng);
+    // A catastrophe is many emergencies at once, not one after another: more rolls of the same dice per tick.
+    for (let extra = 1; extra < (spec.intensity ?? 1); extra++) actions.push(...master.act(world, graph, masterRng).filter((a) => a.type === "spawn_scene"));
+    for (let i = actions.length - 1; i >= 0; i--) if (tick >= EVENT_TICKS && actions[i].type === "spawn_scene") actions.splice(i, 1);
     for (const unit of roadUnits) {
       if (tick < EVENT_TICKS && breakdownRng.chance(P_BREAKDOWN)) actions.push({ type: "puncture", unitId: unit.id, ticks: breakdownRng.int(10, 25) });
     }
@@ -126,6 +156,8 @@ const [LA_TORRE, LA_PUNTA, MALILLA, SANT_ISIDRE, NATZARET] = [0, 1, 2, 3, 4];
 const SCARCE: Partial<SimConfig> = { ambulances: 3, fireUnits: 2, hospitalCapacity: 6 };
 const SILENT: Partial<DanaMasterConfig> = { pSilent: 0.35, pSilentFlood: 0.5, pSilentInWater: 0.8 };
 const SATURATED: Partial<SimConfig> = { hospitals: 4, hospitalCapacity: 5 };
+/** A provincial deployment for a night with hundreds of victims: three times the fleet, and still nowhere near enough. */
+const DEPLOYED: Partial<SimConfig> = { ambulances: 15, fireUnits: 8, rescueUnits: 6, helicopters: 2, drones: 5, hospitals: 8, hospitalCapacity: 45 };
 
 /**
  * Four kinds of night to learn from, each with games the researcher studies (train) and games it is only scored on
@@ -149,6 +181,11 @@ export const COLLECTION: ScenarioSpec[] = [
   { id: "D1", family: "D · Noche silenciosa", split: "train", title: "La Torre, casi nadie llama", seed: 401, floods: [LA_TORRE], dana: SILENT },
   { id: "D2", family: "D · Noche silenciosa", split: "train", title: "La Punta, casi nadie llama", seed: 402, floods: [LA_PUNTA], dana: SILENT },
   { id: "D3", family: "D · Noche silenciosa", split: "validation", title: "Malilla, casi nadie llama", seed: 403, floods: [MALILLA], dana: SILENT },
+
+  { id: "F1", family: "F · DANA a escala real", split: "train", title: "La Torre y Malilla, cientos de víctimas", seed: 601, floods: [LA_TORRE, MALILLA], config: DEPLOYED, intensity: 6 },
+  { id: "F2", family: "F · DANA a escala real", split: "train", title: "La Punta y Sant Isidre, cientos de víctimas", seed: 602, floods: [LA_PUNTA, SANT_ISIDRE], config: DEPLOYED, intensity: 6 },
+  { id: "F3", family: "F · DANA a escala real", split: "validation", title: "La Torre y Natzaret, cientos de víctimas", seed: 603, floods: [LA_TORRE, NATZARET], config: DEPLOYED, intensity: 6 },
+  { id: "F4", family: "F · DANA a escala real", split: "test", title: "Malilla y La Punta, cientos de víctimas", seed: 604, floods: [MALILLA, LA_PUNTA], config: DEPLOYED, intensity: 6 },
 
   { id: "E1", family: "E · Dos focos y hospitales saturados", split: "test", title: "La Torre y Natzaret a la vez", seed: 501, floods: [LA_TORRE, NATZARET], config: SATURATED },
   { id: "E2", family: "E · Dos focos y hospitales saturados", split: "test", title: "Sant Isidre y La Punta a la vez", seed: 502, floods: [SANT_ISIDRE, LA_PUNTA], config: SATURATED },

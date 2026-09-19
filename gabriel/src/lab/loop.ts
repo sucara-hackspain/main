@@ -15,7 +15,7 @@ import { applyEdit, describeEdit, diffDoctrine, EMPTY, type Doctrine } from "./d
 import { play, type Game, type Policy } from "./play";
 import { writeReport } from "./report";
 import { buildResearchInput, ClaudeResearcher, type PastTrial } from "./researcher";
-import { loadScenarios, type Scenario } from "./scenario";
+import { loadPlayables, type Scenario } from "./scenario";
 import { deathsOn, deathsOver, policyKey, readGames, readLedger, readPolicies, saveGame, saveLedger, savePolicy, saveStatus, type Comparison, type GameRow, type RunningGame, type Status, type Trial } from "./store";
 
 const { values } = parseArgs({
@@ -45,7 +45,7 @@ const MIN_GAIN = Number(values["min-gain"]);
 const MAX_HARM = Number(values["max-harm"]);
 
 const graph = new Graph(JSON.parse(readFileSync("data/valencia.json", "utf8")) as GraphData);
-const scenarios = loadScenarios();
+const scenarios = loadPlayables();
 const bySplit = (split: Scenario["split"]) => scenarios.filter((s) => s.split === split);
 const TRAIN = bySplit("train");
 const VALIDATION = bySplit("validation");
@@ -180,6 +180,19 @@ function currentChampion(): { doctrine: Doctrine; generation: number; taken: Set
   return { doctrine, generation, taken };
 }
 
+/** The moments where the agent did worst against the dispatcher, with what it ordered: the most instructive thing there is. */
+function momentCases(rows: GameRow[]): string[] | undefined {
+  const cases = rows.flatMap((row) => {
+    const moment = TRAIN.find((s) => s.id === row.game.scenario)?.handover;
+    if (!moment || !row.game.decisions) return [];
+    const rules = deathsOn(games, "greedy", row.game.scenario);
+    const orders = row.game.decisions.map((d) => `    t${d.tick} «${d.situation}» ${d.orders.length ? d.orders.join(" | ") : "(sin órdenes)"}`);
+    return [{ lost: row.game.dead - rules, text: [`- [${row.game.scenario}] ${moment.why} → ${row.game.dead} muertos (reglas: ${rules})`, ...orders].join("\n") }];
+  });
+  if (cases.length === 0) return undefined;
+  return cases.sort((a, b) => b.lost - a.lost).slice(0, 14).map((c) => c.text.slice(0, 1500));
+}
+
 function pastTrials(): PastTrial[] {
   return readLedger().flatMap((entry) =>
     entry.type === "generation"
@@ -214,6 +227,7 @@ async function generation(n: number, champion: Doctrine, taken: Set<string>): Pr
     ruleUse: [...ruleUse].map(([ruleId, times]) => ({ ruleId, times })).sort((a, b) => b.times - a.times),
     past: pastTrials(),
     wanted: Number(values.hypotheses),
+    moments: momentCases(trainGames),
   });
   const thinking = Date.now();
   const research = await researcher.propose(input);

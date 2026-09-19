@@ -1,0 +1,170 @@
+{
+  "greedy": {
+    "label": "Despachador por reglas (greedy)",
+    "doctrine": null
+  },
+  "informed": {
+    "label": "Greedy con información perfecta",
+    "doctrine": null
+  },
+  "agent:da39a3ee5e": {
+    "label": "G0 · sin doctrina",
+    "doctrine": {
+      "rules": []
+    }
+  },
+  "agent:6f519d78cc": {
+    "label": "G1 · Herramienta correcta o nadie",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D1",
+          "kind": "driver",
+          "title": "Capacidad antes que cercanía",
+          "body": "Cuando no quepa todo, reparte por capacidad, no por distancia. Víctima en agua exige rescate acuático o helicóptero; víctima atrapada exige bomberos. Una unidad que no puede alcanzar ni liberar no cuenta como respuesta.",
+          "since": 1
+        },
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Libera antes de trasladar",
+          "body": "Si el parte dice atrapado, asigna primero bomberos o rescate acuático. No mandes ambulancia a esa escena hasta que la unidad de liberación esté en camino con ETA igual o menor.",
+          "since": 1
+        },
+        {
+          "id": "H2",
+          "kind": "heuristic",
+          "title": "Agua: rescate o helicóptero ya",
+          "body": "Ante persona en el agua, arrastrada o en planta baja inundada, asigna rescate acuático o helicóptero en esa misma decisión, no más tarde. Si ninguno llega antes de la muerte previsible, no mandes ambulancias allí.",
+          "since": 1
+        },
+        {
+          "id": "A1",
+          "kind": "antipattern",
+          "title": "El helicóptero no es taxi",
+          "body": "No uses helicóptero ni rescate acuático para trasladar víctimas que una ambulancia alcanza por carretera, aunque el hospital tenga helipuerto. Resérvalos para agua, aislamiento y atrapados inalcanzables.",
+          "since": 1
+        },
+        {
+          "id": "A2",
+          "kind": "antipattern",
+          "title": "No entres donde cortará el agua",
+          "body": "Si avisan que el agua aislará la zona, no mandes unidades terrestres salvo que lleguen antes del corte. Usa rescate acuático o helicóptero, o deja la escena para ellos.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:bf63299073": {
+    "label": "G1 · Ojos antes que ruedas",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D1",
+          "kind": "driver",
+          "title": "El silencio pesa como llamada",
+          "body": "Trata una zona a ciegas con agua encima como si tuviera víctimas graves esperando. En LO QUE NO SABES está la mitad de los muertos: no dejes que el silencio compita en desventaja con lo ya conocido.",
+          "since": 1
+        },
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Ningún dron parado nunca",
+          "body": "En cada decisión manda todos los drones libres a las zonas sin llamadas donde el agua ya llega o llegará, empezando por las rodeadas de llamadas. Reasigna en cuanto confirmen o descarten.",
+          "since": 1
+        },
+        {
+          "id": "H2",
+          "kind": "heuristic",
+          "title": "Confirmado: envía sin esperar",
+          "body": "Cuando el reconocimiento confirme víctimas en zona silenciosa, manda unidad en esa misma decisión y antes del aislamiento. Esas víctimas no volverán a avisar y su reloj lleva corriendo desde antes.",
+          "since": 1
+        },
+        {
+          "id": "H3",
+          "kind": "heuristic",
+          "title": "Llamada vaga: verifica barato",
+          "body": "Ante aviso impreciso o sin prioridad clara, manda dron o bomberos a verificar y no comprometas ambulancias escasas hasta saber cuántas víctimas hay y si están atrapadas o en el agua.",
+          "since": 1
+        },
+        {
+          "id": "H4",
+          "kind": "heuristic",
+          "title": "Agua y atrapados, herramienta adecuada",
+          "body": "Víctima en el agua: rescate acuático o helicóptero de inmediato. Víctima atrapada: bomberos antes que ambulancia. No mandes traslado a una escena de la que nadie puede sacar a nadie.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:34322e2f23": {
+    "label": "G1 · Reparto: cubrir antes que apilar",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D1",
+          "kind": "driver",
+          "title": "Primero los salvables alcanzables",
+          "body": "Compara ETA con el tiempo que aguanta la víctima. Si ninguna unidad llega a tiempo, no mandes: usa esa unidad en el caso grave que sí alcanzas. Un envío condenado mata dos veces.",
+          "since": 1
+        },
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Cubre todo antes de reforzar",
+          "body": "Antes de añadir una segunda o tercera unidad a una escena ya atendida, asigna a cada aviso P0 o P1 sin nadie asignado. Escena sin respuesta pesa más que escena con respuesta insuficiente.",
+          "since": 1
+        },
+        {
+          "id": "H2",
+          "kind": "heuristic",
+          "title": "Manda exactamente las que FALTAN",
+          "body": "Si FALTAN n traslados, manda las n a la vez o no empieces: la ambulancia sola se lleva a uno y el resto muere esperando. Nunca mandes más unidades de las que FALTAN.",
+          "since": 1
+        },
+        {
+          "id": "H3",
+          "kind": "heuristic",
+          "title": "Hospital cercano con cama",
+          "body": "Traslada al hospital más cercano con cama libre. Con víctima crítica no cruces la ciudad ni elijas hospital casi lleno por tener helipuerto: el traslado largo mata a bordo.",
+          "since": 1
+        },
+        {
+          "id": "A1",
+          "kind": "antipattern",
+          "title": "No desvíes unidades en camino",
+          "body": "Evita reasignar una unidad ya en ruta salvo que la nueva escena esté claramente más cerca y la anterior quede cubierta. Cada desvío reinicia el reloj de dos víctimas.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:743035787a": {
+    "label": "G1 · Tres reglas, las que matan",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D1",
+          "kind": "driver",
+          "title": "Sin liberador no hay traslado",
+          "body": "Ante víctima atrapada, bomberos o rescate acuático van primero y la ambulancia después, nunca antes. Si no puedes mandar quien libere, manda esa ambulancia a otra escena donde sirva.",
+          "since": 1
+        },
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "El agua solo con rescate",
+          "body": "Toda víctima en el agua, arrastrada o en planta inundada recibe rescate acuático o helicóptero en la misma decisión en que la ves. Ninguna ambulancia la alcanza: no la mandes.",
+          "since": 1
+        },
+        {
+          "id": "H2",
+          "kind": "heuristic",
+          "title": "Descarta lo que no llega",
+          "body": "Si la ETA disponible es mayor que el tiempo que la víctima aguanta, no mandes a nadie allí; da esa unidad al grave que sí alcanzas a tiempo.",
+          "since": 1
+        }
+      ]
+    }
+  }
+}

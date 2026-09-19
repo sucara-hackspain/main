@@ -14,7 +14,10 @@
     "hr:phone": "tsx --env-file-if-exists=.env scripts/hr-phone-webhook.ts",
     "lab:scenarios": "tsx src/lab/make-scenarios.ts",
     "lab": "tsx --env-file-if-exists=.env src/lab/loop.ts",
-    "lab:report": "tsx src/lab/report.ts"
+    "lab:report": "tsx src/lab/report.ts",
+    "lab:moments": "tsx src/lab/moments.ts",
+    "lab:micro": "LAB_DIR=lab/micro LAB_MOMENTS=lab/moments.json tsx --env-file-if-exists=.env src/lab/loop.ts --candidate-reps 1 --hypotheses 4 --min-gain 0.2 --max-harm 0.1 --parallel 40 --no-hand-written",
+    "lab:micro:report": "LAB_DIR=lab/micro LAB_MOMENTS=lab/moments.json tsx src/lab/report.ts"
   },
   "devDependencies": {
     "@types/d3-force": "^3.0.10",

@@ -8,7 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { renderDoctrine, type Doctrine, type Edit } from "./doctrine";
 import type { Game, Policy } from "./play";
 
-export const LAB_DIR = "lab";
+export const LAB_DIR = process.env.LAB_DIR ?? "lab";
 const GAMES = `${LAB_DIR}/games.jsonl`;
 const POLICIES = `${LAB_DIR}/policies.json`;
 const LEDGER = `${LAB_DIR}/ledger.jsonl`;
