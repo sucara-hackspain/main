@@ -71,7 +71,8 @@ export function incidentScene(
   prescription.options.forEach((option, i) => {
     const action = option.action;
     const unit = action && unitOf(action.unitId);
-    if (!action || !unit) return;
+    // A phone call to a site moves no unit: nothing to draw.
+    if (!action || !unit || action.type === "warn") return;
     const target =
       action.type === "transport" ? nodeOf(action.hospitalId) : action.node;
     if (target === undefined) return;

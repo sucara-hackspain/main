@@ -13,6 +13,7 @@ const graph = new Graph(JSON.parse(readFileSync("data/valencia.json", "utf8")) a
 const moments = loadPlayables().filter((s) => s.split !== "test" && (!values.only || s.id.startsWith(values.only)));
 const arms: [string, Policy][] = [
   ["greedy", { kind: "greedy" }],
+  ["registry", { kind: "registry" }],
   ["basic", { kind: "agent", doctrine: EMPTY, harness: "basic" }],
   ["plan", { kind: "agent", doctrine: EMPTY, harness: "plan" }],
 ];
@@ -40,14 +41,15 @@ await pool(jobs, Number(values.parallel), async ({ arm, policy, key, moment, rep
 const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
 const deaths = (arm: Policy, id: string) => games.filter((g) => g.policy === policyKey(arm) && g.game.scenario === id && g.game.valid).map((g) => g.game.dead);
 const rows = moments.flatMap((m) => {
-  const [g, b, p] = arms.map(([, policy]) => deaths(policy, m.id));
-  return g.length && b.length && p.length ? [{ id: m.id, family: m.family, why: m.handover?.why ?? "", greedy: mean(g), basic: mean(b), plan: mean(p) }] : [];
+  const [g, r, b, p] = arms.map(([, policy]) => deaths(policy, m.id));
+  return g.length && b.length && p.length ? [{ id: m.id, family: m.family, why: m.handover?.why ?? "", greedy: mean(g), registry: r.length ? mean(r) : NaN, basic: mean(b), plan: mean(p) }] : [];
 });
 const diff = rows.map((r) => r.plan - r.basic);
 const sd = Math.sqrt(mean(diff.map((d) => (d - mean(diff)) ** 2)) * (diff.length / Math.max(1, diff.length - 1)));
 const summary = {
   moments: rows.length,
   greedy: mean(rows.map((r) => r.greedy)),
+  registry: mean(rows.map((r) => r.registry)),
   basic: mean(rows.map((r) => r.basic)),
   plan: mean(rows.map((r) => r.plan)),
   planMinusBasic: mean(diff),

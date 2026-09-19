@@ -1,0 +1,18 @@
+{
+  "greedy": {
+    "label": "greedy",
+    "doctrine": null
+  },
+  "agent:ef11392b6f": {
+    "label": "basic",
+    "doctrine": null
+  },
+  "agent:da39a3ee5e": {
+    "label": "plan",
+    "doctrine": null
+  },
+  "registry": {
+    "label": "registry",
+    "doctrine": null
+  }
+}

@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { ArrowUpRight, ChevronRight, Clock3, Hospital, LocateFixed, Search, Truck, Waves, Wrench, X } from "lucide-react";
 import { priority, sceneLabel, UNIT_KINDS, type RunMeta, type Selection } from "../engineTrace";
@@ -185,6 +186,12 @@ export default function SituationSidebar(props: Props) {
           </span>
           <span className={`situation-margin ${h.margin < 0 ? "danger" : ""}`}>Margen previsto: <b>{h.margin}</b>{h.margin < 0 && " · demanda superior a capacidad"}</span>
         </EntityRow>)}
+      </section>}
+      {!filtered && (s.sites.length > 0 || s.gauges.length > 0) && <section className="situation-section situation-water" aria-label="Anticipación"><div className="situation-section-heading"><h3>Anticipación <span>{s.sites.filter((x) => x.floodedTick === null && x.safe < x.people).length} sitios con gente dentro</span></h3><small>Aforos y registro municipal</small></div>
+        {s.gauges.map((g) => <p key={g.name}><Waves size={13} /><span><strong>Aforo · {g.name}</strong> · cauce al {Math.round(g.level * 100)} %<small>{g.overflowTick > s.tick ? `Desborda en ~${g.overflowTick - s.tick} ticks` : `Desbordado hace ${s.tick - g.overflowTick} ticks`}</small></span></p>)}
+        <dl>
+          {s.sites.map((x) => <React.Fragment key={x.id}><dt>{x.id} · {x.name}</dt><dd>{x.floodedTick !== null ? (x.caught ? `${x.caught} atrapados dentro` : "todos a salvo") : `${x.safe}/${x.people} a salvo · ${x.warnedTick === null ? "SIN AVISAR" : "avisados"}${x.arrivalTicks !== null && x.safe < x.people ? ` · agua en ~${x.arrivalTicks} ticks` : ""}`}</dd></React.Fragment>)}
+        </dl>
       </section>}
       {!filtered && <section className="situation-section situation-water" aria-label="Agua y cortes"><div className="situation-section-heading"><h3>Agua y cortes</h3><small>Lo que sabe el coordinador</small></div>
         {s.water.zones.length ? s.water.zones.map((z) => <p key={z.id}><Waves size={13} /><span><strong>{z.name}</strong> · radio {z.radiusM} m<small>Mapa oficial de hace {duration(z.ageTicks, s.seconds)}</small></span></p>) : <p className="situation-empty">Ningún mapa oficial de inundación todavía.</p>}

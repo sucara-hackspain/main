@@ -281,6 +281,27 @@ export default function RunMap({
       );
     }
 
+    // Places full of people who are fine until the water gets there: how many are out, and how long is left.
+    for (const site of frame.sites ?? []) {
+      const inside = site.people - site.safe;
+      const state = site.floodedTick !== null ? (site.caught ? "caught" : "clear") : inside === 0 ? "clear" : site.warnedTick === null ? "unwarned" : "moving";
+      const el = document.createElement("div");
+      el.className = "run-site";
+      el.dataset.state = state;
+      const name = document.createElement("strong");
+      name.textContent = `${site.id} · ${{ residence: "Residencia", school: "Colegio", garage: "Garaje" }[site.kind]}`;
+      const count = document.createElement("em");
+      count.textContent = site.floodedTick !== null ? (site.caught ? `${site.caught} atrapados` : "todos a salvo") : `${site.safe}/${site.people} a salvo`;
+      el.append(name, count);
+      if (site.floodedTick === null && site.arrivalTicks !== null && inside > 0) {
+        const eta = document.createElement("i");
+        eta.textContent = `agua en ${site.arrivalTicks}`;
+        el.append(eta);
+      }
+      el.title = `${site.name} · ${site.people} personas · ${site.warnedTick === null ? "sin avisar" : `avisados en el tick ${site.warnedTick}`}`;
+      markers.current.push(new ml.Marker({ element: el, anchor: "bottom", offset: [0, -16] }).setLngLat(graph.nodes[site.node]).addTo(m!));
+    }
+
     if (reality)
       for (const scene of frame.scenes) {
         const waiting = scene.victims.filter(

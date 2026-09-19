@@ -34,6 +34,14 @@ export function eventText(e: ObservedEvent, seconds: number): string {
       return `Parte oficial del agua · muestra la situación de hace ${elapsed(e.tick - e.asOfTick, seconds)}`;
     case "master_narration":
       return `Máster · ${e.text}`;
+    case "site_placed":
+      return `Registro · ${e.siteId} con ${count(e.people, "persona", "personas")} dentro`;
+    case "site_warned":
+      return `112 llama a ${e.siteId} · empiezan a ponerse a salvo`;
+    case "site_flooded":
+      return e.caught ? `El agua entra en ${e.siteId} · ${count(e.caught, "persona atrapada", "personas atrapadas")} dentro (${e.safe} a salvo)` : `El agua entra en ${e.siteId} · todos a salvo (${e.safe})`;
+    case "gauge_reading":
+      return `Aforo ${e.name} · cauce al ${Math.round(e.level * 100)} %${e.level >= 1 ? " · DESBORDADO" : ""}`;
     case "scene_created":
       return `Ocurre · ${sceneLabel(e.kind)} · ${count(e.victims, "víctima", "víctimas")}`;
     case "scene_assessed":

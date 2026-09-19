@@ -4,9 +4,10 @@ import type { Graph } from "./graph";
 import { FLOOD_FRINGE_M } from "./engine";
 import { incidentLine } from "./incidents";
 import { infoGaps } from "./recon";
+import { waterArrivalTicks } from "./sites";
 import { believedWater, cutOffForecast, projectedRadius } from "./water";
 import type { TickResult } from "./sim";
-import type { Action, Belief, Call, Incident, InjuryKind, LonLat, Mission, ObservedEvent, SceneKind, SimConfig, Triage, UnitKind, VictimStatus, World } from "./types";
+import type { Action, Belief, Call, Incident, InjuryKind, LonLat, Mission, ObservedEvent, SceneKind, SimConfig, SiteKind, Triage, UnitKind, VictimStatus, World } from "./types";
 import { triage } from "./victims";
 
 // On-disk format of a run (runs/<id>/): meta.json + ticks.jsonl (one TickRecord per line) + llm.jsonl.
@@ -55,8 +56,26 @@ export interface IncidentFrame extends Incident {
 }
 
 /** Everything the UI needs to draw one tick: what is true, and what the coordinator believes. */
+export interface SiteFrame {
+  id: string;
+  kind: SiteKind;
+  name: string;
+  node: number;
+  people: number;
+  safe: number;
+  warnedTick: number | null;
+  floodedTick: number | null;
+  /** Ticks until the water is expected there, as dispatch reckons it. null = nothing points that way yet. */
+  arrivalTicks: number | null;
+  /** How many the water caught inside, once it has arrived. */
+  caught: number | null;
+}
+
 export interface Frame {
   units: UnitFrame[];
+  /** Places with people inside who are fine until the water arrives. Absent in runs older than the sites. */
+  sites?: SiteFrame[];
+  gauges?: { name: string; node: number; level: number; overflowTick: number }[];
   scenes: SceneFrame[];
   incidents: IncidentFrame[];
   /** Truth: where the water really is. */
@@ -128,6 +147,13 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
     incidents: belief.incidents
       .filter((i) => i.status === "open" || recent(i.updatedTick))
       .map((i) => ({ ...structuredClone(i), line: incidentLine(i), cutOffIn: i.status === "open" ? cutOffIn(i.node) : null })),
+    sites: world.sites.map(({ people, ...site }) => ({
+      ...site,
+      people: people.length,
+      arrivalTicks: site.floodedTick === null ? waterArrivalTicks(belief, graph, site.node) : null,
+      caught: site.floodedTick === null ? null : people.length - site.safe,
+    })),
+    gauges: world.gauges.map(({ name, node, level, overflowTick }) => ({ name, node, level, overflowTick })),
     floods: world.floods.map((f) => ({ id: f.id, name: f.name, node: f.node, radiusM: Math.round(f.radiusM), fringeM: Math.round(f.radiusM + FLOOD_FRINGE_M) })),
     knownWater: {
       zones: belief.floods.map((z) => ({ id: z.id, name: z.name, node: z.node, radiusM: projectedRadius(z, world.tick), ageTicks: world.tick - z.asOfTick })),

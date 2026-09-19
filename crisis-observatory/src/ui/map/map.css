@@ -156,3 +156,13 @@
 .run-legend .swatch.water-real { height:9px; background:color-mix(in srgb,var(--info) 30%,transparent); }
 .run-legend .swatch.cut-unknown { border-top:2px dashed var(--muted-foreground); }
 .run-legend .swatch.scene { width:9px; height:9px; border-radius:50%; border:2px dashed var(--destructive); }
+
+/* Sites with people inside: grey = nothing coming yet, amber = not warned, blue = getting people out, green = everyone safe, red = the water caught them. */
+.run-site { display:flex; flex-direction:column; gap:1px; padding:4px 7px; border-radius:var(--radius-md); border:1px solid var(--border); border-left:3px solid var(--site, var(--muted-foreground)); background:var(--popover); box-shadow:var(--dropdown-shadow); white-space:nowrap; pointer-events:auto; }
+.run-site > strong { font-size:10px; font-weight:600; }
+.run-site > em { font:10px var(--font-mono); font-style:normal; color:var(--site, var(--muted-foreground)); }
+.run-site > i { font:9px var(--font-mono); font-style:normal; color:var(--muted-foreground); }
+.run-site[data-state="unwarned"] { --site:#d97706; }
+.run-site[data-state="moving"] { --site:#2563eb; }
+.run-site[data-state="clear"] { --site:#16a34a; opacity:.75; }
+.run-site[data-state="caught"] { --site:#dc2626; }
