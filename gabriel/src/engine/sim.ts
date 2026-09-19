@@ -2,7 +2,8 @@ import type { Coordinator, Decision } from "./coordinator";
 import { advance, applyAction, applyMasterAction, createWorld, DEFAULT_CONFIG, summarize } from "./engine";
 import type { Graph } from "./graph";
 import type { Master } from "./master";
-import { createBelief, truthfulObserver, updateBelief, type Observer } from "./observer";
+import { createBelief, updateBelief } from "./incidents";
+import { CallObserver, type Observer } from "./observer";
 import { Rng } from "./rng";
 import type { Action, Belief, MasterAction, Report, SimConfig, World, WorldEvent } from "./types";
 
@@ -49,7 +50,7 @@ export class Simulation {
     this.graph = options.graph;
     this.master = options.master;
     this.coordinator = options.coordinator;
-    this.observer = options.observer ?? truthfulObserver;
+    this.observer = options.observer ?? new CallObserver();
     this.world = createWorld(options.graph, { ...DEFAULT_CONFIG, ...options.config });
     this.belief = createBelief(this.world);
   }
@@ -77,9 +78,11 @@ export class Simulation {
     const fresh = world.log.slice(this.observedUpTo);
     this.observedUpTo = world.log.length;
     const reports = this.observer
-      .observe(fresh, world, this.observerRng)
+      .observe(fresh, world, graph, this.observerRng)
       .map((report) => ({ ...report, id: this.nextReportId++ }));
-    updateBelief(this.belief, reports, world);
+    updateBelief(this.belief, reports, world, graph);
+    // Crews drive with what dispatch knows, nothing more.
+    world.knownClosedEdges = [...this.belief.closedEdges];
 
     let decision: Decision | undefined;
     if (reports.length > 0) {
