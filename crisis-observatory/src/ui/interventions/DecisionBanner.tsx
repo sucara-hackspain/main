@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
   LocateFixed,
@@ -24,7 +23,6 @@ type DecisionBannerProps = {
   onDecide: (item: InterventionView, option: Option, prescribed: Option) => void;
   onUndo: (interventionId: string) => void;
   onLocate: (incidentId: string) => void;
-  onReveal: (auditId: string) => void;
 };
 
 /** First iteration (?iteracion=1): a banner above the map with its own receipt. */
@@ -39,7 +37,6 @@ export default function DecisionBanner({
   onDecide,
   onUndo,
   onLocate,
-  onReveal,
 }: DecisionBannerProps) {
   const [confirmed, setConfirmed] = useState<{ id: string; label: string } | null>(
     null,
@@ -126,12 +123,6 @@ export default function DecisionBanner({
                 <button onClick={() => onLocate(item.incidentId!)}>
                   <LocateFixed size={12} />
                   Ver {item.incidentId} en el mapa
-                </button>
-              )}
-              {prescription.auditId && (
-                <button onClick={() => onReveal(prescription.auditId!)}>
-                  <ArrowUpRight size={12} />
-                  Ver en actividad
                 </button>
               )}
             </div>

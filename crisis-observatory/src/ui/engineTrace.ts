@@ -94,6 +94,23 @@ export function unitStatus(u: UnitFrame): string {
   return "Sin misión";
 }
 
+/** Whether anybody is on an incident right now: waiting (nobody, or only crews that cannot get
+ * through the water that cuts it off), attended, or resolved. A drone, or a helicopter sent only to
+ * look, helps nobody there: it does not count. The map, the sidebar and the decision room draw this;
+ * the ticket keeps its own lifecycle (triage, in progress, resolved). */
+export type Attention = "waiting" | "attended" | "resolved";
+export function attention(i: IncidentFrame, crews: UnitFrame[]): Attention {
+  if (i.status !== "open") return "resolved";
+  const isolated = i.unreachable || i.cutOffIn === 0;
+  const helps = (u: UnitFrame) =>
+    u.mission !== "to_observe" && (UNIT_KINDS[u.kind].carries || UNIT_KINDS[u.kind].extricates);
+  return crews.some(
+    (u) => helps(u) && (!isolated || UNIT_KINDS[u.kind].wades || UNIT_KINDS[u.kind].flies),
+  )
+    ? "attended"
+    : "waiting";
+}
+
 /** Units the coordinator could send now: nothing on board, not broken, not stuck, not on a call. */
 export const isFree = (u: UnitFrame) =>
   !u.victimId && !u.broken && !u.stranded && u.mission !== "to_scene" && u.mission !== "to_observe";

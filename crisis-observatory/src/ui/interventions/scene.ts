@@ -5,7 +5,7 @@ import type {
   RunMeta,
   TickRecord,
 } from "../engineTrace";
-import type { AuditItem } from "../thoughts/model";
+import type { AuditItem } from "../audit/model";
 import {
   isolatedWaiting,
   unattended,

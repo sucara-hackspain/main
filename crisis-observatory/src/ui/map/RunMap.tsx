@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import * as ml from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -47,6 +48,54 @@ export interface MapExplanation {
   focus: string | null;
 }
 
+/** Where a spotlit incident and what works on it are: the place and how sure we are of it, its
+ * crews and the rest of their trips, their hospitals, and the real scene while reality is shown. */
+function spotlightBounds(
+  record: TickRecord,
+  involved: Set<string>,
+  graph: GraphData,
+  meta: RunMeta,
+  reality: boolean,
+): ml.LngLatBoundsLike | null {
+  const { frame } = record;
+  const points: [number, number][] = [];
+  for (const key of involved) {
+    const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+    if (kind === "incident") {
+      const i = frame.incidents.find((x) => x.id === id);
+      if (!i) continue;
+      const [lon, lat] = graph.nodes[i.node];
+      const r = i.located ? 0 : i.locationErrorM;
+      const dLat = r / 111320,
+        dLon = r / (111320 * Math.cos((lat * Math.PI) / 180));
+      points.push([lon - dLon, lat - dLat], [lon + dLon, lat + dLat]);
+    } else if (kind === "unit") {
+      const u = frame.units.find((x) => x.id === id);
+      if (u) points.push(u.pos, ...(u.route.length ? remainingRoute(u, graph) : []));
+    } else if (kind === "hospital") {
+      const h = meta.hospitals.find((x) => x.id === id);
+      if (h) points.push(graph.nodes[h.node]);
+    } else if (kind === "scene" && reality) {
+      const scene = frame.scenes.find((x) => x.id === id);
+      if (scene) points.push(graph.nodes[scene.node]);
+    }
+  }
+  if (!points.length) return null;
+  let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [lon, lat] of points) {
+    w = Math.min(w, lon);
+    e = Math.max(e, lon);
+    s = Math.min(s, lat);
+    n = Math.max(n, lat);
+  }
+  // A lone place still needs a few streets around it.
+  const pad = 0.002;
+  return [
+    [Math.min(w, e - pad), Math.min(s, n - pad)],
+    [Math.max(e, w + pad), Math.max(n, s + pad)],
+  ];
+}
+
 export default function RunMap({
   graph,
   meta,
@@ -59,6 +108,7 @@ export default function RunMap({
   filtered,
   explain,
   signals,
+  detail,
 }: {
   /** The citizen channel on the map: where messages are coming from, and the leads made out of them. */
   signals?: { heat: { node: number; relevant: boolean }[]; leads: { id: string; node: number; credibility: number; tone: string }[]; focus: string | null } | null;
@@ -68,13 +118,16 @@ export default function RunMap({
   meta: RunMeta;
   record: TickRecord;
   selected: Selection | null;
-  onSelect: (ref: Selection) => void;
+  /** A marker was picked; null closes the selection. */
+  onSelect: (ref: Selection | null) => void;
   focusRequest: number;
   /** Entities tied to the selection, as `kind:id`. */
   related: Set<string>;
   /** Entities the situation panel's filter and search leave in, as `kind:id`. */
   matches: Set<string>;
   filtered: boolean;
+  /** The selection's detail, in a modal anchored to it on the map. */
+  detail?: ReactNode;
 }) {
   const host = useRef<HTMLDivElement>(null),
     map = useRef<ml.Map | null>(null),
@@ -90,13 +143,33 @@ export default function RunMap({
     ? selectionPosition(selected, record, meta, graph)
     : undefined;
   const selectedKey = selected ? `${selected.kind}:${selected.id}` : null;
+  // A selected incident takes the spotlight: the map frames it with the assets working on it, the
+  // rest fades, and its detail docks in a corner instead of covering them.
+  const spotlight = selected?.kind === "incident";
+  const involved = useRef(related);
+  involved.current = related;
   useEffect(() => {
-    if (ready && selectedKey && focusPosition.current)
-      map.current?.easeTo({
-        center: focusPosition.current,
-        zoom: Math.max(map.current.getZoom(), 13),
-        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 350,
+    const m = map.current;
+    if (!m || !ready || !selectedKey || !focusPosition.current) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const box = spotlight ? spotlightBounds(record, involved.current, graph, meta, reality) : null;
+    if (box) {
+      const phone = window.matchMedia("(max-width: 800px)").matches;
+      m.fitBounds(box, {
+        padding: phone
+          ? { top: 40, right: 30, bottom: m.getContainer().clientHeight * 0.5, left: 30 }
+          : // Left: the docked detail. Right: the legend in the lower corner.
+            { top: 70, right: 170, bottom: 70, left: 370 },
+        maxZoom: 15.5,
+        duration: still ? 0 : 500,
       });
+      return;
+    }
+    m.easeTo({
+      center: focusPosition.current,
+      zoom: Math.max(m.getZoom(), 13),
+      duration: still ? 0 : 350,
+    });
   }, [ready, selectedKey, focusRequest]);
   useEffect(() => {
     if (ready && focusRequest > 0 && window.matchMedia("(max-width: 800px)").matches)
@@ -128,6 +201,11 @@ export default function RunMap({
     map.current = m;
     m.addControl(new ml.NavigationControl({ showCompass: false }), "bottom-left");
     m.on("error", () => setError(true));
+    // A click on the map itself, not on a marker, closes the detail.
+    m.on("click", (e) => {
+      if ((e.originalEvent.target as HTMLElement).classList.contains("maplibregl-canvas"))
+        callback.current(null);
+    });
     m.on("load", () => {
       const theme = getComputedStyle(host.current!);
       const color = (name: string) => theme.getPropertyValue(name).trim();
@@ -182,13 +260,21 @@ export default function RunMap({
         id: "incident-area",
         type: "fill",
         source: "incident-area",
-        paint: { "fill-color": tone, "fill-opacity": 0.08 },
+        paint: {
+          "fill-color": tone,
+          "fill-opacity": ["case", ["boolean", ["get", "muted"], false], 0.02, 0.08],
+        },
       });
       m.addLayer({
         id: "incident-area-edge",
         type: "line",
         source: "incident-area",
-        paint: { "line-color": tone, "line-width": 1.5, "line-dasharray": [1, 1.5] },
+        paint: {
+          "line-color": tone,
+          "line-width": 1.5,
+          "line-dasharray": [1, 1.5],
+          "line-opacity": ["case", ["boolean", ["get", "muted"], false], 0.25, 1],
+        },
       });
       m.addLayer({
         id: "routes",
@@ -287,7 +373,9 @@ export default function RunMap({
       : undefined;
     markers.current.forEach((x) => x.remove());
     markers.current = [];
-    const muted = (key: string) => filtered && !matches.has(key) && !related.has(key);
+    // Out of the filter, or out of the spotlight: everything not tied to the selected incident fades.
+    const muted = (key: string) =>
+      !related.has(key) && ((filtered && !matches.has(key)) || spotlight);
     function marker(el: HTMLElement, pos: [number, number], label: string, ref: Selection) {
       const key = `${ref.kind}:${ref.id}`;
       const selectedNow = sameSelection(selected, ref);
@@ -296,7 +384,10 @@ export default function RunMap({
       el.classList.toggle("related", related.has(key));
       el.classList.toggle("is-muted", muted(key));
       el.setAttribute("aria-pressed", String(selectedNow));
-      el.onclick = () => callback.current(ref);
+      el.onclick = (e) => {
+        e.stopPropagation();
+        callback.current(ref);
+      };
       el.title = label;
       el.setAttribute("aria-label", label);
       markers.current.push(
@@ -482,10 +573,62 @@ export default function RunMap({
       collection(
         frame.incidents
           .filter((i) => i.status === "open" && !i.located && i.locationErrorM > 0)
-          .map((i) => area(circle(graph.nodes[i.node], i.locationErrorM), { priority: i.priority })),
+          .map((i) =>
+            area(circle(graph.nodes[i.node], i.locationErrorM), {
+              priority: i.priority,
+              muted: muted(`incident:${i.id}`),
+            }),
+          ),
       ),
     );
-  }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered, explain, signals]);
+  }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered, spotlight, explain, signals]);
+
+  // The detail opens where the selection is and follows it as it moves. The selection is centred on
+  // the map, so it fits beside it, to its left; on a phone it is a sheet at the bottom of the map.
+  const popupNode = useMemo(() => document.createElement("div"), []);
+  const popup = useRef<ml.Popup | null>(null);
+  const showing = Boolean(detail);
+  useEffect(() => {
+    const m = map.current,
+      at = focusPosition.current;
+    if (!m || !ready || !showing || !at) {
+      popup.current?.remove();
+      return;
+    }
+    popup.current ??= new ml.Popup({
+      anchor: "right",
+      closeButton: false,
+      closeOnClick: false,
+      closeOnMove: false,
+      focusAfterOpen: false,
+      maxWidth: "none",
+      offset: 30,
+      className: "entity-popover",
+    }).setDOMContent(popupNode);
+    popup.current.setLngLat(at);
+    if (!popup.current.isOpen()) popup.current.addTo(m);
+    // MapLibre only takes classes once the popup is on the map.
+    if (spotlight) popup.current.addClassName("docked");
+    else popup.current.removeClassName("docked");
+  }, [ready, showing, selectedKey, record, popupNode, spotlight]);
+  useEffect(() => () => void popup.current?.remove(), []);
+  // MapLibre places the popup before React has filled it: place it again once it has a size.
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      const p = popup.current;
+      if (p?.isOpen()) p.setLngLat(p.getLngLat());
+    });
+    observer.observe(popupNode);
+    return () => observer.disconnect();
+  }, [popupNode]);
+  useEffect(() => {
+    if (!showing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector('[role="alertdialog"]')) callback.current(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showing]);
 
   return (
     <div className="app-map-wrap operational-map">
@@ -498,6 +641,7 @@ export default function RunMap({
           <span><i className="water" />dónde estará el agua en 10 ticks</span>
         </div>
       )}
+      {showing && createPortal(detail, popupNode)}
       <div className="operational-map-heading">
         <strong>Valencia</strong>
         <small>Posiciones registradas · cada {seconds} s</small>

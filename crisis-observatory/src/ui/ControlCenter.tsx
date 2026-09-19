@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  GitBranch,
   Route,
   Megaphone,
   Scale,
@@ -30,13 +29,13 @@ import "../theme.css";
 import "./control-center.css";
 import "./session.css";
 import SituationSidebar from "./situation/SituationSidebar";
+import EntityCard from "./situation/EntityCard";
 import {
   buildSituation,
   matchingEntities,
   relatedEntities,
   type SituationFilter,
 } from "./situation/model";
-import ThoughtsView from "./thoughts/ThoughtsView";
 import DecisionPanel, { DecisionStrip } from "./decisions/DecisionPanel";
 import { decisionCards } from "./decisions/model";
 import SignalsView from "./signals/SignalsView";
@@ -44,7 +43,7 @@ import PressView from "./press/PressView";
 import PlanView from "./plan/PlanView";
 import "./press/press.css";
 import { channelView } from "./signals/model";
-import { auditItems, laneName } from "./thoughts/model";
+import { auditItems } from "./audit/model";
 import DecisionBanner from "./interventions/DecisionBanner";
 import DecisionRoom, { PendingDecisionBar } from "./interventions/DecisionRoom";
 import { DecisionReceipt } from "./interventions/DecisionParts";
@@ -91,7 +90,7 @@ export default function ControlCenter() {
           </h1>
           <p>
             {error ||
-              "Aquí aparecerán las ejecuciones y la actividad de los agentes."}
+              "Aquí aparecerán las ejecuciones y sus incidencias."}
           </p>
           {loaded && (
             <p>Los nuevos registros aparecerán aquí automáticamente.</p>
@@ -117,7 +116,8 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"map" | "flow" | "tickets" | "decisions" | "signals" | "press" | "plan">("map"),
+    // Incidents first: the operator starts from what is happening, then goes to the territory.
+    [view, setView] = useState<"map" | "tickets" | "decisions" | "signals" | "press" | "plan">("tickets"),
     [leadFocus, setLeadFocus] = useState<string | null>(null),
     [orderFocus, setOrderFocus] = useState<string | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
@@ -128,8 +128,6 @@ function RunSession({
     [query, setQuery] = useState(""),
     [showClosed, setShowClosed] = useState(false),
     [focusRequest, setFocusRequest] = useState(0),
-    [lane, setLane] = useState<"master" | "coordinator" | null>(null),
-    [expanded, setExpanded] = useState<string | null>(null),
     [decisionId, setDecisionId] = useState<string | null>(null),
     [held, setHeld] = useState(false),
     // Left the decision room to look around: the request waits in a bar until the operator returns.
@@ -235,19 +233,10 @@ function RunSession({
   useEffect(() => {
     if (entity && current && !selectionExists(entity, current, meta)) setEntity(null);
   }, [current, meta, entity]);
-  const items = all.filter(
-    (x) =>
-      (!lane ||
-        (lane === "master"
-          ? x.lane !== "coordinator"
-          : x.lane === "coordinator")) &&
-      (!selection || x.refs.includes(selection.id)),
-  );
   function seek(i: number) {
     setIndex(i);
     setPlaying(false);
     setFollow(false);
-    setExpanded(null);
     setHeld(false);
   }
   function seekTick(tick: number) {
@@ -271,7 +260,6 @@ function RunSession({
   }
   function chooseEntity(value: Selection | null) {
     setEntity(value);
-    setExpanded(null);
   }
   function chooseIncident(id: string | null) {
     chooseEntity(id ? { kind: "incident", id } : null);
@@ -308,12 +296,6 @@ function RunSession({
         onActive={setDecisionId}
         onDecide={decide}
         onLeave={() => setInvestigating(true)}
-        onOpenThread={(item) => {
-          setInvestigating(true);
-          setView("flow");
-          setLane(null);
-          chooseIncident(item.incidentId);
-        }}
       />
     );
   const banner = iteration === 1 && current && (
@@ -331,10 +313,6 @@ function RunSession({
         chooseIncident(incidentId);
         setView("map");
         setFocusRequest((n) => n + 1);
-      }}
-      onReveal={(auditId) => {
-        setView("flow");
-        setExpanded(auditId);
       }}
     />
   );
@@ -355,14 +333,6 @@ function RunSession({
         <div className="app-toolbar">
           <div className="app-tabs">
             <button
-              aria-pressed={view === "map"}
-              className={view === "map" ? "is-active" : ""}
-              onClick={() => setView("map")}
-            >
-              <MapIcon size={14} />
-              Territorio
-            </button>
-            <button
               aria-pressed={view === "tickets"}
               className={view === "tickets" ? "is-active" : ""}
               onClick={() => {
@@ -374,12 +344,12 @@ function RunSession({
               Incidencias
             </button>
             <button
-              aria-pressed={view === "flow"}
-              className={view === "flow" ? "is-active" : ""}
-              onClick={() => setView("flow")}
+              aria-pressed={view === "map"}
+              className={view === "map" ? "is-active" : ""}
+              onClick={() => setView("map")}
             >
-              <GitBranch size={14} />
-              Actividad de los agentes
+              <MapIcon size={14} />
+              Territorio
             </button>
             <button
               aria-pressed={view === "decisions"}
@@ -446,10 +416,9 @@ function RunSession({
         {view !== "tickets" && <div className="app-scope">
           <div>
             <button
-              className={!selection && !lane && !filtered ? "is-active" : ""}
+              className={!selection && !filtered ? "is-active" : ""}
               onClick={() => {
                 chooseEntity(null);
-                setLane(null);
                 setFilter("all");
                 setQuery("");
               }}
@@ -463,14 +432,9 @@ function RunSession({
                 <X size={12} />
               </button>
             )}
-            {view === "flow" && (["master", "coordinator"] as const).map((key) => (
-              <button key={key} aria-pressed={lane === key} className={lane === key ? "app-filter" : ""} onClick={() => setLane(lane === key ? null : key)}>{laneName[key]}</button>
-            ))}
           </div>
           <span>
-            {view === "map"
-              ? `${current?.frame.incidents.filter((i) => i.status === "open").length ?? 0} incidentes abiertos`
-              : `${items.length} registros`}{" "}
+            {current?.frame.incidents.filter((i) => i.status === "open").length ?? 0} incidentes abiertos{" "}
             · +{elapsed(current?.tick ?? 0, seconds)}
           </span>
         </div>}
@@ -492,7 +456,7 @@ function RunSession({
             <PressView notes={notes} seconds={seconds} every={10} />
           ) : view === "signals" ? (
             <SignalsView view={channel} seconds={seconds} focus={leadFocus} onFocus={setLeadFocus} />
-          ) : view === "map" || view === "decisions" ? (
+          ) : (
             graph &&
             meta && (
               <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
@@ -511,24 +475,35 @@ function RunSession({
                   record={current}
                   selected={selection}
                   onSelect={(ref) =>
-                    chooseEntity(sameSelection(selection, ref) ? null : ref)
+                    chooseEntity(ref && sameSelection(selection, ref) ? null : ref)
                   }
                   focusRequest={focusRequest}
                   related={related}
                   matches={matches}
                   filtered={filtered}
+                  detail={
+                    selection &&
+                    situation && (
+                      <EntityCard
+                        s={situation}
+                        selection={selection}
+                        graph={graph}
+                        ticket={
+                          selection.kind === "incident"
+                            ? (tickets.find((t) => t.id === selection.id) ?? null)
+                            : null
+                        }
+                        onSelect={chooseEntity}
+                        onOpenTicket={(incidentId) => {
+                          setTicketId(incidentId);
+                          setView("tickets");
+                        }}
+                      />
+                    )
+                  }
                 />
               </Suspense>
             )
-          ) : (
-            <ThoughtsView
-              items={items}
-              seconds={seconds}
-              tick={current.tick}
-              autoScroll={playing || follow}
-              expanded={expanded}
-              onExpand={setExpanded}
-            />
           )}
         </div>
         <div className="app-playback">
@@ -628,10 +603,10 @@ function RunSession({
           onRun={onRun}
           situation={situation}
           selection={selection}
-          onSelect={chooseEntity}
-          onLocate={() => {
-            setView("map");
-            setFocusRequest((n) => n + 1);
+          onSelect={(ref) => {
+            chooseEntity(ref);
+            // On a phone the map is above the list: bring it into view, where the detail opens.
+            if (ref && view === "map") setFocusRequest((n) => n + 1);
           }}
           related={related}
           matches={matches}

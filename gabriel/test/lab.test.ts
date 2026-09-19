@@ -5,7 +5,8 @@ import { applyEdit, diffDoctrine, EMPTY, renderDoctrine } from "../src/lab/doctr
 import { readResearchOutput } from "../src/lab/researcher";
 import { generateScenario, ScriptedMaster, type ScenarioSpec } from "../src/lab/scenario";
 
-const graph = new Graph(JSON.parse(readFileSync("data/valencia.json", "utf8")) as GraphData);
+// Found from this file, not from wherever the tests were started: the Control Center runs these too.
+const graph = new Graph(JSON.parse(readFileSync(new URL("../data/valencia.json", import.meta.url), "utf8")) as GraphData);
 const SPEC: ScenarioSpec = { id: "T1", family: "test", split: "train", title: "test", seed: 9, floods: [0] };
 
 /** Sends nobody anywhere. */
