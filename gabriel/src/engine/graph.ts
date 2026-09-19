@@ -184,9 +184,12 @@ export class Graph {
       const same = (a: string, b: string) => a === b || (Math.min(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a)));
       const hits = wanted.filter((w) => have.some((h) => same(w, h))).length;
       if (hits === 0) continue;
-      // Every word the caller said should be in the name; a shorter name that still has them all is the closer one.
-      const score = hits / wanted.length - (have.length - hits) * 0.05;
-      if (hits === wanted.length && (!best || score > best.score)) best = { name, score };
+      // Either everything the caller said is in the name ("Sueca" for "Carrer de Sueca"), or the whole name is in
+      // what they said ("Jaume Roig 2, puerta A, junto al garaje"). The more words in common, the better the match.
+      const named = have.every((h) => wanted.some((w) => same(w, h)));
+      if (hits < wanted.length && !named) continue;
+      const score = hits - (have.length - hits) * 0.05;
+      if (!best || score > best.score) best = { name, score };
     }
     if (!best) return null;
     const edges = byName.get(best.name)!;

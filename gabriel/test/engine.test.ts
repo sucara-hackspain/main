@@ -603,6 +603,7 @@ describe("the real 112 line", () => {
     expect(graph.findStreet("en la avenida Reino de Valencia")).toBe(1);
     expect(graph.findStreet("Avenida Regne de Valencia, número 12")).toBe(1);
     expect(graph.findStreet("carrer valencia")).toBe(2);
+    expect(graph.findStreet("Sueca 2, puerta A, junto al garaje")).toBe(0);
     expect(graph.findStreet("Gran Vía")).toBeNull();
   });
 
