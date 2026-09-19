@@ -3,6 +3,7 @@ import type { Situation } from "../situation/model";
 import type { Ticket } from "../tickets/model";
 
 export type Queue = "all" | "critical" | "waiting" | "blocked" | "unconfirmed";
+export type IncidentFocus = { id: string; position: LonLat };
 export const queueLabels: Record<Queue, string> = {
   all: "Todas las incidencias", critical: "Urgentes sin atención", waiting: "Sin atención efectiva",
   blocked: "Acceso comprometido", unconfirmed: "Pendientes de confirmar",

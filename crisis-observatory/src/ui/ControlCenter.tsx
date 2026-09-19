@@ -34,7 +34,7 @@ import TicketsView, { TicketDetail } from "./tickets/TicketsView";
 import { buildTickets, type Ticket, type TicketState } from "./tickets/model";
 import OperationsView from "./operations/OperationsView";
 import { SCALE_ID, scaleMeta } from "./operations/demo";
-import { inQueue, queueLabels, sectorDefinitions, sectorIndex, type Queue, type Sector } from "./operations/model";
+import { inQueue, queueLabels, sectorDefinitions, sectorIndex, type IncidentFocus, type Queue, type Sector } from "./operations/model";
 
 // Read once: a run that mounts while another shows a pending count would take the count as its title.
 const pageTitle = document.title;
@@ -98,6 +98,7 @@ function RunSession({
     [speed, setSpeed] = useState(2),
     [view, setView] = useState<"operations" | "tickets">(iteration === 3 ? "operations" : "tickets"),
     [sectorId, setSectorId] = useState<string | null>(null),
+    [mapFocus, setMapFocus] = useState<IncidentFocus | null>(null),
     [ticketScope, setTicketScope] = useState<{ sectorId: string | null; queue: Queue } | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
@@ -174,6 +175,7 @@ function RunSession({
     [tickets, ticketScope, graph]);
   const scopeName = ticketScope?.sectorId && graph ? sectorDefinitions(graph).find((s) => s.id === ticketScope.sectorId)?.name : null;
   const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
+  const ticketPosition = selectedTicket && graph?.nodes[selectedTicket.incident.node];
   // Only the operations overview needs the territorial summary.
   const situation = useMemo(
     () => (view === "operations" && current && meta ? buildSituation(current, meta, visible, graph) : null),
@@ -181,10 +183,12 @@ function RunSession({
   );
   const workspace = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (view === "operations" && window.matchMedia("(max-width: 800px)").matches)
+    // A direct incident link scrolls to the map inside OperationsView instead.
+    if (view === "operations" && !mapFocus && window.matchMedia("(max-width: 800px)").matches)
       workspace.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, [view]);
   function seek(i: number) {
+    setMapFocus(null);
     setIndex(i);
     setPlaying(false);
     setFollow(false);
@@ -210,12 +214,16 @@ function RunSession({
     setDecisionId(id);
     if (pending.some((x) => x.item.id === id)) setInvestigating(false);
   }
-  function openTicketSector(ticket: Ticket) {
-    setSectorId(graph ? `sector-${sectorIndex(graph.nodes[ticket.incident.node], graph) + 1}` : null);
+  function locateTicket(ticket: Ticket) {
+    const position = graph?.nodes[ticket.incident.node];
+    if (!graph || !position?.every(Number.isFinite)) return;
+    setSectorId(`sector-${sectorIndex(position, graph) + 1}`);
+    setMapFocus({ id: ticket.id, position });
     setTicketId(ticket.id);
     setView("operations");
   }
   function openOperationsQueue(sector: Sector | null, queue: Queue, selectedId: string | null = null) {
+    setMapFocus(null);
     setTicketScope({ sectorId: sector?.id ?? null, queue });
     setTicketFilter("all");
     setTicketQuery("");
@@ -261,7 +269,7 @@ function RunSession({
       onUndo={interventions.undo}
       onLocate={(incidentId) => {
         const ticket = tickets.find((t) => t.id === incidentId);
-        if (ticket) openTicketSector(ticket);
+        if (ticket) locateTicket(ticket);
       }}
     />
   );
@@ -287,7 +295,7 @@ function RunSession({
             <button
               aria-pressed={view === "tickets"}
               className={view === "tickets" ? "is-active" : ""}
-              onClick={() => setView("tickets")}
+              onClick={() => { setMapFocus(null); setView("tickets"); }}
             >
               <ClipboardList size={14} />
               Incidencias
@@ -342,6 +350,7 @@ function RunSession({
             </div>
           ) : view === "operations" && graph && meta && situation ? (
             <OperationsView graph={graph} meta={meta} record={current} records={visible} tickets={tickets} situation={situation}
+              focus={mapFocus} onFocusHandled={(handled) => setMapFocus((request) => request === handled ? null : request)}
               pending={pending} sectorId={sectorId} onSector={setSectorId} onOpenTicket={(id, sector) => openOperationsQueue(sector, "all", id)}
               onQueue={openOperationsQueue} onDecision={activate} runs={runs} onRun={onRun} received={ticks.length} />
           ) : view === "tickets" ? (
@@ -443,7 +452,7 @@ function RunSession({
       </section>
       {view === "tickets" && <div className="app-sidebar-slot" inert={blocked}>
         <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
-          onOpenSector={openTicketSector} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} />
+          onLocate={locateTicket} canLocate={Boolean(ticketPosition?.every(Number.isFinite))} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} />
       </div>}
       {room}
       {receipt && (

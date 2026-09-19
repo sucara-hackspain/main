@@ -51,8 +51,10 @@ test("scale view keeps thousands of cases navigable with bounded rows, search, m
   await expect(page.locator(".tickets-table tbody tr")).toHaveCount(1);
   await page.getByRole("button", { name: /^Abrir incidencia DEMO-C2400:/ }).click();
   await expect(page.getByRole("complementary", { name: "Detalle de incidencia" })).toContainText("DEMO-L11996");
-  await page.getByRole("button", { name: "Ver sector en operaciones", exact: true }).click();
+  await page.getByRole("button", { name: "Ver en el mapa", exact: true }).click();
   await expect(page.getByRole("button", { name: "Operaciones", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".ops-map-incident-marker")).toHaveAttribute("aria-label", /^Incidencia seleccionada DEMO-C2400:/);
+  await expect(page.locator(".ops-incident-panel .ticket-summary-meta code")).toHaveText("DEMO-C2400");
   await expect(page.locator(".ops-sector[aria-pressed=true]")).toHaveCount(1);
   await expect(page.locator(".operational-map")).toHaveCount(0);
   expect(requested.some((url) => url.includes("/map/RunMap") || url.includes("/situation/SituationSidebar"))).toBe(false);

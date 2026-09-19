@@ -4,18 +4,20 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { LocateFixed, Minus, Plus } from "lucide-react";
 import type { GraphData } from "../engineTrace";
-import { number, type Sector } from "./model";
+import type { Ticket } from "../tickets/model";
+import { number, type IncidentFocus, type Sector } from "./model";
 ml.setWorkerUrl(workerUrl);
 const collection = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
 const empty = collection([]);
 
-export default function OperationsMap({ graph, sectors, selected, selectedTicket, onSector, onTicket }: {
-  graph: GraphData; sectors: Sector[]; selected: string | null; selectedTicket: string | null;
+export default function OperationsMap({ graph, sectors, selected, selectedTicket, focus, onFocusHandled, onSector, onTicket }: {
+  graph: GraphData; sectors: Sector[]; selected: string | null; selectedTicket: Ticket | null;
+  focus: IncidentFocus | null; onFocusHandled: (focus: IncidentFocus) => void;
   onSector: (id: string | null) => void; onTicket: (id: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null), map = useRef<ml.Map | null>(null);
-  const callbacks = useRef({ onSector, onTicket });
-  callbacks.current = { onSector, onTicket };
+  const callbacks = useRef({ onSector, onTicket, onFocusHandled });
+  callbacks.current = { onSector, onTicket, onFocusHandled };
   const [ready, setReady] = useState(false), [basemapError, setBasemapError] = useState(false);
   const markers = useRef<ml.Marker[]>([]);
   const reset = () => {
@@ -75,10 +77,6 @@ export default function OperationsMap({ graph, sectors, selected, selectedTicket
       m.addLayer({ id: "case-targets", type: "circle", source: "cases", filter: ["!", ["has", "point_count"]], paint: {
         "circle-radius": 12, "circle-opacity": 0,
       } });
-      m.addLayer({ id: "selected-case", type: "circle", source: "cases", filter: ["==", ["get", "id"], ""], paint: {
-        "circle-radius": 12, "circle-color": "#26745f", "circle-opacity": .12,
-        "circle-stroke-color": "#26745f", "circle-stroke-width": 2,
-      } });
       m.on("click", "case-targets", (event) => {
         const id = event.features?.[0]?.properties?.id;
         if (id) callbacks.current.onTicket(String(id));
@@ -135,18 +133,42 @@ export default function OperationsMap({ graph, sectors, selected, selectedTicket
     });
   }, [ready, sectors, selected, graph]);
   useEffect(() => {
-    if (!ready || !map.current) return;
-    // Selection only changes styling; it never changes the source or the camera.
-    map.current.setFilter("selected-case", ["==", ["get", "id"], selectedTicket ?? ""]);
-  }, [ready, selectedTicket]);
+    const position = selectedTicket && graph.nodes[selectedTicket.incident.node];
+    if (!ready || !map.current || !selectedTicket || !position?.every(Number.isFinite)) return;
+    // One independent marker also locates archived cases, without adding them to the open-case clusters.
+    const el = document.createElement("button");
+    el.className = "ops-map-incident-marker";
+    el.setAttribute("aria-label", `Incidencia seleccionada ${selectedTicket.id}: ${selectedTicket.title}`);
+    el.style.setProperty("--incident-color", selectedTicket.incident.status === "closed" ? "#82908a" : selectedTicket.incident.priority === 0 ? "#c45e45" : selectedTicket.incident.priority === 1 ? "#c68a3c" : "#64877d");
+    const label = document.createElement("span"); label.textContent = selectedTicket.id;
+    el.append(label);
+    el.onclick = (event) => { event.stopPropagation(); callbacks.current.onTicket(selectedTicket.id); };
+    const marker = new ml.Marker({ element: el, anchor: "center" }).setLngLat(position).addTo(map.current);
+    return () => { marker.remove(); };
+  }, [ready, selectedTicket, graph]);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || focus) return;
     const sector = sectors.find((s) => s.id === selected);
     if (sector?.bounds) map.current?.fitBounds(sector.bounds, { padding: 65, duration: 450 });
     else reset();
-    // Live counts must not recenter a map the operator is exploring.
+    // Only a sector change frames its bounds. Consuming a focus request must not undo the incident camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, selected, graph]);
+  useEffect(() => {
+    const m = map.current, hostElement = host.current;
+    if (!ready || !m || !hostElement || !focus) return;
+    const rect = hostElement.getBoundingClientRect();
+    const panel = hostElement.closest(".ops-grid")?.querySelector(".ops-incident-panel")?.getBoundingClientRect();
+    const left = Math.max(0, rect.left), top = Math.max(0, rect.top);
+    let right = Math.min(innerWidth, rect.right), bottom = Math.min(innerHeight, rect.bottom);
+    if (panel) {
+      if (panel.left > rect.left) right = Math.min(right, panel.left);
+      else bottom = Math.min(bottom, panel.top);
+    }
+    const offset: [number, number] = [(left + right) / 2 - rect.left - rect.width / 2, (top + bottom) / 2 - rect.top - rect.height / 2];
+    m.easeTo({ center: focus.position, zoom: Math.max(16, m.getZoom()), offset, duration: 450 });
+    callbacks.current.onFocusHandled(focus);
+  }, [ready, focus]);
   return <div className="ops-map" aria-label="Mapa de sectores operativos" data-inspecting={Boolean(selectedTicket)}>
     <div className="ops-map-canvas" ref={host} />
     <div className="ops-map-caption"><span className="ops-live-dot" />{selected ? "Incidencias de la zona" : "Visión territorial"}<span>VALÈNCIA</span></div>

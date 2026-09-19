@@ -136,13 +136,13 @@ type TicketDetailProps = {
   ticket: Ticket | null; seconds: number; tick: number; onClose: () => void;
 } & ({
   mapContext: { onOpenTickets: () => void; actions?: ReactNode };
-  onOpenSector?: never; runs?: never; runId?: never; onRun?: never; records?: never;
+  onLocate?: never; canLocate?: never; runs?: never; runId?: never; onRun?: never; records?: never;
 } | {
-  mapContext?: undefined; onOpenSector: (ticket: Ticket) => void;
+  mapContext?: undefined; onLocate: (ticket: Ticket) => void; canLocate: boolean;
   runs: RunMeta[]; runId: string; onRun: (id: string) => void; records: number;
 });
 
-export function TicketDetail({ ticket, seconds, tick, onOpenSector, onClose, runs, runId, onRun, records, mapContext }: TicketDetailProps) {
+export function TicketDetail({ ticket, seconds, tick, onLocate, canLocate, onClose, runs, runId, onRun, records, mapContext }: TicketDetailProps) {
   const panel = useRef<HTMLElement>(null), body = useRef<HTMLDivElement>(null);
   const [group, setGroup] = useState<keyof typeof stepGroups>("all");
   const [expanded, setExpanded] = useState(false);
@@ -194,8 +194,9 @@ export function TicketDetail({ ticket, seconds, tick, onOpenSector, onClose, run
           <div><dt>Avisos recibidos</dt><dd>{incident.callIds.length}</dd></div>
           {incident.splitFrom && <div><dt>Separada de</dt><dd><code>{incident.splitFrom}</code> · otro sitio</dd></div>}
         </dl>
-        {!mapContext && <button type="button" className="ticket-locate" onClick={() => onOpenSector(ticket)}><MapPin size={16} aria-hidden="true" />Ver sector en operaciones</button>}
-        {ticket.lastSeenTick < tick && <small className="ticket-archive-note">El sector muestra la situación del instante seleccionado.</small>}
+        {!mapContext && <><button type="button" className="ticket-locate" disabled={!canLocate} onClick={() => onLocate(ticket)}><MapPin size={16} aria-hidden="true" />Ver en el mapa</button>
+          {!canLocate && <small className="ticket-archive-note">No hay coordenadas disponibles para esta incidencia.</small>}</>}
+        {ticket.lastSeenTick < tick && <small className="ticket-archive-note">Se muestra la última ubicación registrada, conservando el instante del historial.</small>}
       </section>
       {mapContext?.actions}
       <section className="ticket-next" data-state={ticket.state} aria-label="Seguimiento de la incidencia"><span className="ticket-next-icon">{ticket.state === "resolved" ? <CheckCheck size={16} /> : <Clock3 size={16} />}</span><div><span className="app-eyebrow">{ticket.state === "resolved" ? "CIERRE" : "SEGUIMIENTO"}</span><h3>{next.title}</h3><p>{next.detail}</p><small>Según el estado registrado</small></div></section>
