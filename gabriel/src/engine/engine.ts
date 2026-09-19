@@ -273,6 +273,8 @@ function underWater(world: World, graph: Graph, edge: number): boolean {
   return world.floods.some((f) => graph.distanceM(f.node, a) <= f.radiusM && graph.distanceM(f.node, b) <= f.radiusM);
 }
 
+/** Whatever is this close is the same place: one crew on one trip sees it and can deal with it. */
+export const SAME_PLACE_M = 150;
 /** Width of the shallow water around the impassable core. */
 export const FLOOD_FRINGE_M = 700;
 const FLOOD_STEP_TICKS = 4;
@@ -493,15 +495,22 @@ function arriveAtScene(world: World, graph: Graph, amb: Unit): void {
 
   const scene = world.scenes.find((s) => s.id === amb.sceneId)!;
   const victims = world.victims.filter((v) => v.sceneId === scene.id);
-  const assessed: AssessedVictim[] = victims.map((v) => ({ id: v.id, injury: v.injury, triage: triage(v), status: v.status, trapped: v.trapped }));
-  emit(world, {
-    type: "scene_assessed",
-    unitId: amb.id,
-    incidentId: amb.incidentId,
-    sceneId: scene.id,
-    node: scene.node,
-    victims: assessed,
-  });
+  // The crew radioes what it has come to, and anything else going on within sight of it.
+  const inSight = world.scenes.filter((s) => s !== scene && !s.resolved && graph.distanceM(scene.node, s.node) <= SAME_PLACE_M);
+  for (const seen of [scene, ...inSight]) {
+    emit(world, {
+      type: "scene_assessed",
+      unitId: amb.id,
+      incidentId: amb.incidentId,
+      sceneId: seen.id,
+      kind: seen.kind,
+      node: seen.node,
+      inSight: seen !== scene,
+      victims: world.victims
+        .filter((v) => v.sceneId === seen.id)
+        .map((v): AssessedVictim => ({ id: v.id, injury: v.injury, triage: triage(v), status: v.status, trapped: v.trapped })),
+    });
+  }
 
   const can = UNIT_KINDS[amb.kind];
   const waiting = victims.filter((v) => v.status === "waiting").sort(bySeverity);

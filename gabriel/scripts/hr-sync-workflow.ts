@@ -30,13 +30,17 @@ const paragraphs = (text: string) => text.split("\n").map((line) => ({ type: "pa
 const client = new HappyRobotClient({ apiKey, cluster: (process.env.HAPPYROBOT_CLUSTER as "us" | "eu") ?? "eu" });
 
 const workflow = await client.workflows.get(workflowId);
-const versionId = workflow.latest_version.id;
 // The SDK ships its node types as unresolved zod inferences, so pin down the fields we use.
 type NodeRow = { id: string; name: string; persistent_id: string; parent_id: string | null; event_id: string };
-const { data: nodes } = (await client.nodes.list(versionId)) as { data: NodeRow[] };
-const trigger = nodes.find((n) => n.parent_id === null);
-const node = nodes.find((n) => n.persistent_id === nodeId);
-if (!trigger || !node) throw new Error(`workflow ${workflowId} has no trigger, or no node with persistent_id ${nodeId}`);
+async function nodesOf(version: string) {
+  const { data: nodes } = (await client.nodes.list(version)) as { data: NodeRow[] };
+  const trigger = nodes.find((n) => n.parent_id === null);
+  const node = nodes.find((n) => n.persistent_id === nodeId);
+  if (!trigger || !node) throw new Error(`workflow ${workflowId} has no trigger, or no node with persistent_id ${nodeId}`);
+  return { trigger, node };
+}
+let versionId = workflow.latest_version.id;
+let { trigger, node } = await nodesOf(versionId);
 
 // The briefing arrives as the trigger's `data` field; the node reads it as a variable reference.
 const input = [
@@ -63,6 +67,18 @@ if (values["dry-run"]) {
 }
 
 // `type` is the body's discriminator and `event_id` pins which action this node runs; both are required.
-await client.nodes.update(versionId, node.id, { type: "action", event_id: node.event_id, configuration });
-await client.versions.publish(versionId);
+const push = () => client.nodes.update(versionId, node.id, { type: "action", event_id: node.event_id, configuration });
+try {
+  await push();
+} catch (error) {
+  // A published version is locked: the change goes into a fork of it, which then becomes the published one.
+  if (!String((error as Error).message).includes("locked version")) throw error;
+  const fork = (await client.versions.fork(versionId)) as { id?: string; version?: { id: string }; data?: { id: string } };
+  versionId = fork.id ?? fork.version?.id ?? fork.data?.id ?? (await client.workflows.get(workflowId)).latest_version.id;
+  ({ trigger, node } = await nodesOf(versionId));
+  console.log(`"${workflow.latest_version.name}" is locked: forked it into version ${versionId}.`);
+  await push();
+}
+// `force` takes the live slot from whichever version holds it (the locked one we forked from).
+await client.versions.publish(versionId, { force: true } as Parameters<typeof client.versions.publish>[1]);
 console.log(`Synced prompt + schema into "${workflow.name}" / "${node.name}" and published.`);
