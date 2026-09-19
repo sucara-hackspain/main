@@ -13,6 +13,7 @@ import type {
   Victim,
   World,
 } from "./types";
+import { advanceSites } from "./sites";
 import { bySeverity, INJURIES, triage } from "./victims";
 
 export const DEFAULT_CONFIG: SimConfig = {
@@ -24,6 +25,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   drones: 2,
   hospitals: 6,
   hospitalCapacity: 14,
+  outboundLines: 3,
   ambulanceSpeedFactor: 1.3,
   pickupTicks: 2,
   dropoffTicks: 1,
@@ -109,6 +111,8 @@ export function createWorld(graph: Graph, config: SimConfig): World {
     victims: [],
     hospitals,
     floods: [],
+    sites: [],
+    gauges: [],
     closedEdges: [],
     floodedEdges: [],
     knownClosedEdges: [],
@@ -265,6 +269,18 @@ export function applyMasterAction(world: World, graph: Graph, action: MasterActi
     case "narrate":
       emit(world, { type: "master_narration", text: action.text });
       return;
+    case "place_site": {
+      const site = { id: `S${world.sites.length + 1}`, kind: action.kind, name: action.name, node: action.node, people: action.people, safe: 0, warnedTick: null, floodedTick: null };
+      world.sites.push(site);
+      emit(world, { type: "site_placed", siteId: site.id, kind: site.kind, node: site.node, people: site.people.length });
+      return;
+    }
+    case "gauge_reading": {
+      const { type: _type, ...reading } = action;
+      world.gauges = [...world.gauges.filter((g) => g.name !== action.name), { ...reading, asOfTick: world.tick }];
+      emit(world, { type: "gauge_reading", name: action.name, level: action.level, overflowTick: action.overflowTick });
+      return;
+    }
     case "puncture": {
       const amb = world.units.find((a) => a.id === action.unitId);
       if (!amb || amb.brokenUntil !== null) return;
@@ -322,6 +338,18 @@ export function applyAction(world: World, graph: Graph, action: Action): boolean
     emit(world, { type: "action_rejected", action, reason });
     return false;
   };
+  if (action.type === "warn") {
+    const site = world.sites.find((s) => s.id === action.siteId);
+    if (!site) return reject("unknown site");
+    if (site.floodedTick !== null) return reject("the water is already there");
+    if (site.warnedTick !== null) return reject("site already warned");
+    const placed = world.log.filter((e) => e.tick === world.tick && e.type === "site_warned").length;
+    if (placed >= world.config.outboundLines) return reject("all outbound lines are busy this tick");
+    site.warnedTick = world.tick;
+    emit(world, { type: "site_warned", siteId: site.id });
+    emit(world, { type: "action_applied", action, etaTicks: 0 });
+    return true;
+  }
   const amb = world.units.find((a) => a.id === action.unitId);
   if (!amb) return reject("unknown ambulance");
   if (amb.brokenUntil !== null) return reject("ambulance is broken down");
@@ -388,6 +416,11 @@ export function applyAction(world: World, graph: Graph, action: Action): boolean
 
 export function advance(world: World, graph: Graph): void {
   growFloods(world, graph);
+  advanceSites(world, graph, (site) => {
+    // Whoever the water catches inside is an emergency like any other from here on, and somebody there does call.
+    applyMasterAction(world, graph, { type: "spawn_scene", kind: "flooded_home", node: site.node, victims: site.people.slice(site.safe) });
+    return world.scenes.at(-1)!.id;
+  });
   const closed = new Set(world.closedEdges);
   for (const amb of world.units) moveUnit(world, graph, amb, closed);
   for (const victim of world.victims) ageVictim(world, graph, victim);

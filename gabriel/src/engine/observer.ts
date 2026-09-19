@@ -17,6 +17,11 @@ const SOURCE: Record<WorldEvent["type"], ReportSource | null> = {
   // Nobody announces a scene or a death in the street: calls do, or the crew that finds them.
   scene_created: null,
   master_narration: null,
+  site_placed: null,
+  site_warned: null,
+  // The care home phones the moment the water is in: it is the scene's own calls that carry the detail.
+  site_flooded: "system",
+  gauge_reading: "sensor",
   victim_died: null,
   scene_assessed: "ambulance",
   scene_not_found: "ambulance",

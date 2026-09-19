@@ -8,12 +8,15 @@ import {
   DanaMaster,
   DEFAULT_CONFIG,
   DEFAULT_DANA,
+  makeSceneVictims,
   Rng,
   type DanaMasterConfig,
   type Graph,
   type Master,
   type MasterAction,
   type SimConfig,
+  type SiteKind,
+  type VictimSpec,
   type World,
 } from "../engine";
 import { FLOOD_SOURCES } from "../masters/protocol";
@@ -89,6 +92,26 @@ export interface ScenarioSpec {
   config?: Partial<SimConfig>;
   /** How many emergencies can break out in the same tick: 1 is a bad night, 6 is the 29th of October 2024. */
   intensity?: number;
+  /** Tick each flood comes out at (default 0: the night starts with the water already out). Upstream gauges warn of the late ones. */
+  floodTicks?: number[];
+  /** Care homes, schools and car parks in the water's path, full of people who are fine until it arrives. */
+  sites?: number;
+}
+
+const SITE_NAMES: Record<SiteKind, string[]> = {
+  residence: ["Residencia Sant Josep", "Residencia La Saleta", "Centro de día Verge del Carme", "Residencia El Pilar"],
+  school: ["CEIP Rei en Jaume", "Escoleta Els Xiquets", "CEIP Blasco Ibáñez", "IES La Marxadella"],
+  garage: ["Garaje Plaza Major", "Aparcamiento Mercat", "Garaje residencial Av. del Sud", "Aparcamiento Estació"],
+};
+const SITE_PEOPLE: Record<SiteKind, [number, number]> = { residence: [18, 34], school: [24, 40], garage: [8, 18] };
+const SITE_AGE: Record<SiteKind, [number, number]> = { residence: [72, 96], school: [6, 12], garage: [22, 70] };
+
+/** Whoever the water catches in a ground floor or a basement: what a flooded home does to people, at the ages of that site. */
+function peopleInside(kind: SiteKind, rng: Rng): VictimSpec[] {
+  const people: VictimSpec[] = [];
+  const wanted = rng.int(...SITE_PEOPLE[kind]);
+  while (people.length < wanted) people.push(...makeSceneVictims("flooded_home", rng));
+  return people.slice(0, wanted).map((p) => ({ ...p, age: rng.int(...SITE_AGE[kind]) }));
 }
 
 const EVENT_TICKS = 40;
@@ -106,7 +129,7 @@ const DENSE: Partial<DanaMasterConfig> = { pSceneStart: 0.5, pScenePeak: 0.6, pe
 export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
   const config = { ...DEFAULT_CONFIG, ...spec.config };
   const world = createWorld(graph, config);
-  const floods = spec.floods.map((index) => ({ tick: 0, ...FLOOD_SOURCES[index], radiusM: 450, growthM: 10, maxRadiusM: 1300 }));
+  const floods = spec.floods.map((index, n) => ({ tick: spec.floodTicks?.[n] ?? 0, ...FLOOD_SOURCES[index], radiusM: 450, growthM: 10, maxRadiusM: 1300 }));
   const master = new DanaMaster({ ...DEFAULT_DANA, ...DENSE, ...spec.dana, floods });
   const root = new Rng(spec.seed);
   const masterRng = root.fork();
@@ -114,11 +137,32 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
   const roadUnits = world.units.filter((u) => u.kind === "ambulance" || u.kind === "fire");
 
   const script: Scenario["script"] = [];
+  const siteRng = root.fork();
+  for (let n = 0; n < (spec.sites ?? 0); n++) {
+    const flood = floods[n % floods.length];
+    const source = graph.nearestNode(flood.lon, flood.lat);
+    // Far enough that there is time to act, near enough that the water gets there before the night is over.
+    const ring = graph.nodesWithin(source, 950).filter((node) => graph.distanceM(source, node) > 520);
+    if (ring.length === 0) continue;
+    const kind = siteRng.pick<SiteKind>(["residence", "residence", "school", "garage"]);
+    const action: MasterAction = { type: "place_site", kind, name: SITE_NAMES[kind][n % 4], node: siteRng.pick(ring), people: peopleInside(kind, siteRng) };
+    applyMasterAction(world, graph, action);
+    script.push({ tick: 0, action });
+  }
+  const gaugeRng = root.fork();
+  const gauges = floods.filter((f) => f.tick > 0);
+
   for (let tick = 0; tick < TICKS; tick++) {
     const actions = master.act(world, graph, masterRng);
     // A catastrophe is many emergencies at once, not one after another: more rolls of the same dice per tick.
     for (let extra = 1; extra < (spec.intensity ?? 1); extra++) actions.push(...master.act(world, graph, masterRng).filter((a) => a.type === "spawn_scene"));
     for (let i = actions.length - 1; i >= 0; i--) if (tick >= EVENT_TICKS && actions[i].type === "spawn_scene") actions.splice(i, 1);
+    // The channel fills for a while before it spills, and the forecast of when sharpens as it gets closer.
+    for (const f of gauges) {
+      if (tick % 3 !== 0 || tick > f.tick + 6) continue;
+      const left = Math.max(0, f.tick - tick);
+      actions.push({ type: "gauge_reading", name: f.name, node: graph.nearestNode(f.lon, f.lat), level: Number(Math.min(1.3, 1 - left * 0.025).toFixed(2)), overflowTick: f.tick + Math.round(gaugeRng.range(-1, 1) * (left / 5)), radiusM: f.radiusM, growthM: f.growthM });
+    }
     for (const unit of roadUnits) {
       if (tick < EVENT_TICKS && breakdownRng.chance(P_BREAKDOWN)) actions.push({ type: "puncture", unitId: unit.id, ticks: breakdownRng.int(10, 25) });
     }
@@ -186,6 +230,11 @@ export const COLLECTION: ScenarioSpec[] = [
   { id: "F2", family: "F · DANA a escala real", split: "train", title: "La Punta y Sant Isidre, cientos de víctimas", seed: 602, floods: [LA_PUNTA, SANT_ISIDRE], config: DEPLOYED, intensity: 6 },
   { id: "F3", family: "F · DANA a escala real", split: "validation", title: "La Torre y Natzaret, cientos de víctimas", seed: 603, floods: [LA_TORRE, NATZARET], config: DEPLOYED, intensity: 6 },
   { id: "F4", family: "F · DANA a escala real", split: "test", title: "Malilla y La Punta, cientos de víctimas", seed: 604, floods: [MALILLA, LA_PUNTA], config: DEPLOYED, intensity: 6 },
+
+  { id: "G1", family: "G · Anticipación", split: "train", title: "La Torre avisa con 12 ticks; residencias y colegios en el camino", seed: 701, floods: [LA_TORRE, MALILLA], floodTicks: [12, 26], sites: 6 },
+  { id: "G2", family: "G · Anticipación", split: "train", title: "La Punta avisa con 10 ticks; sitios en el camino", seed: 702, floods: [LA_PUNTA, SANT_ISIDRE], floodTicks: [10, 24], sites: 6 },
+  { id: "G3", family: "G · Anticipación", split: "validation", title: "Natzaret avisa con 14 ticks; sitios en el camino", seed: 703, floods: [NATZARET, LA_TORRE], floodTicks: [14, 28], sites: 6 },
+  { id: "G4", family: "G · Anticipación", split: "test", title: "Malilla avisa con 11 ticks; sitios en el camino", seed: 704, floods: [MALILLA, LA_PUNTA], floodTicks: [11, 25], sites: 6 },
 
   { id: "E1", family: "E · Dos focos y hospitales saturados", split: "test", title: "La Torre y Natzaret a la vez", seed: 501, floods: [LA_TORRE, NATZARET], config: SATURATED },
   { id: "E2", family: "E · Dos focos y hospitales saturados", split: "test", title: "Sant Isidre y La Punta a la vez", seed: 502, floods: [SANT_ISIDRE, LA_PUNTA], config: SATURATED },

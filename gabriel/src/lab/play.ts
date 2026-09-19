@@ -8,6 +8,8 @@ import { ScriptedMaster, type Scenario } from "./scenario";
 
 export type Policy =
   | { kind: "greedy" }
+  /** The dispatcher, also acting on the registry of sites and the gauges: what well-made rules can do with structured data. */
+  | { kind: "registry" }
   /** Greedy told the truth about every emergency the moment it happens: what perfect information is worth. */
   | { kind: "informed" }
   /** `harness`: "basic" is the reactive dispatcher the agent used to be; the default lets it plan (stage, hold, notebook). */
@@ -85,7 +87,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     });
     coordinator = scenario.handover ? new Handover(agent, scenario.handover.tick, scenario.handover.decisions) : agent;
   } else {
-    coordinator = new GreedyCoordinator();
+    coordinator = new GreedyCoordinator(undefined, policy.kind === "registry");
   }
 
   const sim = new Simulation({

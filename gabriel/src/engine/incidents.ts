@@ -26,6 +26,8 @@ export function createBelief(world: Readonly<World>): Belief {
     closedEdges: [],
     floodedEdges: [],
     scouts: [],
+    sites: [],
+    gauges: [],
     nextIncidentNum: 1,
   };
 }
@@ -44,6 +46,9 @@ export function updateBelief(belief: Belief, reports: Report[], world: Readonly<
   // Fleet GPS/status and hospital bed counts come from our own systems, not from reports.
   belief.units = structuredClone(world.units);
   belief.hospitals = structuredClone(world.hospitals);
+  // The registry of sites is ours too, and whoever answers the phone there says how many are already upstairs.
+  belief.sites = world.sites.map(({ people, ...site }) => ({ ...site, people: people.length }));
+  belief.gauges = structuredClone(world.gauges);
 
   const retags: Retag[] = [];
   /** Places a crew has looked over this tick: whatever was reported there and it did not see, is not there. */

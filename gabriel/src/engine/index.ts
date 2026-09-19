@@ -8,6 +8,7 @@ export * from "./observer";
 export * from "./incidents";
 export * from "./recon";
 export * from "./staging";
+export * from "./sites";
 export * from "./water";
 export * from "./coordinator";
 export * from "./sim";

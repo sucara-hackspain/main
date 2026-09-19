@@ -79,3 +79,39 @@ describe("lab: a hypothesis is one edit to the doctrine", () => {
   });
 
 });
+
+describe("sites: people who are fine until the water arrives", () => {
+  const G: ScenarioSpec = { id: "TG", family: "test", split: "train", title: "test", seed: 11, floods: [0], floodTicks: [10], sites: 4 };
+
+  async function nightWith(coordinator: Coordinator) {
+    const scenario = generateScenario(G, graph);
+    const sim = new Simulation({ graph, seed: scenario.seed, master: new ScriptedMaster(scenario), coordinator, config: scenario.config });
+    await sim.run(scenario.ticks);
+    return sim;
+  }
+
+  it("puts the sites and the gauge in the script, and the gauge warns before the water is out", () => {
+    const scenario = generateScenario(G, graph);
+    expect(scenario.script.filter((s) => s.action.type === "place_site")).toHaveLength(4);
+    const readings = scenario.script.filter((s) => s.action.type === "gauge_reading");
+    expect(readings[0].tick).toBe(0);
+    expect(readings.some((s) => s.tick < 10 && s.action.type === "gauge_reading" && s.action.level < 1)).toBe(true);
+  });
+
+  it("catches everyone inside if nobody acts, and nobody if the registry is acted on in time", async () => {
+    const [ignored, acted] = await Promise.all([nightWith(new GreedyCoordinator()), nightWith(new GreedyCoordinator(undefined, true))]);
+    const caught = (sim: Simulation) => sim.world.log.flatMap((e) => (e.type === "site_flooded" ? [e.caught] : [])).reduce((a, b) => a + b, 0);
+    expect(caught(ignored)).toBeGreaterThan(20);
+    expect(caught(acted)).toBeLessThan(caught(ignored) / 4);
+    expect(acted.summary().dead).toBeLessThan(ignored.summary().dead);
+  });
+
+  it("refuses more warnings in a tick than there are outbound lines", async () => {
+    const scenario = generateScenario(G, graph);
+    const everyone: Coordinator = { name: "all", decide: ({ belief }) => belief.sites.filter((s) => s.warnedTick === null).map((s) => ({ type: "warn", unitId: "112", siteId: s.id }) as Action) };
+    const sim = new Simulation({ graph, seed: scenario.seed, master: new ScriptedMaster(scenario), coordinator: everyone, config: { ...scenario.config, outboundLines: 2 } });
+    await sim.run(2);
+    expect(sim.world.sites.filter((s) => s.warnedTick !== null).length).toBeLessThanOrEqual(4);
+    expect(sim.world.log.some((e) => e.type === "action_rejected" && e.reason.includes("outbound"))).toBe(true);
+  });
+});

@@ -2,6 +2,7 @@ import { closuresFor, effectiveNode, flightMps, UNIT_KINDS } from "./engine";
 import type { Graph } from "./graph";
 import { resolve, unitsNeeded } from "./incidents";
 import { infoGaps } from "./recon";
+import { CREW_RATE, SITES, sitesAtRisk } from "./sites";
 import { holdAllows, holdOn, type Hold } from "./staging";
 import { believedWater, cutOffForecast } from "./water";
 import type { Action, Belief, Incident, Report, SimConfig, Unit, UnitKind } from "./types";
@@ -49,7 +50,14 @@ export class GreedyCoordinator implements Coordinator {
   readonly name = "greedy";
 
   /** Standing holds somebody above the dispatcher has placed: a held unit is only spent on what it is held for. */
-  constructor(private readonly holds: () => Hold[] = () => []) {}
+  constructor(
+    private readonly holds: () => Hold[] = () => [],
+    /**
+     * Also act on the registry of sites and the gauges: warn whoever the water will reach, soonest first, and post a
+     * crew where a warning alone will not get everyone out. Off by default: today's control rooms do not cross these.
+     */
+    private readonly usesRegistry = false,
+  ) {}
 
   decide({ belief, graph, config }: DecideInput): Action[] {
     const actions: Action[] = [];
@@ -107,8 +115,11 @@ export class GreedyCoordinator implements Coordinator {
     // A drone can do nothing else, so it never competes for rescue work; and a unit already looking
     // at something is left alone until its report comes in.
     const canRescue = (u: Unit) => UNIT_KINDS[u.kind].carries || UNIT_KINDS[u.kind].extricates;
+    // A crew getting people out of a site ahead of the water, or on its way to do it, is at work, not free.
+    const evacuating = new Set(belief.sites.filter((site) => site.floodedTick === null && site.safe < site.people).map((site) => site.node));
+    const atSite = (u: Unit) => evacuating.has(u.destNode ?? (u.mission === "idle" ? u.node : -1));
     const free = belief.units.filter(
-      (u) => canRescue(u) && !u.victimId && u.brokenUntil === null && u.mission !== "to_observe" && (u.mission !== "to_scene" || !isOpen(u.incidentId)),
+      (u) => !atSite(u) && canRescue(u) && !u.victimId && u.brokenUntil === null && u.mission !== "to_observe" && (u.mission !== "to_scene" || !isOpen(u.incidentId)),
     );
     const take = (unit: Unit) => free.splice(free.indexOf(unit), 1);
     const holds = this.holds();
@@ -136,6 +147,20 @@ export class GreedyCoordinator implements Coordinator {
       if (!refuge) continue;
       actions.push({ type: "reposition", unitId: u.id, node: refuge.node });
       take(u);
+    }
+
+    if (this.usesRegistry) {
+      let lines = config.outboundLines;
+      for (const { site, arrival } of sitesAtRisk(belief, graph)) {
+        if (site.warnedTick === null && lines-- > 0) actions.push({ type: "warn", unitId: "112", siteId: site.id });
+        const alone = SITES[site.kind].selfRate * arrival;
+        const posted = belief.units.filter((u) => u.destNode === site.node || (u.node === site.node && u.mission === "idle")).length;
+        if (site.people - site.safe <= alone + posted * CREW_RATE * arrival) continue;
+        const crew = free.filter((u) => u.kind === "fire" || u.kind === "ambulance").filter((u) => etaOf(u)(site.node) < arrival).sort((a, b) => etaOf(a)(site.node) - etaOf(b)(site.node))[0];
+        if (!crew) continue;
+        actions.push({ type: "reposition", unitId: crew.id, node: site.node });
+        take(crew);
+      }
     }
 
     const open = belief.incidents

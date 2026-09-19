@@ -1,7 +1,7 @@
 // pnpm lab:moments — picks the hard moments out of every night: the ticks where there is a real choice to make.
 // A whole night is 27 decisions and most of them anyone would take the same way; a moment is 3 decisions where it matters.
 import { readFileSync, writeFileSync } from "node:fs";
-import { believedWater, buildBriefing, cutOffForecast, Graph, GreedyCoordinator, infoGaps, Simulation, UNIT_KINDS, unitsNeeded, type Action, type Coordinator, type DecideInput, type GraphData } from "../engine";
+import { believedWater, buildBriefing, cutOffForecast, Graph, GreedyCoordinator, infoGaps, Simulation, sitesAtRisk, UNIT_KINDS, unitsNeeded, type Action, type Coordinator, type DecideInput, type GraphData } from "../engine";
 import { loadScenarios, ScriptedMaster, type MomentRef, type Scenario } from "./scenario";
 
 const DECISIONS = Number(process.env.MOMENT_DECISIONS ?? 3);
@@ -44,6 +44,11 @@ class Probe implements Coordinator {
       if (observers > 0 && blind > 0) {
         score += 1;
         reasons.push(`${blind} zonas a ciegas y ${observers} drones libres`);
+      }
+      const unwarned = sitesAtRisk(belief, graph).filter(({ site }) => site.warnedTick === null);
+      if (unwarned.length > 0) {
+        score += 3 + unwarned.length;
+        reasons.push(`${unwarned.length} sitios con gente dentro sin avisar; al primero le llega el agua en ${unwarned[0].arrival} ticks`);
       }
       if (score >= 3) this.seen.push({ tick, score, why: reasons.join("; ") });
     }

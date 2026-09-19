@@ -3,6 +3,7 @@ import { clock, describe } from "./describe";
 import { closuresFor, effectiveNode, flightMps, remainingTicks, UNIT_KINDS } from "./engine";
 import { incidentLine, resolve, unitsNeeded } from "./incidents";
 import { infoGaps } from "./recon";
+import { CREW_RATE, SITES, sitesAtRisk } from "./sites";
 import { holdOn, stagingPoints, type Hold } from "./staging";
 import { believedWater, cutOffForecast, projectedRadius } from "./water";
 
@@ -59,7 +60,8 @@ export function buildBriefing({ tick, reports, belief, graph, config }: DecideIn
     } else if (a.victimId) {
       state = `PARADA con ${a.victimId} a bordo, SIN HOSPITAL ASIGNADO`;
     } else {
-      state = "libre";
+      const site = belief.sites.find((x) => x.node === a.node && x.floodedTick === null && x.safe < x.people);
+      state = site ? `en ${site.id} poniendo gente a salvo (quedan ${site.people - site.safe} dentro); puedes darle otra orden` : "libre";
     }
     if (a.brokenUntil !== null) state = `AVERIADA hasta el tick ${a.brokenUntil} (${state})`;
     if (a.stranded) state += " — BLOQUEADA, sin ruta abierta";
@@ -202,6 +204,41 @@ export function buildBriefing({ tick, reports, belief, graph, config }: DecideIn
           "Una pasada con calidad baja o que no vio nada NO demuestra que allí no haya nadie.",
       );
     }
+  }
+
+  if (belief.gauges.length) {
+    lines.push("", "AFOROS (sensores río arriba: avisan antes de que salga el agua, y dicen cómo avanzará):");
+    for (const g of belief.gauges) {
+      lines.push(
+        `- ${g.name}: cauce al ${Math.round(g.level * 100)} %` +
+          (g.overflowTick > tick ? `, subiendo: DESBORDA EN ~${g.overflowTick - tick} ticks` : `, DESBORDADO hace ${tick - g.overflowTick} ticks`) +
+          `; el agua sale junto a ${graph.streetAt(g.node) ?? `nodo ${g.node}`} y avanza ~${g.growthM} m/tick en todas direcciones`,
+      );
+    }
+  }
+
+  const atRisk = sitesAtRisk(belief, graph);
+  if (atRisk.length) {
+    lines.push(
+      "",
+      `SITIOS CON GENTE DENTRO (registro municipal; están BIEN hasta que llegue el agua, y quien siga dentro entonces queda atrapado de golpe. warn llama al sitio: empiezan a ponerse a salvo solos, sin gastar ninguna unidad; hay ${config.outboundLines} líneas por tick. Una dotación esperando EN el sitio (reposition con target = id del sitio) pone a salvo ${CREW_RATE} personas más por tick):`,
+    );
+    for (const { site, arrival } of atRisk) {
+      const left = site.people - site.safe;
+      const alone = SITES[site.kind].selfRate;
+      const etas = available
+        .filter(({ amb }) => amb.mission === "idle" || amb.mission === "reposition")
+        .map(({ amb, times }) => ({ id: amb.id, eta: toTicks(times[site.node]) }))
+        .filter((o) => Number.isFinite(o.eta))
+        .sort((a, b) => a.eta - b.eta)
+        .slice(0, 3);
+      lines.push(
+        `- ${site.id} ${SITES[site.kind].label} «${site.name}»: ${left} personas aún dentro (${site.safe} a salvo) · EL AGUA LLEGA EN ~${arrival} ticks · ` +
+          (site.warnedTick === null ? "SIN AVISAR" : `avisados hace ${tick - site.warnedTick} ticks`) +
+          ` · solos ponen a salvo ${alone} por tick (${site.warnedTick === null ? "si se les avisa" : `a este ritmo quedarán ${Math.max(0, left - alone * arrival)} dentro`}) · libres: ${etas.map((o) => `${o.id} a ${o.eta} ticks`).join(" | ") || "nadie"}`,
+      );
+    }
+    if (atRisk.some(({ site }) => site.warnedTick === null)) actionable = true;
   }
 
   if (options.plan) {

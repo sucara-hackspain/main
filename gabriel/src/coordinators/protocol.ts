@@ -28,7 +28,8 @@ REGLAS DEL MUNDO
 ÓRDENES
 - dispatch {unitId, incidentId, hospitalId}: unidad SIN herido a bordo va al incidente y, si traslada, sigue sola al hospital indicado (para bomberos no pongas hospitalId). Puedes desviar una que iba a otro incidente; ese otro se queda sin ella.
 - transport {unitId, hospitalId}: ambulancia CON herido a bordo va a ese hospital.
-- reposition {unitId, target}: unidad vacía va a esperar a un sitio: un hospital (H2) o un PUNTO DE ESPERA del parte (E1N). También sirve para anular una salida. Una unidad que ya está cerca de donde va a hacer falta llega a tiempo; una que sale del otro lado de la ciudad, no.
+- reposition {unitId, target}: unidad vacía va a esperar a un sitio: un hospital (H2), un PUNTO DE ESPERA del parte (E1N) o un SITIO CON GENTE DENTRO (S3), donde ayuda a ponerlos a salvo. También sirve para anular una salida. Una unidad que ya está cerca de donde va a hacer falta llega a tiempo; una que sale del otro lado de la ciudad, no.
+- warn {unitId:"112", target}: el 112 llama a un SITIO CON GENTE DENTRO del parte (S3) para que empiecen a ponerse a salvo antes de que llegue el agua. No gasta ninguna unidad. Si no les da tiempo solos, manda además una dotación a esperar en el sitio con reposition {unitId, target:"S3"}.
 - hold {unitId, onlyFor, ticks}: RESERVA una unidad libre durante esos ticks. onlyFor: "agua" (solo para víctimas en el agua o sin ruta por carretera), "P0" (solo para vida en riesgo inmediato) o "nada" (no se toca hasta que tú la sueltes). Mientras dure, nadie la gasta en otra cosa, tampoco tú por despiste. No reserves lo que hace falta ahora mismo.
 - release {unitId}: levanta la reserva.
 - scout {unitId, target}: manda un dron o el helicóptero a mirar. "target" es un id de la sección LO QUE NO SABES: un incidente (C7) o una zona (Z142). No vale ningún otro id.
@@ -59,7 +60,7 @@ export const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          type: { type: "string", enum: ["dispatch", "transport", "reposition", "scout", "hold", "release"] },
+          type: { type: "string", enum: ["dispatch", "transport", "reposition", "scout", "warn", "hold", "release"] },
           unitId: { type: "string" },
           incidentId: { type: "string" },
           hospitalId: { type: "string" },
@@ -79,7 +80,7 @@ export const SCHEMA = {
 };
 
 export interface LlmAction {
-  type: "dispatch" | "transport" | "reposition" | "scout" | "hold" | "release";
+  type: "dispatch" | "transport" | "reposition" | "scout" | "warn" | "hold" | "release";
   onlyFor?: string;
   ticks?: number;
   unitId: string;
@@ -130,9 +131,13 @@ export function toAction(raw: LlmAction, { belief, graph, tick }: DecideInput): 
   if (raw.type === "transport" && raw.hospitalId) {
     return { type: "transport", unitId: raw.unitId, hospitalId: raw.hospitalId };
   }
+  if (raw.type === "warn") {
+    const site = belief.sites.find((x) => x.id === (raw.target ?? raw.incidentId));
+    if (site) return { type: "warn", unitId: "112", siteId: site.id };
+  }
   if (raw.type === "reposition") {
     const where = raw.target ?? raw.hospitalId;
-    const node = belief.hospitals.find((h) => h.id === where)?.node ?? stagingPoints(belief, graph, tick).find((p) => p.id === where)?.node;
+    const node = belief.hospitals.find((h) => h.id === where)?.node ?? belief.sites.find((site) => site.id === where)?.node ?? stagingPoints(belief, graph, tick).find((p) => p.id === where)?.node;
     if (node !== undefined) return { type: "reposition", unitId: raw.unitId, node };
   }
   return null;
@@ -193,7 +198,7 @@ export const HR_SCHEMA = {
     actions: {
       type: "string",
       description:
-        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition"|"scout"|"hold"|"release","unitId":"...","incidentId":"...","hospitalId":"...","target":"...","onlyFor":"agua"|"P0"|"nada","ticks":10,"reason":"...","applies":["H5","D2"]}. `target`: para scout, id de incidente (C7) o de zona (Z142); para reposition, hospital (H2) o punto de espera (E1N). `onlyFor` y `ticks` solo para hold. `applies` = ids de la doctrina seguidos en esa orden. Sin órdenes: "[]".',
+        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition"|"scout"|"warn"|"hold"|"release","unitId":"...","incidentId":"...","hospitalId":"...","target":"...","onlyFor":"agua"|"P0"|"nada","ticks":10,"reason":"...","applies":["H5","D2"]}. `target`: para scout, id de incidente (C7) o de zona (Z142); para reposition, hospital (H2), punto de espera (E1N) o sitio (S3); para warn, sitio (S3) y unitId "112". `onlyFor` y `ticks` solo para hold. `applies` = ids de la doctrina seguidos en esa orden. Sin órdenes: "[]".',
     },
     plan: { type: "string", description: "Tu cuaderno: qué intentas conseguir en los próximos ~10 ticks y por qué tienes cada unidad donde la tienes. 60 palabras como mucho. Vacío si en esta sesión no hay cuaderno." },
     watch: { type: "string", description: "Tu cuaderno: qué vigilas y qué harás si pasa. 40 palabras como mucho." },
