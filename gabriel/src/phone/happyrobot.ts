@@ -20,6 +20,13 @@ const KINDS: SceneKind[] = ["vehicle_trapped", "flooded_home", "swept_away", "bu
 const oneOf = <T extends string>(value: unknown, options: readonly T[], fallback: T): T => (options.includes(value as T) ? (value as T) : fallback);
 const nothing = (value: unknown) => value === null || value === undefined || value === "" || value === "null";
 
+/** A Spanish number as people say it (9 digits, with or without a plus) becomes E.164; anything else already in E.164 is kept. */
+export function normalisePhone(value: unknown): string | undefined {
+  const digits = String(value ?? "").replace(/[\s().-]/g, "");
+  if (/^\+?\d{9}$/.test(digits)) return `+34${digits.replace("+", "")}`;
+  return /^\+\d{8,15}$/.test(digits) ? digits : undefined;
+}
+
 /**
  * The record the operator agent filed, as the engine takes calls. Where the call happened is the street the
  * caller said: the agent cannot know the map, so whatever node it wrote down is ignored.

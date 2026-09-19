@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit",
     "hr:sync": "tsx --env-file-if-exists=.env scripts/hr-sync-workflow.ts",
     "hr:phone": "tsx --env-file-if-exists=.env scripts/hr-phone-webhook.ts",
+    "hr:generator": "tsx --env-file-if-exists=.env scripts/hr-fix-112-coordinator.ts",
+    "hr:triage": "tsx --env-file-if-exists=.env scripts/hr-fix-112-triage.ts",
     "lab:scenarios": "tsx src/lab/make-scenarios.ts",
     "lab": "tsx --env-file-if-exists=.env src/lab/loop.ts",
     "lab:report": "tsx src/lab/report.ts",

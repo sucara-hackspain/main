@@ -45,6 +45,10 @@ export interface Decision {
 export interface Coordinator {
   readonly name: string;
   decide(input: DecideInput): Action[] | Decision | Promise<Action[] | Decision>;
+  /** A decision taken in the background has landed: wake me even if nothing new was heard. */
+  pending?(): boolean;
+  /** Wait for whatever is still being decided (the session is over). */
+  settle?(): Promise<void>;
 }
 
 /**

@@ -122,7 +122,7 @@ export interface CallWriterOptions {
 }
 
 const ANSWER = { yes: "sí", no: "no", unknown: "no lo sabe" } as const;
-const WHO = { victim: "el propio herido", family: "un familiar", bystander: "un testigo a pie", driver: "un conductor que pasaba" } as const;
+export const WHO = { victim: "el propio herido", family: "un familiar", bystander: "un testigo a pie", driver: "un conductor que pasaba" } as const;
 const WHAT: Record<string, string> = {
   vehicle_trapped: "un coche atrapado por el agua con gente dentro", flooded_home: "una planta baja que se inunda con gente dentro", swept_away: "el agua ha arrastrado a una persona",
   building_collapse: "se ha derrumbado parte de un edificio", collapse: "una persona se ha desplomado", fall: "una persona se ha caído", traffic: "un accidente de tráfico",
