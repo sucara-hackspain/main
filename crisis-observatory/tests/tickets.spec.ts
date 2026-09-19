@@ -1,0 +1,68 @@
+import { test, expect } from "@playwright/test";
+import { serve } from "./support/engineRun";
+import { ticketGraph, ticketRun } from "./support/ticketRun";
+
+test.beforeEach(async ({ page }) => {
+  await serve(page, [ticketRun()]);
+  await page.route("**/api/graph/ticket-test", (route) => route.fulfill({ json: ticketGraph }));
+  await page.goto("/");
+  await expect(page.getByText("6 registros recibidos", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Incidencias", exact: true }).click();
+});
+
+test("ticket list, filters, reasons, historical details and map focus work together", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const seek = page.getByLabel("Navegar por el historial", { exact: true });
+  const detail = page.getByRole("complementary", { name: "Detalle de incidencia" });
+  await expect(page.getByText("Todavía no hay incidencias", { exact: true })).toBeVisible();
+  await seek.fill("2");
+  await page.getByRole("button", { name: "Abrir incidencia C1:", exact: false }).click();
+  await expect(detail).toContainText("Esperando valoración en la zona");
+  await expect(detail).toContainText("A1 es la ambulancia disponible más cercana");
+  await expect(detail).not.toContainText("A2 cubre el aviso");
+  await detail.getByRole("button", { name: "Enfocar en el mapa" }).click();
+  await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('.operational-map [data-entity="incident:C1"]')).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Incidencias", exact: true }).click();
+  await seek.fill("3");
+  await expect(detail).toContainText("La incidencia es más grave de lo previsto");
+  await expect(detail).toContainText("parada cardiaca");
+  await page.screenshot({ path: "test-results/tickets-desktop.png", fullPage: true });
+  const filters = page.getByLabel("Filtrar tickets por estado");
+  await filters.getByRole("button", { name: /^Triage/ }).click();
+  await expect(page.locator('.tickets-table tr[data-ticket="C1"]')).toHaveCount(0);
+  await filters.getByRole("button", { name: /^Todos/ }).click();
+  await page.getByLabel("Buscar incidencias").fill("avinguda");
+  await expect(page.locator(".tickets-table tbody tr")).toHaveCount(1);
+  await page.getByLabel("Buscar incidencias").fill("no-existe");
+  await expect(page.getByText("No hay coincidencias", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
+  await seek.fill("5");
+  await filters.getByRole("button", { name: /^Resuelto/ }).click();
+  await expect(page.locator('.tickets-table tr[data-ticket="C1"]')).toBeVisible();
+  await expect(detail).toContainText("Se abrirá el último registro");
+  await detail.getByRole("button", { name: "Enfocar en el mapa" }).click();
+  await expect(seek).toHaveValue("4");
+  await expect(page.locator('.operational-map [data-entity="incident:C1"]')).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Incidencias", exact: true }).click();
+  await seek.fill("0");
+  await expect(detail).toContainText("Selecciona un ticket");
+  await expect(detail).not.toContainText("parada cardiaca");
+  expect(errors).toEqual([]);
+});
+
+test("tickets support keyboard selection and mobile navigation without horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByLabel("Navegar por el historial", { exact: true }).fill("2");
+  const open = page.getByRole("button", { name: "Abrir incidencia C1:", exact: false });
+  await open.focus();
+  await page.keyboard.press("Enter");
+  const detail = page.getByRole("complementary", { name: "Detalle de incidencia" });
+  await expect(detail.getByRole("heading", { name: "accidente de tráfico", exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.screenshot({ path: "test-results/tickets-mobile.png", fullPage: true });
+  await detail.getByRole("button", { name: "Enfocar en el mapa" }).click();
+  await expect(page.locator(".operational-map")).toBeInViewport();
+  await expect(page.locator('.operational-map [data-entity="incident:C1"]')).toHaveAttribute("aria-pressed", "true");
+});
