@@ -1,9 +1,10 @@
-# HackSpain 2026 · ¿Puede la IA gestionar una crisis?
+![El 112 de la Generalitat dejó sin atender más de 40.000 llamadas durante los días de la dana en Valencia.](docs/readme-happyrobot/112-valencia.png)
+<sub>elDiario.es · Recorte aportado por el equipo.</sub>
 
-Tres paquetes independientes, cada uno con sus dependencias y su README:
+# ¿Puede la IA gestionar una crisis?
 
-| Directorio | Qué es | Arranque |
-| --- | --- | --- |
-| [`gabriel/`](gabriel/README.md) | Simulador de una DANA sobre el callejero real de València: mundo, información imperfecta (llamadas 112, incidentes, agua inferida), cinco tipos de unidad (incluido el dron de reconocimiento, para ir a buscar la información que falta), coordinadores (reglas y Claude) y visor propio. | `cd gabriel && pnpm install && pnpm run-sim --coordinator greedy && pnpm ui` |
-| [`crisis-observatory/`](crisis-observatory/README.md) | Control Center: panel React conectado a HappyRobot V2 que lee las ejecuciones de `gabriel/runs/`. **Pendiente de portar al formato nuevo de ejecuciones.** | `cd crisis-observatory && npm install && npm run dev` |
-| [`backend/`](backend/README.md) | Simulador de emergencias independiente con CLI y estado en `state.json`. | ver su README |
+**HackSpain 2026 · HappyRobot · DANA en Valencia**
+
+**Objetivo:** minimizar la tasa de fallecidos por catástrofe.  
+**Solución:** agentes para priorizar incidencias, asignar recursos y adaptar intervenciones.  
+**Validación:** escenarios simulados. Sin resultados acreditados en emergencias reales.
