@@ -46,7 +46,7 @@ test("engine run drives operational totals, playback and historical state", asyn
   await expect(page.getByLabel("Tiempo transcurrido")).toHaveText(paused!);
   expect(errors).toEqual([]);
 });
-test("navigation contains only operations and incidents on desktop and mobile", async ({
+test("navigation preserves the merged views without Territory on desktop and mobile", async ({
   page,
 }) => {
   await open(page);
@@ -54,7 +54,7 @@ test("navigation contains only operations and incidents on desktop and mobile", 
   await expect(page.getByRole("button", { name: "Incidencias", exact: true })).toHaveAttribute("aria-pressed", "true");
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
-    await expect(page.locator(".app-tabs button")).toHaveText(["Operaciones", "Incidencias"]);
+    await expect(page.locator(".app-tabs button")).toHaveText(["Operaciones", "Incidencias", "Decisiones", "Plan", /Prensa/, /Señales/]);
     await page.getByRole("button", { name: "Operaciones", exact: true }).click();
     await expect(page.getByRole("button", { name: "Operaciones", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("region", { name: "Panorama operativo", exact: true })).toBeVisible();

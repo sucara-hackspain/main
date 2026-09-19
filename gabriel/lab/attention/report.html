@@ -1,0 +1,37 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Presupuesto de atención</title>
+<style>
+:root { --bg:#f6f5f1; --card:#fff; --ink:#1c1b19; --muted:#77736a; --line:#e4e1d8; --bar:#b9b4a8; --agent:#2f6fde; --ceiling:#1f9d6b; --good:#1f9d6b; --bad:#d64545; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#151412; --card:#1f1e1b; --ink:#f0ede6; --muted:#9a958a; --line:#33312c; --bar:#5a564d; --agent:#6ea1ff; --ceiling:#3ecf8e; --good:#3ecf8e; --bad:#ff6b6b; } }
+:root[data-theme="dark"] { --bg:#151412; --card:#1f1e1b; --ink:#f0ede6; --muted:#9a958a; --line:#33312c; --bar:#5a564d; --agent:#6ea1ff; --ceiling:#3ecf8e; --good:#3ecf8e; --bad:#ff6b6b; }
+* { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+main { max-width:1080px; margin:0 auto; padding:28px 16px 64px; } h1 { font-size:26px; letter-spacing:-0.02em; margin:0 0 6px; } h2 { font-size:17px; margin:32px 0 10px; }
+.muted { color:var(--muted); } .small { font-size:12.5px; } .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; overflow-x:auto; }
+svg { width:100%; height:auto; display:block; } svg .name { font:600 13px ui-sans-serif,system-ui; fill:var(--ink); } svg .note { font:10.5px ui-sans-serif,system-ui; fill:var(--muted); } svg .value { font:600 12.5px ui-sans-serif,system-ui; fill:var(--ink); }
+table { border-collapse:collapse; width:100%; font-size:13.5px; } th,td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; } th:first-child,td:first-child { text-align:left; white-space:normal; } th { font-size:12px; color:var(--muted); font-weight:600; }
+td.best { color:var(--good); font-weight:600; } .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin:18px 0; } .kpi b { display:block; font-size:26px; letter-spacing:-0.02em; } .kpi span { font-size:12.5px; color:var(--muted); }
+</style></head><body><main>
+<h1>Presupuesto de atención</h1>
+<p class="muted">Las mismas 1 noches, el mismo despachador por reglas, el mismo canal ciudadano. Lo único que cambia es cuánto de ese canal se alcanza a leer, y cómo de bien. Ninguna llamada a un LLM durante las partidas: la lectura del agente se hizo una vez por noche y está guardada.</p>
+<div class="kpis">
+  <div class="card kpi"><b>4633</b><span>mensajes por noche en el canal ciudadano</span></div>
+  <div class="card kpi"><b>12 %</b><span>es lo que alcanza a leer una sala con operadores</span></div>
+  <div class="card kpi"><b>16.0 → 4.0</b><span>muertos por noche: sala de hoy → agente lector</span></div>
+  <div class="card kpi"><b>8 % · 85 %</b><span>pistas que eran verdad: reglas por palabras clave · agente</span></div>
+</div>
+<div class="card"><svg viewBox="0 0 760 270" role="img" aria-label="Muertos por noche según quién lee el canal"><text x="140" y="47" text-anchor="end" class="name">Sala de hoy</text><text x="140" y="61" text-anchor="end" class="note">solo 112, radio y drones</text>
+      <rect x="150" y="34" width="420" height="26" rx="4" fill="var(--bar)"/><text x="578" y="52" class="value">16.0 muertos por noche</text><text x="140" y="93" text-anchor="end" class="name">Sala + redes</text><text x="140" y="107" text-anchor="end" class="note">operadores leyendo: 6 mensajes por tick</text>
+      <rect x="150" y="80" width="367.5" height="26" rx="4" fill="var(--bar)"/><text x="525.5" y="98" class="value">14.0 muertos por noche</text><text x="140" y="139" text-anchor="end" class="name">Reglas</text><text x="140" y="153" text-anchor="end" class="note">lo leen todo por palabras clave</text>
+      <rect x="150" y="126" width="210" height="26" rx="4" fill="var(--bar)"/><text x="368" y="144" class="value">8.0 muertos por noche</text><text x="140" y="185" text-anchor="end" class="name">Agente lector</text><text x="140" y="199" text-anchor="end" class="note">lo lee todo y lo entiende; llama casa por casa</text>
+      <rect x="150" y="172" width="105" height="26" rx="4" fill="var(--agent)"/><text x="263" y="190" class="value">4.0 muertos por noche</text><text x="140" y="231" text-anchor="end" class="name">Lector perfecto</text><text x="140" y="245" text-anchor="end" class="note">techo: sabe qué mensaje es verdad</text>
+      <rect x="150" y="218" width="183.75" height="26" rx="4" fill="var(--ceiling)"/><text x="341.75" y="236" class="value">7.0 muertos por noche</text></svg></div>
+<h2>Qué hace cada uno con el mismo canal</h2>
+<div class="card"><table><tr><th>Quién lee</th><th>Lee</th><th>Pistas por noche</th><th>Eran verdad</th><th>Escenas mudas encontradas</th><th>Viajes a sitios vacíos</th><th>Muertos por noche</th></tr>
+<tr><td><strong>Sala de hoy</strong><div class="muted small">solo 112, radio y drones</div></td><td>0 %</td><td>0</td><td>–</td><td>–</td><td>0.0</td><td><strong>16.0</strong></td></tr><tr><td><strong>Sala + redes</strong><div class="muted small">operadores leyendo: 6 mensajes por tick</div></td><td>12 %</td><td>6.0</td><td>100 %</td><td>71 %</td><td>1.0</td><td><strong>14.0</strong></td></tr><tr><td><strong>Reglas</strong><div class="muted small">lo leen todo por palabras clave</div></td><td>100 %</td><td>83.0</td><td>8 %</td><td>79 %</td><td>15.0</td><td><strong>8.0</strong></td></tr><tr><td><strong>Agente lector</strong><div class="muted small">lo lee todo y lo entiende; llama casa por casa</div></td><td>100 %</td><td>13.0</td><td>85 %</td><td>100 %</td><td>6.0</td><td><strong>4.0</strong></td></tr><tr><td><strong>Lector perfecto</strong><div class="muted small">techo: sabe qué mensaje es verdad</div></td><td>100 %</td><td>15.0</td><td>93 %</td><td>93 %</td><td>5.0</td><td><strong>7.0</strong></td></tr>
+</table></div>
+<p class="muted small">"Escenas mudas": emergencias de las que nadie llamó al 112. Una sala lee bien pero poco; unas reglas leen todo y se creen las bromas, así que mandan unidades a sitios donde no hay nadie; el agente lee todo y entiende qué es verdad.</p>
+<h2>Noche a noche</h2>
+<div class="card"><table><tr><th>Noche</th><th>Víctimas</th><th>Sala de hoy</th><th>Sala + redes</th><th>Reglas</th><th>Agente lector</th><th>Lector perfecto</th></tr>
+<tr><td><strong>H1</strong> La Torre a oscuras: casi nadie puede llamar<div class="muted small">H · Apagón y redes</div></td><td>40</td><td class="">16</td><td class="">14</td><td class="">8</td><td class="best">4</td><td class="">7</td></tr>
+</table></div>
+
+</main></body></html>

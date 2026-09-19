@@ -1,0 +1,414 @@
+{
+  "summary": {
+    "moments": 49,
+    "greedy": 22.408163265306122,
+    "basic": 22.102040816326532,
+    "plan": 22.3265306122449,
+    "planMinusBasic": 0.22448979591836735,
+    "standardError": 0.18446306094289608,
+    "planBetter": 13,
+    "same": 18,
+    "planWorse": 18,
+    "byFamily": {
+      "A · Agua desde el sur": 0.125,
+      "B · Agua desde otro foco": 0.125,
+      "C · Pocos recursos": 0,
+      "D · Noche silenciosa": 0.125,
+      "F · DANA a escala real": 0.625
+    }
+  },
+  "rows": [
+    {
+      "id": "A1@15",
+      "family": "A · Agua desde el sur",
+      "why": "2 avisos esperando unidad (1 graves) y 1 libres",
+      "greedy": 2,
+      "basic": 3,
+      "plan": 2
+    },
+    {
+      "id": "A1@22",
+      "family": "A · Agua desde el sur",
+      "why": "5 avisos esperando unidad (2 graves) y 1 libres; 1 a punto de quedar aislados por el agua",
+      "greedy": 2,
+      "basic": 1.5,
+      "plan": 2
+    },
+    {
+      "id": "A1@35",
+      "family": "A · Agua desde el sur",
+      "why": "5 avisos esperando unidad (1 graves) y 3 libres; 2 a punto de quedar aislados por el agua",
+      "greedy": 2,
+      "basic": 1.5,
+      "plan": 2
+    },
+    {
+      "id": "A2@11",
+      "family": "A · Agua desde el sur",
+      "why": "3 avisos esperando unidad (2 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 8,
+      "basic": 8.5,
+      "plan": 12
+    },
+    {
+      "id": "A2@18",
+      "family": "A · Agua desde el sur",
+      "why": "4 avisos esperando unidad (1 graves) y 2 libres; 2 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 7,
+      "plan": 6.5
+    },
+    {
+      "id": "A2@25",
+      "family": "A · Agua desde el sur",
+      "why": "6 avisos esperando unidad (3 graves) y 1 libres; 1 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 6,
+      "plan": 6
+    },
+    {
+      "id": "A2@32",
+      "family": "A · Agua desde el sur",
+      "why": "7 avisos esperando unidad (2 graves) y 3 libres; 1 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 6.5,
+      "plan": 5
+    },
+    {
+      "id": "A2@39",
+      "family": "A · Agua desde el sur",
+      "why": "11 avisos esperando unidad (1 graves) y 1 libres; 2 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 9,
+      "plan": 8
+    },
+    {
+      "id": "A3@10",
+      "family": "A · Agua desde el sur",
+      "why": "3 avisos esperando unidad (2 graves) y 1 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 12,
+      "basic": 11,
+      "plan": 12
+    },
+    {
+      "id": "A3@22",
+      "family": "A · Agua desde el sur",
+      "why": "7 avisos esperando unidad (3 graves) y 3 libres; 2 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres",
+      "greedy": 12,
+      "basic": 11,
+      "plan": 10
+    },
+    {
+      "id": "A3@31",
+      "family": "A · Agua desde el sur",
+      "why": "9 avisos esperando unidad (2 graves) y 2 libres; 1 a punto de quedar aislados por el agua",
+      "greedy": 12,
+      "basic": 14,
+      "plan": 14
+    },
+    {
+      "id": "A3@38",
+      "family": "A · Agua desde el sur",
+      "why": "6 avisos esperando unidad (0 graves) y 2 libres; 1 a punto de quedar aislados por el agua",
+      "greedy": 12,
+      "basic": 13,
+      "plan": 14
+    },
+    {
+      "id": "B1@21",
+      "family": "B · Agua desde otro foco",
+      "why": "6 avisos esperando unidad (4 graves) y 2 libres; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 9,
+      "basic": 9.5,
+      "plan": 9
+    },
+    {
+      "id": "B1@28",
+      "family": "B · Agua desde otro foco",
+      "why": "7 avisos esperando unidad (5 graves) y 2 libres; 1 a punto de quedar aislados por el agua",
+      "greedy": 9,
+      "basic": 9.5,
+      "plan": 10
+    },
+    {
+      "id": "B1@36",
+      "family": "B · Agua desde otro foco",
+      "why": "6 avisos esperando unidad (3 graves) y 1 libres",
+      "greedy": 9,
+      "basic": 10,
+      "plan": 10
+    },
+    {
+      "id": "B2@13",
+      "family": "B · Agua desde otro foco",
+      "why": "1 a punto de quedar aislados por el agua; 3 zonas a ciegas y 2 drones libres",
+      "greedy": 4,
+      "basic": 4,
+      "plan": 4
+    },
+    {
+      "id": "B2@25",
+      "family": "B · Agua desde otro foco",
+      "why": "1 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres",
+      "greedy": 4,
+      "basic": 4,
+      "plan": 4
+    },
+    {
+      "id": "B2@38",
+      "family": "B · Agua desde otro foco",
+      "why": "5 avisos esperando unidad (2 graves) y 4 libres; 2 a punto de quedar aislados por el agua",
+      "greedy": 4,
+      "basic": 4,
+      "plan": 4
+    },
+    {
+      "id": "B3@13",
+      "family": "B · Agua desde otro foco",
+      "why": "1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 6,
+      "basic": 6,
+      "plan": 7
+    },
+    {
+      "id": "B3@36",
+      "family": "B · Agua desde otro foco",
+      "why": "4 avisos esperando unidad (3 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres",
+      "greedy": 6,
+      "basic": 6,
+      "plan": 6
+    },
+    {
+      "id": "C1@14",
+      "family": "C · Pocos recursos",
+      "why": "2 avisos esperando unidad (2 graves) y 1 libres",
+      "greedy": 6,
+      "basic": 6.5,
+      "plan": 6.5
+    },
+    {
+      "id": "C1@26",
+      "family": "C · Pocos recursos",
+      "why": "5 avisos esperando unidad (1 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 6,
+      "basic": 6,
+      "plan": 6
+    },
+    {
+      "id": "C1@33",
+      "family": "C · Pocos recursos",
+      "why": "3 avisos esperando unidad (0 graves) y 1 libres; 1 a punto de quedar aislados por el agua",
+      "greedy": 6,
+      "basic": 6,
+      "plan": 6
+    },
+    {
+      "id": "C2@32",
+      "family": "C · Pocos recursos",
+      "why": "5 avisos esperando unidad (3 graves) y 2 libres; 3 a punto de quedar aislados por el agua; 3 zonas a ciegas y 1 drones libres",
+      "greedy": 7,
+      "basic": 7,
+      "plan": 7.5
+    },
+    {
+      "id": "C2@39",
+      "family": "C · Pocos recursos",
+      "why": "7 avisos esperando unidad (4 graves) y 3 libres; 2 a punto de quedar aislados por el agua",
+      "greedy": 7,
+      "basic": 6.5,
+      "plan": 7
+    },
+    {
+      "id": "C3@11",
+      "family": "C · Pocos recursos",
+      "why": "1 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 8.5,
+      "plan": 7.5
+    },
+    {
+      "id": "C3@23",
+      "family": "C · Pocos recursos",
+      "why": "1 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 8,
+      "plan": 8
+    },
+    {
+      "id": "C3@30",
+      "family": "C · Pocos recursos",
+      "why": "1 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 9,
+      "plan": 9
+    },
+    {
+      "id": "C3@38",
+      "family": "C · Pocos recursos",
+      "why": "9 avisos esperando unidad (3 graves) y 2 libres; 2 a punto de quedar aislados por el agua",
+      "greedy": 8,
+      "basic": 7,
+      "plan": 7
+    },
+    {
+      "id": "D1@17",
+      "family": "D · Noche silenciosa",
+      "why": "3 avisos esperando unidad (0 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 9,
+      "basic": 9,
+      "plan": 8.5
+    },
+    {
+      "id": "D1@27",
+      "family": "D · Noche silenciosa",
+      "why": "1 a punto de quedar aislados por el agua; 2 zonas a ciegas y 1 drones libres",
+      "greedy": 9,
+      "basic": 9.5,
+      "plan": 9
+    },
+    {
+      "id": "D1@34",
+      "family": "D · Noche silenciosa",
+      "why": "1 a punto de quedar aislados por el agua",
+      "greedy": 9,
+      "basic": 10,
+      "plan": 9.5
+    },
+    {
+      "id": "D2@33",
+      "family": "D · Noche silenciosa",
+      "why": "1 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres",
+      "greedy": 14,
+      "basic": 12.5,
+      "plan": 12.5
+    },
+    {
+      "id": "D3@12",
+      "family": "D · Noche silenciosa",
+      "why": "2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres",
+      "greedy": 12,
+      "basic": 11,
+      "plan": 13
+    },
+    {
+      "id": "D3@19",
+      "family": "D · Noche silenciosa",
+      "why": "2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 12,
+      "basic": 13,
+      "plan": 13
+    },
+    {
+      "id": "D3@26",
+      "family": "D · Noche silenciosa",
+      "why": "6 avisos esperando unidad (3 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 3 zonas a ciegas y 1 drones libres",
+      "greedy": 12,
+      "basic": 12,
+      "plan": 12.5
+    },
+    {
+      "id": "D3@33",
+      "family": "D · Noche silenciosa",
+      "why": "6 avisos esperando unidad (1 graves) y 2 libres; 3 a punto de quedar aislados por el agua",
+      "greedy": 12,
+      "basic": 12,
+      "plan": 12
+    },
+    {
+      "id": "F1@12",
+      "family": "F · DANA a escala real",
+      "why": "13 avisos esperando unidad (9 graves) y 3 libres; 2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 74,
+      "basic": 74,
+      "plan": 74.5
+    },
+    {
+      "id": "F1@19",
+      "family": "F · DANA a escala real",
+      "why": "19 avisos esperando unidad (13 graves) y 4 libres; 6 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 74,
+      "basic": 73.5,
+      "plan": 71
+    },
+    {
+      "id": "F1@28",
+      "family": "F · DANA a escala real",
+      "why": "26 avisos esperando unidad (19 graves) y 8 libres; 12 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 74,
+      "basic": 71.5,
+      "plan": 72.5
+    },
+    {
+      "id": "F1@35",
+      "family": "F · DANA a escala real",
+      "why": "30 avisos esperando unidad (20 graves) y 9 libres; 10 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 74,
+      "basic": 74.5,
+      "plan": 74.5
+    },
+    {
+      "id": "F2@12",
+      "family": "F · DANA a escala real",
+      "why": "10 avisos esperando unidad (5 graves) y 4 libres; 3 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres",
+      "greedy": 64,
+      "basic": 61,
+      "plan": 60
+    },
+    {
+      "id": "F2@19",
+      "family": "F · DANA a escala real",
+      "why": "17 avisos esperando unidad (6 graves) y 3 libres; 4 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 64,
+      "basic": 58,
+      "plan": 62.5
+    },
+    {
+      "id": "F2@26",
+      "family": "F · DANA a escala real",
+      "why": "24 avisos esperando unidad (9 graves) y 3 libres; 5 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 64,
+      "basic": 62,
+      "plan": 64.5
+    },
+    {
+      "id": "F2@35",
+      "family": "F · DANA a escala real",
+      "why": "39 avisos esperando unidad (16 graves) y 1 libres; 8 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres",
+      "greedy": 64,
+      "basic": 64.5,
+      "plan": 66.5
+    },
+    {
+      "id": "F3@13",
+      "family": "F · DANA a escala real",
+      "why": "11 avisos esperando unidad (4 graves) y 5 libres; 2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 62,
+      "basic": 62.5,
+      "plan": 62.5
+    },
+    {
+      "id": "F3@23",
+      "family": "F · DANA a escala real",
+      "why": "22 avisos esperando unidad (10 graves) y 3 libres; 4 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 62,
+      "basic": 60,
+      "plan": 61.5
+    },
+    {
+      "id": "F3@30",
+      "family": "F · DANA a escala real",
+      "why": "27 avisos esperando unidad (15 graves) y 6 libres; 8 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres",
+      "greedy": 62,
+      "basic": 59,
+      "plan": 61
+    },
+    {
+      "id": "F3@37",
+      "family": "F · DANA a escala real",
+      "why": "35 avisos esperando unidad (17 graves) y 7 libres; 10 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres",
+      "greedy": 62,
+      "basic": 64,
+      "plan": 61
+    }
+  ]
+}

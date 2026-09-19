@@ -2,8 +2,10 @@ import { closuresFor, effectiveNode, flightMps, UNIT_KINDS } from "./engine";
 import type { Graph } from "./graph";
 import { resolve, unitsNeeded } from "./incidents";
 import { infoGaps } from "./recon";
+import { CREW_RATE, SITES, sitesAtRisk } from "./sites";
+import { holdAllows, holdOn, type Hold } from "./staging";
 import { believedWater, cutOffForecast } from "./water";
-import type { Action, Belief, Report, SimConfig, Unit, UnitKind } from "./types";
+import type { Action, Belief, Incident, Report, SimConfig, Unit, UnitKind } from "./types";
 
 export interface DecideInput {
   tick: number;
@@ -20,6 +22,16 @@ export interface Decision {
   source: "llm" | "fallback" | "rules";
   /** One-line read of the situation. */
   situation?: string;
+  /** What the coordinator is trying to do over the next few minutes, in its own words (its notebook). */
+  plan?: string;
+  /** What it is keeping an eye on, and what it will do if it happens. */
+  watch?: string;
+  /** What was new or pressing when it decided: the handful of facts the decision answers to. */
+  saw?: string[];
+  /** Units it is holding back as of this decision. */
+  holds?: Hold[];
+  /** What the rule-based dispatcher would have ordered from the same picture: shows where judgement was used. */
+  baseline?: Action[];
   /** Why each action, same order as `actions`. */
   reasons?: string[];
   /** Doctrine ids (from the agent's memory) cited for each action, same order as `actions`. */
@@ -44,6 +56,18 @@ export interface Coordinator {
  */
 export class GreedyCoordinator implements Coordinator {
   readonly name = "greedy";
+
+  /** Standing holds somebody above the dispatcher has placed: a held unit is only spent on what it is held for. */
+  constructor(
+    private readonly holds: () => Hold[] = () => [],
+    /**
+     * Also act on the registry of sites and the gauges: warn whoever the water will reach, soonest first, and post a
+     * crew where a warning alone will not get everyone out. Off by default: today's control rooms do not cross these.
+     */
+    private readonly usesRegistry = false,
+    /** Also phone round the zones nobody has heard from, as many as there are outbound lines. Only an agent has the lines. */
+    private readonly phonesRound = false,
+  ) {}
 
   decide({ belief, graph, config }: DecideInput): Action[] {
     const actions: Action[] = [];
@@ -101,14 +125,20 @@ export class GreedyCoordinator implements Coordinator {
     // A drone can do nothing else, so it never competes for rescue work; and a unit already looking
     // at something is left alone until its report comes in.
     const canRescue = (u: Unit) => UNIT_KINDS[u.kind].carries || UNIT_KINDS[u.kind].extricates;
+    // A crew getting people out of a site ahead of the water, or on its way to do it, is at work, not free.
+    const evacuating = new Set(belief.sites.filter((site) => site.floodedTick === null && site.safe < site.people).map((site) => site.node));
+    const atSite = (u: Unit) => evacuating.has(u.destNode ?? (u.mission === "idle" ? u.node : -1));
     const free = belief.units.filter(
-      (u) => canRescue(u) && !u.victimId && u.brokenUntil === null && u.mission !== "to_observe" && (u.mission !== "to_scene" || !isOpen(u.incidentId)),
+      (u) => !atSite(u) && canRescue(u) && !u.victimId && u.brokenUntil === null && u.mission !== "to_observe" && (u.mission !== "to_scene" || !isOpen(u.incidentId)),
     );
     const take = (unit: Unit) => free.splice(free.indexOf(unit), 1);
-    const nearest = (kinds: UnitKind[], node: number): Unit | null => {
+    const holds = this.holds();
+    const nearest = (kinds: UnitKind[], node: number, incident: Incident): Unit | null => {
       let best: Unit | null = null;
       for (const u of free) {
         if (!kinds.includes(u.kind) || etaOf(u)(node) === Infinity) continue;
+        const hold = holdOn(holds, u, belief.tick);
+        if (hold && !holdAllows(hold, incident)) continue;
         if (!best || etaOf(u)(node) < etaOf(best)(node)) best = u;
       }
       return best;
@@ -129,6 +159,20 @@ export class GreedyCoordinator implements Coordinator {
       take(u);
     }
 
+    if (this.usesRegistry) {
+      let lines = config.outboundLines;
+      for (const { site, arrival } of sitesAtRisk(belief, graph)) {
+        if (site.warnedTick === null && lines-- > 0) actions.push({ type: "warn", unitId: "112", siteId: site.id });
+        const alone = SITES[site.kind].selfRate * arrival;
+        const posted = belief.units.filter((u) => u.destNode === site.node || (u.node === site.node && u.mission === "idle")).length;
+        if (site.people - site.safe <= alone + posted * CREW_RATE * arrival) continue;
+        const crew = free.filter((u) => u.kind === "fire" || u.kind === "ambulance").filter((u) => etaOf(u)(site.node) < arrival).sort((a, b) => etaOf(a)(site.node) - etaOf(b)(site.node))[0];
+        if (!crew) continue;
+        actions.push({ type: "reposition", unitId: crew.id, node: site.node });
+        take(crew);
+      }
+    }
+
     const open = belief.incidents
       .filter((i) => i.status === "open")
       .sort((a, b) => a.priority - b.priority || a.openedTick - b.openedTick);
@@ -140,7 +184,7 @@ export class GreedyCoordinator implements Coordinator {
       const safeByRoad = (u: Unit) => cutOff === null || cutOff >= etaOf(u)(incident.node) + 8;
 
       if (need.fire > 0) {
-        const crew = incident.unreachable ? nearest(["rescue"], incident.node) : nearest(["fire"], incident.node) ?? nearest(["rescue"], incident.node);
+        const crew = incident.unreachable ? nearest(["rescue"], incident.node, incident) : nearest(["fire"], incident.node, incident) ?? nearest(["rescue"], incident.node, incident);
         if (crew && (UNIT_KINDS[crew.kind].wades || safeByRoad(crew))) {
           actions.push({ type: "dispatch", unitId: crew.id, incidentId: incident.id, node: incident.node, hospitalId: UNIT_KINDS[crew.kind].carries ? (nearestHospital(crew, incident.node) ?? undefined) : undefined });
           take(crew);
@@ -150,14 +194,21 @@ export class GreedyCoordinator implements Coordinator {
 
       for (let n = need.carriers; n > 0; n--) {
         // By road if a road gets there; otherwise only water or air does. The helicopter is kept for the worst cases.
-        const ambulance = incident.unreachable ? null : nearest(["ambulance"], incident.node);
+        const ambulance = incident.unreachable ? null : nearest(["ambulance"], incident.node, incident);
         const byRoad = ambulance && safeByRoad(ambulance) ? ambulance : null;
         const urgentAndFar = incident.priority <= 1 && (!byRoad || etaOf(byRoad)(incident.node) > 12);
-        const unit = (urgentAndFar ? nearest(["helicopter"], incident.node) : null) ?? byRoad ?? nearest(["rescue"], incident.node);
+        const unit = (urgentAndFar ? nearest(["helicopter"], incident.node, incident) : null) ?? byRoad ?? nearest(["rescue"], incident.node, incident);
         if (!unit) break;
         actions.push({ type: "dispatch", unitId: unit.id, incidentId: incident.id, node: incident.node, hospitalId: nearestHospital(unit, incident.node) ?? undefined });
         take(unit);
       }
+    }
+
+    if (this.phonesRound) {
+      const warned = actions.filter((a) => a.type === "warn").length;
+      const recently = new Set(belief.outboundRounds.filter((r) => belief.tick - r.tick < 12).map((r) => r.zone));
+      const quiet = infoGaps(belief, graph, belief.tick, 12).filter((g) => g.kind === "silence" && !recently.has(g.id));
+      for (const gap of quiet.slice(0, Math.max(0, config.outboundLines - warned))) actions.push({ type: "call_zone", unitId: "112", zone: gap.id, node: gap.node });
     }
 
     // What we do not know. Only units with nothing better to do go looking: a drone always, the

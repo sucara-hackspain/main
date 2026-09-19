@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   LayoutDashboard,
+  Route,
+  Megaphone,
+  Scale,
   Pause,
   Play,
   Radio,
@@ -14,14 +17,28 @@ import {
 import { useRun, useRuns } from "./useRuns";
 import {
   elapsed,
+  sameSelection,
+  selectionExists,
   type RunMeta,
+  type Selection,
 } from "./engineTrace";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "../theme.css";
 import "./control-center.css";
 import "./session.css";
-import { buildSituation } from "./situation/model";
+import EntityCard from "./situation/EntityCard";
+import {
+  buildSituation,
+  relatedEntities,
+} from "./situation/model";
+import DecisionPanel, { DecisionStrip } from "./decisions/DecisionPanel";
+import { decisionCards } from "./decisions/model";
+import SignalsView from "./signals/SignalsView";
+import PressView from "./press/PressView";
+import PlanView from "./plan/PlanView";
+import "./press/press.css";
+import { channelView } from "./signals/model";
 import { auditItems } from "./audit/model";
 import DecisionBanner from "./interventions/DecisionBanner";
 import DecisionRoom, { PendingDecisionBar } from "./interventions/DecisionRoom";
@@ -36,12 +53,18 @@ import OperationsView from "./operations/OperationsView";
 import { SCALE_ID, scaleMeta } from "./operations/demo";
 import { inQueue, queueLabels, sectorDefinitions, sectorIndex, type IncidentFocus, type Queue, type Sector } from "./operations/model";
 
+const RunMap = lazy(() => import("./map/RunMap"));
+const NO_PENDING: ReturnType<typeof useInterventions>["pending"] = [];
+const noMatches = new Set<string>();
+
 // Read once: a run that mounts while another shows a pending count would take the count as its title.
 const pageTitle = document.title;
 const noRecords: import("./engineTrace").TickRecord[] = [];
 // The operations queue is the default; earlier banner and interruption layouts remain opt-in.
 const params = new URLSearchParams(window.location.search);
 const iteration = params.get("iteracion") === "1" ? 1 : params.get("iteracion") === "2" ? 2 : 3;
+// Main runs autonomously. Approval workflows remain available for explicit comparison/demo modes.
+const ASK_FOR_APPROVAL = params.get("aprobaciones") === "1" || iteration !== 3;
 export default function ControlCenter() {
   const { runs: recordedRuns, error, loaded } = useRuns();
   const runs = useMemo(() => [...recordedRuns, scaleMeta], [recordedRuns]);
@@ -96,10 +119,13 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(iteration === 3 && !params.has("inicio")),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"operations" | "tickets">(iteration === 3 ? "operations" : "tickets"),
+    [view, setView] = useState<"operations" | "tickets" | "decisions" | "signals" | "press" | "plan">(iteration === 3 ? "operations" : "tickets"),
     [sectorId, setSectorId] = useState<string | null>(null),
     [mapFocus, setMapFocus] = useState<IncidentFocus | null>(null),
     [ticketScope, setTicketScope] = useState<{ sectorId: string | null; queue: Queue } | null>(null),
+    [leadFocus, setLeadFocus] = useState<string | null>(null),
+    [orderFocus, setOrderFocus] = useState<string | null>(null),
+    [entity, setEntity] = useState<Selection | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
@@ -116,7 +142,8 @@ function RunSession({
     seconds = meta?.config.tickSeconds ?? 30;
   const interventions = useInterventions({ ticks: id === SCALE_ID ? noRecords : ticks, current,
     graph: id === SCALE_ID ? null : graph, meta: id === SCALE_ID ? null : meta });
-  const { pending, router } = interventions;
+  const { router } = interventions;
+  const pending = ASK_FOR_APPROVAL ? interventions.pending : NO_PENDING;
   const sound = useAlertSound();
   const { chime } = sound;
   // Legacy layouts interrupt playback; the operations queue leaves navigation under operator control.
@@ -174,13 +201,32 @@ function RunSession({
     (!ticketScope.sectorId || !graph || `sector-${sectorIndex(graph.nodes[t.incident.node], graph) + 1}` === ticketScope.sectorId) && inQueue(t, ticketScope.queue)) : tickets,
     [tickets, ticketScope, graph]);
   const scopeName = ticketScope?.sectorId && graph ? sectorDefinitions(graph).find((s) => s.id === ticketScope.sectorId)?.name : null;
+  // Decisions are read with hindsight: what came of each order is looked up in the ticks that followed.
+  const cards = useMemo(() => (graph && meta ? decisionCards(ticks, graph, meta) : []), [ticks, graph, meta]);
+  const channel = useMemo(() => {
+    if (!graph) return null;
+    const rad = Math.PI / 180;
+    const distanceM = (a: number, b: number) => {
+      const [lon1, lat1] = graph.nodes[a], [lon2, lat2] = graph.nodes[b];
+      const x = (lon2 - lon1) * rad * Math.cos(((lat1 + lat2) / 2) * rad), y = (lat2 - lat1) * rad;
+      return Math.sqrt(x * x + y * y) * 6371000;
+    };
+    return channelView(visible, distanceM);
+  }, [visible, graph]);
+  const notes = useMemo(() => visible.flatMap((r) => (r.press ? [r.press] : [])), [visible]);
+  const card = useMemo(() => [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0] ?? null, [cards, current]);
   const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
   const ticketPosition = selectedTicket && graph?.nodes[selectedTicket.incident.node];
-  // Only the operations overview needs the territorial summary.
+  const selection = entity && selectionExists(entity, current, meta) ? entity : null;
+  // Only map views need the territorial summary.
   const situation = useMemo(
-    () => (view === "operations" && current && meta ? buildSituation(current, meta, visible, graph) : null),
+    () => ((view === "operations" || view === "decisions") && current && meta ? buildSituation(current, meta, visible, graph) : null),
     [view, current, meta, visible, graph],
   );
+  const related = useMemo(() => situation ? relatedEntities(situation, selection) : noMatches, [situation, selection]);
+  useEffect(() => {
+    if (entity && current && !selectionExists(entity, current, meta)) setEntity(null);
+  }, [current, meta, entity]);
   const workspace = useRef<HTMLElement>(null);
   useEffect(() => {
     // A direct incident link scrolls to the map inside OperationsView instead.
@@ -300,6 +346,30 @@ function RunSession({
               <ClipboardList size={14} />
               Incidencias
             </button>
+            <button
+              aria-pressed={view === "decisions"}
+              className={view === "decisions" ? "is-active" : ""}
+              onClick={() => {
+                setView("decisions");
+                const nearest = [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0];
+                if (nearest) seekTick(nearest.tick);
+              }}
+            >
+              <Scale size={14} />
+              Decisiones
+            </button>
+            <button aria-pressed={view === "plan"} className={view === "plan" ? "is-active" : ""} onClick={() => setView("plan")}>
+              <Route size={14} />
+              Plan
+            </button>
+            <button aria-pressed={view === "press"} className={view === "press" ? "is-active" : ""} onClick={() => setView("press")}>
+              <Megaphone size={14} />
+              Prensa{notes.length ? ` · ${notes.length}` : ""}
+            </button>
+            <button aria-pressed={view === "signals"} className={view === "signals" ? "is-active" : ""} onClick={() => setView("signals")}>
+              <Radio size={14} />
+              Señales{channel ? ` · ${channel.leads.length}` : ""}
+            </button>
           </div>
           {current && (
             <InterventionInbox
@@ -357,6 +427,60 @@ function RunSession({
             <TicketsView tickets={scopedTickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
+          ) : view === "plan" ? (
+            <PlanView cards={cards} tick={current.tick} lastTick={ticks.at(-1)?.tick ?? 0} seconds={seconds} onDecision={(c) => { setView("decisions"); seekTick(c.tick); }} />
+          ) : view === "press" ? (
+            <PressView notes={notes} seconds={seconds} every={10} />
+          ) : view === "signals" ? (
+            <SignalsView view={channel} seconds={seconds} focus={leadFocus} onFocus={setLeadFocus} />
+          ) : view === "decisions" && graph && meta ? (
+              <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
+                {view === "decisions" && <DecisionStrip cards={cards} active={card} onGo={(c) => seekTick(c.tick)} />}
+                <RunMap
+                  signals={channel ? { heat: channel.heat, leads: channel.leads.map((l) => ({ id: l.id, node: l.node, credibility: l.credibility, tone: l.outcome.tone })), focus: leadFocus } : null}
+                  explain={view === "decisions" && card ? {
+                    orders: card.orders.map((o) => ({ key: o.key, kind: o.kind, from: o.from, to: o.to, own: card.compared && !o.shared })),
+                    rules: card.rulesOnly.map((o) => ({ from: o.from, to: o.to })),
+                    held: card.holds.map((h) => h.unitId),
+                    waterAhead: card.waterAhead,
+                    focus: orderFocus,
+                  } : null}
+                  graph={graph}
+                  meta={meta}
+                  record={current}
+                  selected={selection}
+                  onSelect={(ref) =>
+                    setEntity(ref && sameSelection(selection, ref) ? null : ref)
+                  }
+                  focusRequest={0}
+                  related={related}
+                  matches={noMatches}
+                  filtered={false}
+                  detail={
+                    selection &&
+                    situation && (
+                      <EntityCard
+                        s={situation}
+                        selection={selection}
+                        graph={graph}
+                        ticket={
+                          selection.kind === "incident"
+                            ? (tickets.find((t) => t.id === selection.id) ?? null)
+                            : null
+                        }
+                        onSelect={setEntity}
+                        onOpenTicket={(incidentId) => {
+                          setTicketId(incidentId);
+                          setTicketScope(null);
+                          setTicketFilter("all");
+                          setTicketQuery("");
+                          setView("tickets");
+                        }}
+                      />
+                    )
+                  }
+                />
+              </Suspense>
           ) : (
             <div className="app-empty">Preparando operaciones…</div>
           )}
@@ -453,6 +577,9 @@ function RunSession({
       {view === "tickets" && <div className="app-sidebar-slot" inert={blocked}>
         <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
           onLocate={locateTicket} canLocate={Boolean(ticketPosition?.every(Number.isFinite))} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} />
+      </div>}
+      {view === "decisions" && <div className="app-sidebar-slot" inert={blocked}>
+        <DecisionPanel cards={cards} card={card} seconds={seconds} focus={orderFocus} onFocus={setOrderFocus} onGo={(c) => seekTick(c.tick)} />
       </div>}
       {room}
       {receipt && (

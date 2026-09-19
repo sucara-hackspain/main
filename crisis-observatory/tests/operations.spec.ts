@@ -34,7 +34,7 @@ test("scale view keeps thousands of cases navigable with bounded rows, search, m
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("request", (r) => requested.push(r.url()));
   await page.goto("/?escala=1");
-  await expect(page.locator(".app-tabs button")).toHaveText(["Operaciones", "Incidencias"]);
+  await expect(page.locator(".app-tabs button")).toHaveText(["Operaciones", "Incidencias", "Decisiones", "Plan", "Prensa", "Señales"]);
   await expect(page.getByTestId("ops-calls")).toHaveText("12.000");
   await expect(page.getByTestId("ops-open")).toHaveText("1.866");
   await expect(page.locator(".ops-map-marker")).toHaveCount(6);
@@ -76,6 +76,10 @@ test("pending decisions never seize operations; the operator explicitly opens th
   await serve(page, [interventionRun()]);
   await page.route("**/api/graph/ticket-test", (route) => route.fulfill({ json: interventionGraph }));
   await page.goto("/");
+  await expect(page.getByTestId("ops-open")).toBeVisible();
+  await expect(page.locator(".ops-decisions > button")).toHaveCount(0);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await page.goto("/?aprobaciones=1");
   const decisions = page.locator(".ops-decisions > button");
   await expect(decisions.first()).toBeVisible();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);

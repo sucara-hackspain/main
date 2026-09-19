@@ -13,6 +13,7 @@ import type {
   Victim,
   World,
 } from "./types";
+import { advanceSites } from "./sites";
 import { bySeverity, INJURIES, triage } from "./victims";
 
 export const DEFAULT_CONFIG: SimConfig = {
@@ -24,6 +25,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   drones: 2,
   hospitals: 6,
   hospitalCapacity: 14,
+  outboundLines: 3,
   ambulanceSpeedFactor: 1.3,
   pickupTicks: 2,
   dropoffTicks: 1,
@@ -109,6 +111,10 @@ export function createWorld(graph: Graph, config: SimConfig): World {
     victims: [],
     hospitals,
     floods: [],
+    sites: [],
+    gauges: [],
+    outages: [],
+    outbound: [],
     closedEdges: [],
     floodedEdges: [],
     knownClosedEdges: [],
@@ -262,6 +268,27 @@ export function applyMasterAction(world: World, graph: Graph, action: MasterActi
       emit(world, { type: "road_opened", edge: action.edge, name: graph.edgeName(action.edge) });
       return;
     }
+    case "narrate":
+      emit(world, { type: "master_narration", text: action.text });
+      return;
+    case "blackout": {
+      const outage = { id: `O${world.outages.length + 1}`, node: action.node, radiusM: action.radiusM, fromTick: world.tick, untilTick: world.tick + action.ticks };
+      world.outages.push(outage);
+      emit(world, { type: "blackout_started", outageId: outage.id, node: outage.node, radiusM: outage.radiusM, untilTick: outage.untilTick });
+      return;
+    }
+    case "place_site": {
+      const site = { id: `ST${world.sites.length + 1}`, kind: action.kind, name: action.name, node: action.node, people: action.people, safe: 0, warnedTick: null, floodedTick: null };
+      world.sites.push(site);
+      emit(world, { type: "site_placed", siteId: site.id, kind: site.kind, node: site.node, people: site.people.length });
+      return;
+    }
+    case "gauge_reading": {
+      const { type: _type, ...reading } = action;
+      world.gauges = [...world.gauges.filter((g) => g.name !== action.name), { ...reading, asOfTick: world.tick }];
+      emit(world, { type: "gauge_reading", name: action.name, level: action.level, overflowTick: action.overflowTick });
+      return;
+    }
     case "puncture": {
       const amb = world.units.find((a) => a.id === action.unitId);
       if (!amb || amb.brokenUntil !== null) return;
@@ -319,6 +346,28 @@ export function applyAction(world: World, graph: Graph, action: Action): boolean
     emit(world, { type: "action_rejected", action, reason });
     return false;
   };
+  if (action.type === "warn" || action.type === "call_zone") {
+    const placed = world.log.filter((e) => e.tick === world.tick && (e.type === "site_warned" || e.type === "outbound_placed")).length;
+    if (placed >= world.config.outboundLines) return reject("all outbound lines are busy this tick");
+  }
+  if (action.type === "call_zone") {
+    if (!(action.node >= 0 && action.node < graph.nodeCount)) return reject("unknown zone");
+    if (world.outbound.some((r) => r.zone === action.zone)) return reject("that zone is already being phoned");
+    world.outbound.push({ zone: action.zone, node: action.node, placedTick: world.tick, dueTick: world.tick + OUTBOUND_TICKS });
+    emit(world, { type: "outbound_placed", zone: action.zone, node: action.node });
+    emit(world, { type: "action_applied", action, etaTicks: OUTBOUND_TICKS });
+    return true;
+  }
+  if (action.type === "warn") {
+    const site = world.sites.find((s) => s.id === action.siteId);
+    if (!site) return reject("unknown site");
+    if (site.floodedTick !== null) return reject("the water is already there");
+    if (site.warnedTick !== null) return reject("site already warned");
+    site.warnedTick = world.tick;
+    emit(world, { type: "site_warned", siteId: site.id });
+    emit(world, { type: "action_applied", action, etaTicks: 0 });
+    return true;
+  }
   const amb = world.units.find((a) => a.id === action.unitId);
   if (!amb) return reject("unknown ambulance");
   if (amb.brokenUntil !== null) return reject("ambulance is broken down");
@@ -383,8 +432,39 @@ export function applyAction(world: World, graph: Graph, action: Action): boolean
 
 // ---------- Physics: one tick ----------
 
+/** Ticks a round of calls takes, how far round the zone's centre it reaches, and how often a neighbour knows. */
+const OUTBOUND_TICKS = 2;
+export const OUTBOUND_RADIUS_M = 450;
+const P_NEIGHBOUR_KNOWS = 0.8;
+const P_ANSWERS_IN_THE_DARK = 0.35;
+
+/** Deterministic coin: the engine has no dice of its own, and the same round must find the same people every time. */
+function coin(key: string): number {
+  let hash = 2166136261;
+  for (const char of key) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return ((hash >>> 0) % 10000) / 10000;
+}
+
+function answerOutbound(world: World, graph: Graph): void {
+  for (const round of world.outbound.filter((r) => r.dueTick <= world.tick)) {
+    const dark = world.outages.some((o) => world.tick < o.untilTick && graph.distanceM(o.node, round.node) <= o.radiusM);
+    const found = world.scenes
+      .filter((scene) => !scene.resolved && graph.distanceM(scene.node, round.node) <= OUTBOUND_RADIUS_M)
+      .filter((scene) => world.victims.some((v) => v.sceneId === scene.id && v.status === "waiting"))
+      .filter((scene) => coin(`${round.zone}:${round.placedTick}:${scene.id}`) < (dark ? P_ANSWERS_IN_THE_DARK : P_NEIGHBOUR_KNOWS));
+    emit(world, { type: "outbound_answered", zone: round.zone, node: round.node, sceneIds: found.map((scene) => scene.id), homes: graph.nodesWithin(round.node, OUTBOUND_RADIUS_M).length * 6 });
+  }
+  world.outbound = world.outbound.filter((r) => r.dueTick > world.tick);
+}
+
 export function advance(world: World, graph: Graph): void {
   growFloods(world, graph);
+  answerOutbound(world, graph);
+  advanceSites(world, graph, (site) => {
+    // Whoever the water catches inside is an emergency like any other from here on, and somebody there does call.
+    applyMasterAction(world, graph, { type: "spawn_scene", kind: "flooded_home", node: site.node, victims: site.people.slice(site.safe) });
+    return world.scenes.at(-1)!.id;
+  });
   const closed = new Set(world.closedEdges);
   for (const amb of world.units) moveUnit(world, graph, amb, closed);
   for (const victim of world.victims) ageVictim(world, graph, victim);

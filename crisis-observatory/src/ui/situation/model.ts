@@ -134,7 +134,7 @@ export function buildSituation(record: TickRecord, meta: RunMeta, history: TickR
     unreported: frame.closedEdges.filter((e) => !known.has(e)).length,
   };
   const open = incidents.filter((i) => i.open);
-  return { tick, seconds, units, incidents, hospitals, water, scenes: frame.scenes, open,
+  return { tick, seconds, units, incidents, hospitals, water, sites: frame.sites ?? [], gauges: frame.gauges ?? [], scenes: frame.scenes, open,
     unattended: open.filter((i) => i.unattended).length,
     isolated: open.filter((i) => i.isolated).length,
     available: units.filter((u) => u.available).length,

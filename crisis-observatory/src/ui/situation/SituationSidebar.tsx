@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, Clock3, Hospital, Search, Truck, Waves, Wrench, X } from "lucide-react";
 import type { RunMeta, Selection } from "../engineTrace";
 import { unitIcon } from "../map/unitIcons";
@@ -25,6 +25,7 @@ type Props = {
   running: boolean;
   records: number;
   error: boolean;
+
 };
 
 function EntityRow({ entity, selection, related, onSelect, icon, title, detail, end, tone = "neutral", compact, children }: {
@@ -160,6 +161,12 @@ export default function SituationSidebar(props: Props) {
           </span>
         </EntityRow>)}
       </Collapsible>}
+      {!filtered && (s.sites.length > 0 || s.gauges.length > 0) && <section className="situation-section situation-water" aria-label="Anticipación"><div className="situation-section-heading"><h3>Anticipación <span>{s.sites.filter((x) => x.floodedTick === null && x.safe < x.people).length} sitios con gente dentro</span></h3><small>Aforos y registro municipal</small></div>
+        {s.gauges.map((g) => <p key={g.name}><Waves size={13} /><span><strong>Aforo · {g.name}</strong> · cauce al {Math.round(g.level * 100)} %<small>{g.overflowTick > s.tick ? `Desborda en ~${g.overflowTick - s.tick} ticks` : `Desbordado hace ${s.tick - g.overflowTick} ticks`}</small></span></p>)}
+        <dl>
+          {s.sites.map((x) => <Fragment key={x.id}><dt>{x.id} · {x.name}</dt><dd>{x.floodedTick !== null ? (x.caught ? `${x.caught} atrapados dentro` : "todos a salvo") : `${x.safe}/${x.people} a salvo · ${x.warnedTick === null ? "SIN AVISAR" : "avisados"}${x.arrivalTicks !== null && x.safe < x.people ? ` · agua en ~${x.arrivalTicks} ticks` : ""}`}</dd></Fragment>)}
+        </dl>
+      </section>}
       {filtered && matches.size === 0 && <div className="situation-no-results"><Search size={20} /><strong>No hay coincidencias</strong><p>Prueba otro filtro o busca por identificador.</p></div>}
     </div>}
     <div className="app-last-update"><span>{error ? "Conexión interrumpida" : `${records} registros recibidos`}</span><span>Solo observación</span></div>

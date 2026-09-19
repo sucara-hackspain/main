@@ -1,0 +1,109 @@
+{
+  "profiles": [
+    {
+      "key": "none",
+      "label": "Sala de hoy",
+      "attention": null,
+      "outbound": false,
+      "note": "solo 112, radio y drones"
+    },
+    {
+      "key": "sala",
+      "label": "Sala + redes",
+      "attention": "sala",
+      "outbound": false,
+      "note": "operadores leyendo: 6 mensajes por tick"
+    },
+    {
+      "key": "palabras",
+      "label": "Reglas",
+      "attention": "palabras",
+      "outbound": false,
+      "note": "lo leen todo por palabras clave"
+    },
+    {
+      "key": "agente",
+      "label": "Agente lector",
+      "attention": "agente",
+      "outbound": true,
+      "note": "lo lee todo y lo entiende; llama casa por casa"
+    },
+    {
+      "key": "perfecto",
+      "label": "Lector perfecto",
+      "attention": "perfecto",
+      "outbound": true,
+      "note": "techo: sabe qué mensaje es verdad"
+    }
+  ],
+  "rows": [
+    {
+      "night": "H1",
+      "family": "H · Apagón y redes",
+      "title": "La Torre a oscuras: casi nadie puede llamar",
+      "victims": 40,
+      "results": {
+        "none": {
+          "dead": 16,
+          "wasted": 0
+        },
+        "sala": {
+          "dead": 14,
+          "wasted": 1,
+          "channel": {
+            "reader": "sala (6 mensajes por tick)",
+            "received": 4633,
+            "read": 540,
+            "relevant": 8,
+            "leads": 6,
+            "realLeads": 6,
+            "silentScenes": 14,
+            "silentFound": 10
+          }
+        },
+        "palabras": {
+          "dead": 8,
+          "wasted": 15,
+          "channel": {
+            "reader": "reglas por palabras clave",
+            "received": 4633,
+            "read": 4633,
+            "relevant": 1294,
+            "leads": 83,
+            "realLeads": 7,
+            "silentScenes": 14,
+            "silentFound": 11
+          }
+        },
+        "agente": {
+          "dead": 4,
+          "wasted": 6,
+          "channel": {
+            "reader": "agente lector",
+            "received": 4633,
+            "read": 4633,
+            "relevant": 67,
+            "leads": 13,
+            "realLeads": 11,
+            "silentScenes": 14,
+            "silentFound": 14
+          }
+        },
+        "perfecto": {
+          "dead": 7,
+          "wasted": 5,
+          "channel": {
+            "reader": "lector perfecto",
+            "received": 4633,
+            "read": 4633,
+            "relevant": 55,
+            "leads": 15,
+            "realLeads": 14,
+            "silentScenes": 14,
+            "silentFound": 13
+          }
+        }
+      }
+    }
+  ]
+}

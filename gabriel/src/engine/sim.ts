@@ -4,8 +4,11 @@ import type { Graph } from "./graph";
 import type { Master } from "./master";
 import { createBelief, recordOrders, updateBelief } from "./incidents";
 import { CallObserver, type Observer } from "./observer";
+import { leadAsCall, LeadDesk, type Reader } from "./reading";
+import type { NightSignals } from "./signals";
 import { Rng } from "./rng";
-import type { Action, Belief, MasterAction, Report, SimConfig, World, WorldEvent } from "./types";
+import type { Action, Belief, Call, MasterAction, PhoneCall, Report, SimConfig, World, WorldEvent } from "./types";
+import { sceneFromCall } from "./victims";
 
 export interface SimulationOptions {
   graph: Graph;
@@ -14,6 +17,12 @@ export interface SimulationOptions {
   seed?: number;
   config?: Partial<SimConfig>;
   observer?: Observer;
+  /** Puts a 112 call into words. It gets the call as the operator filed it, nothing more; null keeps the engine's wording. */
+  callWriter?: (call: Call) => Promise<string | null>;
+  /** The night's citizen channel and whoever reads it. What the reader makes out reaches dispatch as one more call. */
+  signals?: { night: NightSignals; reader: Reader };
+  /** Somebody who listens to the whole call, not just the form: gives back the fields the words carry. */
+  callReader?: (call: Call) => Call["buried"] | null;
 }
 
 export interface TickResult {
@@ -40,19 +49,31 @@ export class Simulation {
   private readonly observerRng: Rng;
   private observedUpTo = 0;
   private nextReportId = 1;
+  private readonly callWriter?: (call: Call) => Promise<string | null>;
   private injected: MasterAction[] = [];
   private orders: Action[] = [];
+  private phoned: PhoneCall[] = [];
+  private readonly phoneRng: Rng;
+  readonly desk: LeadDesk | null;
+  private readonly callReader?: (call: Call) => Call["buried"] | null;
+  /** Calls where the words carried more than the form, and whether anybody picked it up. */
+  readonly buriedCalls = { total: 0, recovered: 0 };
 
   constructor(options: SimulationOptions) {
     const root = new Rng(options.seed ?? 1);
     this.masterRng = root.fork();
     this.observerRng = root.fork();
+    // Forked last, and only drawn from when someone phones: a run nobody phones into is the same run as before.
+    this.phoneRng = root.fork();
     this.graph = options.graph;
     this.master = options.master;
     this.coordinator = options.coordinator;
     this.observer = options.observer ?? new CallObserver();
+    this.callWriter = options.callWriter;
     this.world = createWorld(options.graph, { ...DEFAULT_CONFIG, ...options.config });
     this.belief = createBelief(this.world);
+    this.callReader = options.callReader;
+    this.desk = options.signals ? new LeadDesk(options.graph, options.signals.night.signals, options.signals.night.registry, options.signals.reader) : null;
   }
 
   /** Human playing master: applied at the start of the next tick. */
@@ -65,6 +86,14 @@ export class Simulation {
     this.orders.push(action);
   }
 
+  /**
+   * Somebody really phoned 112. What they described becomes true: an emergency appears where they said, nobody else
+   * calls about it, and their call reaches the coordinator on the next tick like any other.
+   */
+  phone(call: PhoneCall): void {
+    this.phoned.push(call);
+  }
+
   async step(): Promise<TickResult> {
     const { world, graph } = this;
     const logStart = world.log.length;
@@ -73,13 +102,50 @@ export class Simulation {
     this.injected = [];
     for (const action of masterActions) applyMasterAction(world, graph, action);
 
+    const phoned: Omit<Report, "id">[] = [];
+    for (const heard of this.phoned.splice(0)) {
+      if (!(this.observer instanceof CallObserver)) break;
+      const placed = heard.node ?? (heard.street ? graph.findStreet(heard.street) : null);
+      // No street the map knows: somewhere in the city, and the operator's "where" is worth very little.
+      const node = placed ?? this.phoneRng.int(0, graph.nodeCount - 1);
+      const { kind, victims } = sceneFromCall(heard, this.phoneRng);
+      applyMasterAction(world, graph, { type: "spawn_scene", kind, node, victims, silent: true });
+      const call = this.observer.adopt(
+        { ...heard, node, street: heard.street ?? graph.streetAt(node), locationErrorM: placed === null ? Math.max(heard.locationErrorM, 1000) : heard.locationErrorM, source: "phone" },
+        world.scenes.at(-1)!.id,
+        world.tick,
+      );
+      phoned.push({ tick: world.tick, source: "call_112", confidence: 1, event: { type: "call_received", tick: world.tick, call } });
+    }
+
+    if (this.desk && this.observer instanceof CallObserver) {
+      for (const lead of this.desk.take(world.tick)) {
+        // Hindsight only: which real emergency, if any, the lead was about.
+        const scene = lead.about === null ? null : world.scenes.find((x) => !x.resolved && x.node === lead.about);
+        const call = this.observer.adopt(leadAsCall(lead), scene?.id ?? null, world.tick);
+        phoned.push({ tick: world.tick, source: "call_112", confidence: lead.credibility, event: { type: "call_received", tick: world.tick, call } });
+      }
+    }
+
     advance(world, graph);
 
     const fresh = world.log.slice(this.observedUpTo);
     this.observedUpTo = world.log.length;
-    const reports = this.observer
-      .observe(fresh, world, graph, this.observerRng)
-      .map((report) => ({ ...report, id: this.nextReportId++ }));
+    const reports = [...this.observer.observe(fresh, world, graph, this.observerRng), ...phoned].map((report) => ({ ...report, id: this.nextReportId++ }));
+    if (this.callWriter) {
+      // A call somebody really made already is in their own words.
+      const calls = reports.flatMap((r) => (r.event.type === "call_received" && !r.event.call.source ? [r.event.call] : []));
+      const texts = await Promise.all(calls.map((call) => this.callWriter!(call).catch(() => null)));
+      calls.forEach((call, n) => (call.text = texts[n] ?? call.text));
+    }
+    for (const r of reports) {
+      if (r.event.type !== "call_received" || !r.event.call.buried) continue;
+      this.buriedCalls.total++;
+      const heard = this.callReader?.(r.event.call);
+      if (!heard) continue;
+      Object.assign(r.event.call, heard);
+      if (Object.keys(heard).length >= Object.keys(r.event.call.buried).length) this.buriedCalls.recovered++;
+    }
     // What a crew is working on may turn out to belong to another incident: dispatch relabels it.
     for (const { unitId, incidentId } of updateBelief(this.belief, reports, world, graph)) {
       for (const fleet of [world.units, this.belief.units]) fleet.find((u) => u.id === unitId)!.incidentId = incidentId;

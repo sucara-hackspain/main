@@ -110,7 +110,8 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
           <div className="ops-source-row"><span><i className={record.frame.knownWater.zones.some((z) => z.ageTicks * situation.seconds >= 600) ? "stale" : "available"} />Observaciones de agua</span><b>{record.frame.knownWater.zones.length}</b></div>
           {sources && <div className="ops-source-detail"><p>Última llamada: {operations.lastCall === null ? "sin registros" : `hace ${duration(record.tick - operations.lastCall, situation.seconds)}`}.</p><p>Último parte: {operations.lastRadio === null ? "sin registros" : `hace ${duration(record.tick - operations.lastRadio, situation.seconds)}`}.</p><p>El agua se marca para revisión cuando la observación tiene 10 minutos o más.</p></div>}
           <div className="ops-source-row disconnected"><span><i />Radar meteorológico</span><small>Sin conectar</small></div>
-          <div className="ops-source-row disconnected"><span><i />Redes sociales</span><small>Sin conectar</small></div>
+          {record.frame.channel ? <div className="ops-source-row"><span><i />Canal ciudadano</span><small>{number(record.frame.channel.received)} mensajes</small></div>
+            : <div className="ops-source-row disconnected"><span><i />Redes sociales</span><small>Sin conectar</small></div>}
           <small className="ops-source-note">{simulated ? "Todos los registros de este escenario son simulados." : "Solo información recibida hasta el instante seleccionado."}</small>
         </section>
       </aside>

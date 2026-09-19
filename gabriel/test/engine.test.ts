@@ -552,3 +552,81 @@ describe("reconocimiento", () => {
     expect(s.world.log.some((e) => e.type === "area_surveyed")).toBe(true);
   });
 });
+
+describe("agentic master", () => {
+  it("turns the master's wishes into what the engine can do, and drops what the map does not have", async () => {
+    const { buildMasterTurn, readMasterOutput, toMasterActions } = await import("../src/masters/protocol");
+    const graph = grid(9);
+    const world = createWorld(graph, { ...DEFAULT_CONFIG, ...CONFIG });
+    const turn = buildMasterTurn(world, graph, new Rng(3), 1, 10, "test");
+    expect(JSON.parse(turn.payload.places).length).toBeGreaterThan(4);
+    expect(turn.payload.places).not.toContain('"node"');
+
+    // As the platform hands it back: the reply under a couple of envelopes.
+    const output = readMasterOutput({ data: { response: {
+      narration: "Empieza a llover con fuerza.",
+      scenes: [{ place: 0, kind: "traffic", victims: 2, severity: "critico", trapped: true, silent: false }, { place: 99, kind: "fall", victims: 1, severity: "leve", trapped: false, silent: false }],
+      flood: [{ source: 0, strength: "rapida" }], cut: ["Carrer que no existe"], puncture: ["A1"],
+    } } });
+    const { actions, dropped } = toMasterActions(output, turn, world, graph, new Rng(3));
+    expect(actions.map((a) => a.type)).toEqual(["narrate", "start_flood", "spawn_scene", "puncture"]);
+    expect(dropped).toEqual(["scene at place 99 (fall)", 'street "Carrer que no existe"']);
+    const scene = actions.find((a) => a.type === "spawn_scene")!;
+    expect(scene).toMatchObject({ kind: "traffic", node: turn.places[0].node, silent: false });
+    if (scene.type === "spawn_scene") {
+      expect(scene.victims).toHaveLength(2);
+      expect(scene.victims[0]).toMatchObject({ injury: "hemorrhage", trapped: true });
+    }
+  });
+
+  it("lets an agent word the 112 calls without touching what they say", async () => {
+    const s = new Simulation({
+      graph: grid(5), master: scripted({ 0: [scene(12, [victim("hemorrhage", 90)])] }), coordinator: new GreedyCoordinator(),
+      observer: new CallObserver({ callers: ["family"] }), config: CONFIG, callWriter: async (call) => `reescrita ${call.id}`,
+    });
+    await s.run(10);
+    expect(s.belief.calls[0]).toMatchObject({ text: "reescrita L1", node: 12 });
+    expect(s.belief.incidents[0].timeline[0]).toMatchObject({ kind: "call", text: "reescrita L1" });
+  });
+});
+
+describe("the real 112 line", () => {
+  it("finds a street the way a caller says it", () => {
+    const data = { name: "t", bbox: [0, 0, 1, 1] as [number, number, number, number], nodes: [[0, 0], [0.001, 0], [0.002, 0], [0.003, 0]] as [number, number][], hospitals: [],
+      edges: [
+        { a: 0, b: 1, len: 100, kph: 30, oneway: false, name: "Carrer de Sueca", geom: [] },
+        { a: 1, b: 2, len: 100, kph: 30, oneway: false, name: "Avinguda del Regne de València", geom: [] },
+        { a: 2, b: 3, len: 100, kph: 30, oneway: false, name: "Carrer de València", geom: [] },
+      ] };
+    const graph = new Graph(data as unknown as GraphData);
+    expect(graph.findStreet("calle Sueca")).toBe(0);
+    expect(graph.findStreet("en la avenida Reino de Valencia")).toBe(1);
+    expect(graph.findStreet("Avenida Regne de Valencia, número 12")).toBe(1);
+    expect(graph.findStreet("carrer valencia")).toBe(2);
+    expect(graph.findStreet("Sueca 2, puerta A, junto al garaje")).toBe(0);
+    expect(graph.findStreet("Gran Vía")).toBeNull();
+  });
+
+  it("turns a phoned-in call into an emergency that is really there, and into a call like any other", async () => {
+    const s = new Simulation({ graph: grid(5), master: scripted({}), coordinator: new GreedyCoordinator(), config: CONFIG });
+    await s.run(3);
+    s.phone({ caller: "family", mechanism: "vehicle_trapped", node: 12, street: null, locationErrorM: 25, conscious: "no", breathing: "none", bleeding: "unknown", trapped: "yes", ageGroup: "child", victims: 2, text: "Llamada real" });
+    await s.run(1);
+    const [call] = s.belief.calls;
+    expect(call).toMatchObject({ id: "L1", tick: 3, node: 12, source: "phone", trapped: "yes" });
+    expect(s.belief.incidents[0]).toMatchObject({ priority: 0, callIds: ["L1"] });
+    const victims = s.world.victims.filter((v) => v.sceneId === s.world.scenes[0].id);
+    expect(victims).toHaveLength(2);
+    expect(victims[0]).toMatchObject({ injury: "drowning", trapped: true });
+    expect(victims[0].age).toBeLessThan(16);
+    expect((s.observer as CallObserver).sceneOfCall.get("L1")).toBe(s.world.scenes[0].id);
+    await s.run(30);
+    expect(s.world.log.some((e) => e.type === "scene_assessed")).toBe(true);
+  });
+
+  it("reads the operator's record forgivingly", async () => {
+    const { toPhoneCall } = await import("../src/phone/happyrobot");
+    expect(toPhoneCall({ caller: "neighbour", mechanism: "null", street: "Calle Sueca", locationErrorM: "100", conscious: "yes", breathing: "weird", victims: "2", node: 0, text: "Se ha caído mi padre" }))
+      .toMatchObject({ caller: "bystander", mechanism: null, street: "Calle Sueca", locationErrorM: 100, conscious: "yes", breathing: "unknown", trapped: "unknown", victims: 2 });
+  });
+});

@@ -174,6 +174,8 @@ export interface SimConfig {
   /** Max hospitals taken from the map (emergency ones first). */
   hospitals: number;
   hospitalCapacity: number;
+  /** Outbound calls the call centre can place in one tick. */
+  outboundLines: number;
   /** Multiplier over the street speed limit. */
   ambulanceSpeedFactor: number;
   pickupTicks: number;
@@ -190,6 +192,58 @@ export interface SimConfig {
   scoutTicks: number;
 }
 
+// ---------- Places with people in them, and the sensors that say the water is coming ----------
+
+export type SiteKind = "residence" | "school" | "garage";
+
+/**
+ * A known place with people inside who are fine until the water gets there: a care home, a school, an underground
+ * car park. Whoever has been moved up or out by then is safe; whoever has not becomes an emergency, all at once.
+ */
+export interface Site {
+  id: string;
+  kind: SiteKind;
+  name: string;
+  node: number;
+  /** Everyone inside, as they will be if the water catches them. Never shown to the coordinator. */
+  people: VictimSpec[];
+  safe: number;
+  warnedTick: number | null;
+  floodedTick: number | null;
+}
+
+/** What the registry and the phone tell dispatch about a site: who is there, how many are already safe. */
+export type KnownSite = Omit<Site, "people"> & { people: number };
+
+/** An upstream gauge: how full the channel is, when it will spill, and how the water will spread once it does. */
+export interface Gauge {
+  name: string;
+  node: number;
+  /** 1 = spilling. */
+  level: number;
+  overflowTick: number;
+  radiusM: number;
+  growthM: number;
+  asOfTick: number;
+}
+
+/** A district without power: phones die, so hardly anyone inside calls 112, and the landlines barely answer. */
+export interface Outage {
+  id: string;
+  node: number;
+  radiusM: number;
+  fromTick: number;
+  untilTick: number;
+}
+
+/** A round of outbound calls to the homes of a zone nobody has heard from: answers come back a couple of ticks later. */
+export interface OutboundRound {
+  zone: string;
+  node: number;
+  placedTick: number;
+  dueTick: number;
+}
+
 export interface World {
   tick: number;
   config: SimConfig;
@@ -198,6 +252,10 @@ export interface World {
   victims: Victim[];
   hospitals: Hospital[];
   floods: Flood[];
+  sites: Site[];
+  gauges: Gauge[];
+  outages: Outage[];
+  outbound: OutboundRound[];
   /** Streets that really cannot be driven. */
   closedEdges: number[];
   /** The subset of closedEdges that is under water: rescue units still get through these. */
@@ -219,7 +277,12 @@ export type MasterAction =
   | { type: "start_flood"; name: string; node: number; radiusM: number; growthM: number; maxRadiusM: number }
   | { type: "close_road"; edge: number }
   | { type: "open_road"; edge: number }
-  | { type: "puncture"; unitId: string; ticks: number };
+  | { type: "puncture"; unitId: string; ticks: number }
+  | { type: "blackout"; node: number; radiusM: number; ticks: number }
+  | { type: "place_site"; kind: SiteKind; name: string; node: number; people: VictimSpec[] }
+  | { type: "gauge_reading"; name: string; node: number; level: number; overflowTick: number; radiusM: number; growthM: number }
+  /** The master tells, in a sentence, what it is doing to the city. For whoever is watching; the coordinator never hears it. */
+  | { type: "narrate"; text: string };
 
 // ---------- What the coordinator can order ----------
 
@@ -237,7 +300,17 @@ export type Action =
    * Send an observer (drone, helicopter) to look at a place. It rescues nobody: it comes back with a
    * report of what it thinks is there. The answer to "I am deciding blind here".
    */
-  | { type: "scout"; unitId: string; node: number; incidentId?: string };
+  | { type: "scout"; unitId: string; node: number; incidentId?: string }
+  /**
+   * Phone a site and tell them the water is coming: they start moving people up or out on their own. Costs no unit,
+   * only one of the outbound lines for the tick. `unitId` is always "112": the call centre, not a vehicle.
+   */
+  | { type: "warn"; unitId: "112"; siteId: string }
+  /**
+   * Phone round the homes of a zone nobody has heard from and ask: are you all right, do you know of anyone who needs
+   * help? Silence becomes information. Takes one outbound line; the answers arrive a couple of ticks later.
+   */
+  | { type: "call_zone"; unitId: "112"; zone: string; node: number };
 
 // ---------- Event log (ground truth) ----------
 
@@ -250,6 +323,15 @@ export interface AssessedVictim {
 }
 
 type EventBody =
+  | { type: "master_narration"; text: string }
+  | { type: "site_placed"; siteId: string; kind: SiteKind; node: number; people: number }
+  | { type: "site_warned"; siteId: string }
+  | { type: "site_flooded"; siteId: string; sceneId: string | null; caught: number; safe: number }
+  | { type: "gauge_reading"; name: string; level: number; overflowTick: number }
+  | { type: "blackout_started"; outageId: string; node: number; radiusM: number; untilTick: number }
+  | { type: "outbound_placed"; zone: string; node: number }
+  /** Truth: the emergencies somebody in the zone knew about when asked. */
+  | { type: "outbound_answered"; zone: string; node: number; sceneIds: string[]; homes: number }
   | { type: "scene_created"; sceneId: string; kind: SceneKind; node: number; victims: number }
   /** `inSight`: not the scene the crew is working, but something else it can see from there. */
   | { type: "scene_assessed"; unitId: string; incidentId: string | null; sceneId: string; kind: SceneKind; node: number; inSight: boolean; victims: AssessedVictim[] }
@@ -308,7 +390,17 @@ export interface Call {
   victims: number | null;
   /** The call in words, for humans and LLMs. */
   text: string;
+  /** A person really phoned this in (the HappyRobot 112 line), rather than the simulation making it up. */
+  source?: "phone" | "citizen" | "outbound";
+  /**
+   * What the caller did say but nobody keyed into a field: under load the operator types the address and moves on,
+   * and the detail stays in the words. Truth kept for hindsight; a dispatcher that reads only fields never sees it.
+   */
+  buried?: Partial<Pick<Call, "trapped" | "breathing" | "ageGroup">>;
 }
+
+/** A call taken on the real 112 line, as the operator filed it: no id or tick yet, and a street instead of a node. */
+export type PhoneCall = Omit<Call, "id" | "tick" | "node" | "source"> & { node?: number | null };
 
 /**
  * One thing an aerial observer believes it has seen. Every field can be wrong or missing: it is a
@@ -350,7 +442,7 @@ export type ObservedEvent =
     }
   /** Official flood map. Reliable, but it shows the water as it was `asOfTick`, not now. */
   | { type: "flood_bulletin"; tick: number; asOfTick: number; floods: { id: string; name: string; node: number; radiusM: number }[] };
-export type ReportSource = "call_112" | "ambulance" | "hospital" | "traffic" | "system" | "drone";
+export type ReportSource = "call_112" | "ambulance" | "hospital" | "traffic" | "system" | "drone" | "sensor";
 
 /** The coordinator never reads the world, only reports. */
 export interface Report {
@@ -511,5 +603,12 @@ export interface Belief {
   floodedEdges: number[];
   /** Places already looked at from the air, and how good that look was. Ageing information, not proof. */
   scouts: { tick: number; node: number; radiusM: number; quality: number; from: string; found: number }[];
+  /** The municipal registry of places with people in them, kept current by phone. */
+  sites: KnownSite[];
+  gauges: Gauge[];
+  /** Power cuts, as the grid operator reports them. */
+  outages: Outage[];
+  /** Zones phoned round, and when: nobody needs asking twice in ten minutes. */
+  outboundRounds: { zone: string; node: number; tick: number; found: number | null }[];
   nextIncidentNum: number;
 }
