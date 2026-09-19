@@ -33,7 +33,7 @@
 .ops-metrics strong em { font-size:16px; font-style:normal; letter-spacing:-.5px; color:#a1aaa4; }
 .ops-metrics small { color:#87928a; font-size:9px; display:flex; justify-content:space-between; gap:6px; align-items:center; }
 .ops-metrics .needs-attention strong { color:var(--ops-red); }
-.ops-grid { display:grid; grid-template-columns:224px minmax(0,1fr) 278px; min-height:525px; flex:1; background:#fff; border:1px solid var(--ops-line); border-radius:8px; overflow:hidden; }
+.ops-grid { display:grid; grid-template-columns:224px minmax(0,1fr) 278px; min-height:525px; flex:1; margin-bottom:16px; background:#fff; border:1px solid var(--ops-line); border-radius:8px; overflow:hidden; }
 .ops-section-heading { display:flex; justify-content:space-between; align-items:center; padding:17px 16px 14px; gap:8px; }
 .ops-section-heading h2 { font-size:12px; font-weight:600; letter-spacing:-.2px; }
 .ops-section-heading h2 span { padding:1px 5px; margin-left:3px; color:var(--ops-muted); background:#f1f4f0; border-radius:4px; font-size:9px; }
@@ -129,14 +129,6 @@
 .ops-source-row small { font-size:8px; color:#adb5a9; }
 .ops-source-detail { background:#f7f9f5; padding:8px; border-radius:4px; font-size:9px; line-height:1.6; color:#7e8d79; margin:6px 0; }
 .ops-source-note { display:block; font-size:8px; line-height:1.6; color:#97a18f; margin-top:8px; }
-.ops-evolution { display:flex; align-items:center; gap:24px; padding:13px 4px; min-height:63px; flex-shrink:0; }
-.ops-evolution > div:first-child { min-width:175px; }
-.ops-evolution strong { font-size:15px; font-weight:500; display:block; margin-top:3px; letter-spacing:-.2px; }
-.ops-evolution strong > span { font-size:10px; font-weight:400; color:#97a08f; letter-spacing:0; }
-.ops-evolution > svg { width:220px; height:36px; color:#709278; }
-.ops-evolution-caption { display:flex; flex-direction:column; gap:3px; color:#809076; font:8px var(--font-mono); }
-.ops-evolution-caption small { font:8px var(--font-sans); color:#a3ad9b; }
-.ops-evolution-note { margin-left:auto; font-size:9px; color:#88967e; }
 .ops-empty { padding:16px; color:#8b9887; font-size:10px; line-height:1.6; text-align:center; }
 .ops-empty button { display:block; margin:8px auto 0; font-size:10px; text-decoration:underline; }
 .ticket-scope { display:flex; justify-content:space-between; align-items:center; gap:8px; background:#edf4ed; border:1px solid #dbe7dc; margin:0 24px 12px; padding:9px 12px; border-radius:6px; color:#386546; font-size:11px; }
@@ -144,7 +136,7 @@
 .ticket-pagination { display:flex; align-items:center; gap:8px; }
 .ticket-pagination button { display:flex; align-items:center; justify-content:center; width:25px; height:23px; border:1px solid var(--border); border-radius:4px; }
 @media(min-width:1700px) { .ops-grid { grid-template-columns:260px minmax(0,1fr) 310px; } .ops-sector { padding:17px 20px; } .ops-map { min-height:300px; } }
-@media(max-width:1200px) { .ops-grid { grid-template-columns:195px minmax(0,1fr) 245px; } .operations-view { padding:0 16px; } .ops-heading h1 { font-size:24px; } .ops-evolution { gap:14px; } .ops-evolution-note { display:none; } .ops-metrics > * { padding-inline:13px; } }
+@media(max-width:1200px) { .ops-grid { grid-template-columns:195px minmax(0,1fr) 245px; } .operations-view { padding:0 16px; } .ops-heading h1 { font-size:24px; } .ops-metrics > * { padding-inline:13px; } }
 @media(max-width:1000px) and (min-width:801px) { .ops-grid { grid-template-columns:180px minmax(0,1fr); } .ops-attention { grid-column:1 / -1; display:grid; grid-template-columns:1fr 1fr; border-left:0; border-top:1px solid var(--ops-line); overflow:visible; } .ops-grid { overflow:visible; flex:none; } .ops-center { min-height:620px; } .ops-attention > .ops-section-heading { grid-column:1 / -1; } .ops-attention-queues { grid-row:2 / 4; } }
 @media(max-width:800px) {
   .operations-layout .app-workspace { height:auto; min-height:100dvh; }
@@ -186,8 +178,5 @@
   .ops-attention h3 { font-size:12px; }
   .ops-attention-queues strong { font-size:12px; }
   .ops-attention-queues small,.ops-capacity-row,.ops-source-row { font-size:10px; }
-  .ops-evolution { flex-wrap:wrap; gap:8px; padding:16px 3px; }
-  .ops-evolution > svg { width:135px; margin-left:auto; }
-  .ops-evolution-caption { flex-basis:100%; }
   .ticket-scope { margin-inline:12px; }
 }

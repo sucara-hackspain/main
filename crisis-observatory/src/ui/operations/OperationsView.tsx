@@ -30,9 +30,6 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
   const unitGroups = [{ name: "Disponibles", count: situation.available, className: "available" },
     { name: "Con actividad", count: situation.units.filter((u) => !u.available && !u.broken && !u.stranded).length, className: "busy" },
     { name: "Bloqueadas / averiadas", count: situation.units.filter((u) => u.broken || u.stranded).length, className: "blocked" }];
-  const maxOpen = Math.max(1, ...operations.trend.map((p) => p.open));
-  const trendStart = operations.trend[0]?.tick ?? 0, trendEnd = operations.trend.at(-1)?.tick ?? 0;
-  const points = operations.trend.map((p) => `${((p.tick - trendStart) / Math.max(1, trendEnd - trendStart)) * 260},${38 - p.open / maxOpen * 32}`).join(" ");
   const simulated = meta.id === SCALE_ID;
   function select(id: string | null) { onSector(id); }
   return <section className="operations-view" aria-label="Panorama operativo">
@@ -100,10 +97,5 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
         </section>
       </aside>
     </div>
-    <footer className="ops-evolution"><div><span className="ops-eyebrow">EVOLUCIÓN DE LA CARGA</span><strong>{number(operations.open)} <span>incidencias abiertas</span></strong></div>
-      <svg viewBox="0 0 260 42" role="img" aria-label="Evolución del número de incidencias abiertas"><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" /></svg>
-      <div className="ops-evolution-caption"><span>+{elapsed(trendStart, situation.seconds)} — +{elapsed(trendEnd, situation.seconds)}</span><small>{operations.trend.length} instantáneas · historial disponible</small></div>
-      <span className="ops-evolution-note">{number(operations.waiting)} casos sin atención efectiva</span>
-    </footer>
   </section>;
 }

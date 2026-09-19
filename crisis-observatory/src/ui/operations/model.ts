@@ -89,10 +89,9 @@ export function buildOperations(tickets: Ticket[], record: TickRecord, history: 
       if (radioTypes.has(e.type)) { radio++; lastRadio = Math.max(lastRadio ?? 0, e.tick); }
     }
   }
-  const trend = past.slice(-24).map((r) => ({ tick: r.tick, open: r.frame.incidents.filter((i) => i.status === "open").length }));
   return {
     sectors: sectors.filter((s, i) => i < 6 || s.tickets.length || s.units || s.gaps || s.stale),
-    calls: calls.size, radio, lastCall, lastRadio, trend,
+    calls: calls.size, radio, lastCall, lastRadio,
     windowMinutes: baseline ? Math.round((currentTick - baseline.tick) * situation.seconds / 60) : 0,
     open: sectors.reduce((n, s) => n + s.open, 0), critical: sectors.reduce((n, s) => n + s.critical, 0),
     waiting: sectors.reduce((n, s) => n + s.waiting, 0), blocked: sectors.reduce((n, s) => n + s.blocked, 0),

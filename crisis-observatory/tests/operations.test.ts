@@ -53,5 +53,4 @@ test("the scale workload retains 2,400 cases and 12,000 calls; rewinding never e
   assert.equal(past.open, 400);
   assert.equal(past.calls, 2000);
   assert.equal(past.sectors.reduce((n, s) => n + s.stale, 0), 0);
-  assert.ok(past.trend.every((point) => point.tick <= earlier.tick));
 });
