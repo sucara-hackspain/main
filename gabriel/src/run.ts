@@ -50,6 +50,8 @@ const { values } = parseArgs({
     phone: { type: "boolean", default: false },
     /** Port for the 112 workflow's POST node to reach (through a tunnel). 0 = only poll the platform. */
     "phone-port": { type: "string", default: "8112" },
+    /** Also take calls that ended up to this many minutes before the session started. */
+    "phone-since": { type: "string", default: "0" },
     /** Decide without the doctrine (to measure what the memory is worth). */
     "no-memory": { type: "boolean", default: false },
     /** Skip the end-of-session dream; `--dream` forces it for a greedy run. */
@@ -141,9 +143,9 @@ const takeCall = (call: PhoneCall, via: string) => {
   sim.phone(call);
 };
 const phoneError = (error: string) => log(`TELÉFONO 112: ${error}`);
-const phoneLine = values.phone ? new HappyRobotPhoneLine({ onCall: (call, runId) => takeCall(call, `sondeo ${runId}`), onError: phoneError }) : null;
+const phoneLine = values.phone ? new HappyRobotPhoneLine({ sinceMinutes: Number(values["phone-since"]), onCall: (call, runId) => takeCall(call, `sondeo ${runId}`), onError: phoneError }) : null;
 const phonePort = Number(values["phone-port"]);
-const phoneHook = values.phone && phonePort > 0 ? startPhoneWebhook({ port: phonePort, onCall: (call) => takeCall(call, "webhook"), onError: phoneError }) : null;
+const phoneHook = values.phone && phonePort > 0 ? startPhoneWebhook({ port: phonePort, onCall: (call) => takeCall(call, "webhook"), onPing: () => [0, 2000, 5000].forEach((ms) => setTimeout(() => void phoneLine?.poll(), ms)), onError: phoneError }) : null;
 phoneLine?.start();
 if (phoneLine) log(`TELÉFONO 112: línea abierta${phoneHook ? `, webhook en http://localhost:${phonePort}/phone` : ""}`);
 

@@ -10,6 +10,8 @@ export interface PhoneLineOptions {
   nodeId?: string;
   cluster?: "us" | "eu";
   pollMs?: number;
+  /** Also take calls that ended up to this many minutes before the session started (to pick one up after a restart). */
+  sinceMinutes?: number;
   onCall: (call: PhoneCall, runId: string) => void;
   onError?: (error: string) => void;
 }
@@ -51,7 +53,8 @@ export class HappyRobotPhoneLine {
   private readonly nodeId: string;
   private readonly pollMs: number;
   private readonly seen = new Set<string>();
-  private readonly since = Date.now();
+  private readonly since: number;
+  private readonly failures = new Map<string, number>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private busy = false;
 
@@ -66,6 +69,7 @@ export class HappyRobotPhoneLine {
     this.workflowId = workflowId;
     this.nodeId = nodeId;
     this.pollMs = options.pollMs ?? 4000;
+    this.since = Date.now() - (options.sinceMinutes ?? 0) * 60_000;
   }
 
   start(): void {
@@ -88,14 +92,24 @@ export class HappyRobotPhoneLine {
         if (this.seen.has(run.id) || new Date(run.timestamp ?? 0).getTime() < this.since) continue;
         // The record is filed after the caller hangs up: until then the run is simply not ready.
         const nodes = (await this.client.runs.listNodes(run.id, { node_persistent_id: this.nodeId, sort: "asc" } as never)) as unknown as { data: { node_persistent_id: string; output_id?: string; status?: string }[] };
-        const filed = nodes.data.filter((n) => n.node_persistent_id === this.nodeId && n.output_id).at(-1);
+        // An output id appears before the node is done; only a finished node has the record in it.
+        const filed = nodes.data.filter((n) => n.node_persistent_id === this.nodeId && n.output_id && ["completed", "succeeded"].includes(n.status ?? "")).at(-1);
         if (!filed) {
           if (["failed", "canceled", "skipped"].includes(run.status)) this.seen.add(run.id);
           continue;
         }
-        this.seen.add(run.id);
-        const output = await this.client.runs.getOutput(run.id, filed.output_id!);
-        this.options.onCall(toPhoneCall(unwrap(output.data, "caller")), run.id);
+        try {
+          const output = await this.client.runs.getOutput(run.id, filed.output_id!);
+          const call = toPhoneCall(unwrap(output.data, "caller"));
+          this.seen.add(run.id);
+          this.options.onCall(call, run.id);
+        } catch (err) {
+          // Not readable yet, or not at all: a few more looks, then let it go.
+          const tries = (this.failures.get(run.id) ?? 0) + 1;
+          this.failures.set(run.id, tries);
+          if (tries >= 5) this.seen.add(run.id);
+          if (tries === 5) this.options.onError?.(`la llamada ${run.id} no se pudo leer: ${err instanceof Error ? err.message : err}`);
+        }
       }
     } catch (err) {
       this.options.onError?.(err instanceof Error ? err.message : String(err));
