@@ -103,6 +103,10 @@
 .entity-popover .maplibregl-popup-content { padding:0; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--popover); color:var(--popover-foreground); box-shadow:var(--dropdown-shadow),0 12px 32px -12px #00000040; }
 .entity-popover .maplibregl-popup-tip { display:none; }
 .entity-popover .entity-card { max-height:min(70vh, 520px); overflow:auto; overscroll-behavior:contain; }
+/* A spotlit incident's detail docks in the corner, clear of the assets the map frames around it. */
+@media (min-width:801px) {
+  .entity-popover.docked { top:12px !important; left:12px !important; transform:none !important; }
+}
 @media (max-width:800px) {
   .entity-popover { top:auto !important; right:8px; bottom:8px; left:8px !important; max-width:none !important; transform:none !important; }
   .entity-popover .maplibregl-popup-content { width:100%; }
