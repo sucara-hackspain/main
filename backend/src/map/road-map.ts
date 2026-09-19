@@ -52,6 +52,19 @@ export class RoadMap {
     return this.namedNodes[Math.floor(Math.random() * this.namedNodes.length)];
   }
 
+  /** Un nodo de la calle que alguien nombra ("calle Colón, 12" o "Sueca" valen para "Carrer de Colón" / "Carrer de Sueca"), o null si no está en el mapa. */
+  findStreet(spoken: string | null): NodeId | null {
+    if (!spoken) return null;
+    const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    // ponytail: se quitan tipo de vía, artículos y números y se buscan las palabras que quedan; sin traducir (Calabazas ≠ Carabasses)
+    const NOISE = /\b(calle|carrer|avenida|avinguda|plaza|placa|camino|cami|paseo|passeig|de|del|la|las|les|el|els|los|numero|n)\b|\b[dl]'|[\d,.;:º°]+/g;
+    const wanted = fold(spoken).replace(NOISE, " ").split(/\s+/).filter(Boolean);
+    if (!wanted.length) return null;
+    const names = this.streetNames();
+    const street = names.find((s) => fold(s) === fold(spoken)) ?? names.filter((s) => wanted.every((w) => fold(s).includes(w))).sort((a, b) => a.length - b.length)[0];
+    return street ? this.edgesOfStreet(street)[0][0] : null;
+  }
+
   // ---- rutas ----
 
   /** Dijkstra desde `source` evitando `blocked`. Termina en cuanto todos los `targets` están resueltos. */

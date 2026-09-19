@@ -1,55 +1,19 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Page } from "@playwright/test";
-import {
-  DanaMaster,
-  Graph,
-  GreedyCoordinator,
-  makeTickRecord,
-  Simulation,
-  type GraphData,
-} from "../../../gabriel/src/engine";
 import type { RunMeta, TickRecord } from "../../src/ui/engineTrace";
 
 export type Run = { meta: RunMeta; records: TickRecord[] };
 
-/** A DANA night with the rule coordinator, simulated in memory: nothing is written to ../gabriel/runs. */
-export async function simulate(seed: number, ticks: number): Promise<Run> {
-  const data = JSON.parse(
-    readFileSync(resolve("../gabriel/data/valencia.json"), "utf8"),
-  ) as GraphData;
-  const graph = new Graph(data);
-  const sim = new Simulation({
-    graph,
-    seed,
-    master: new DanaMaster(),
-    coordinator: new GreedyCoordinator(),
-  });
-  const records: TickRecord[] = [];
-  for (let i = 0; i < ticks; i++)
-    records.push(makeTickRecord(await sim.step(), sim.world, sim.belief, graph));
-  return {
-    meta: {
-      id: `e2e-dana-s${seed}`,
-      map: "valencia",
-      seed,
-      ticks,
-      coordinator: "greedy",
-      model: null,
-      config: sim.world.config,
-      hospitals: sim.world.hospitals.map(({ id, name, node, capacity, helipad }) => ({
-        id,
-        name,
-        node,
-        capacity,
-        helipad,
-      })),
-      startedAt: "2026-09-19T00:00:00.000Z",
-      status: "finished",
-      summary: sim.summary(),
-    },
-    records,
-  };
+/** The latest game recorded by ../backend (npm run sim -- init && step), cut to `ticks` records. */
+export async function simulate(_seed: number, ticks: number): Promise<Run> {
+  const root = resolve("../backend/runs");
+  const ids = existsSync(root) ? readdirSync(root).filter((id) => existsSync(resolve(root, id, "meta.json"))).sort() : [];
+  const id = ids.at(-1);
+  if (!id) throw new Error("no hay partidas en backend/runs: crea una con `npm run sim -- init -n 4 && npm run sim -- step 20` en backend/");
+  const meta = JSON.parse(readFileSync(resolve(root, id, "meta.json"), "utf8")) as RunMeta;
+  const records = readFileSync(resolve(root, id, "ticks.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as TickRecord).slice(0, ticks);
+  return { meta, records };
 }
 
 /** Serve runs through the same incremental API the app polls. External tiles become a plain background. */

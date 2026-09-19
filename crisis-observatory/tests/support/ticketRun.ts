@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG } from "../../../gabriel/src/engine/engine";
+import { DEFAULT_CONFIG } from "../../src/engine/engine";
 import type { Action, Call, GraphData, IncidentFrame, RunMeta, TickRecord, UnitFrame } from "../../src/ui/engineTrace";
 
 export const ticketGraph: GraphData = {

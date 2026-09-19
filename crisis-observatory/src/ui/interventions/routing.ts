@@ -1,5 +1,5 @@
-import { Graph } from "../../../../gabriel/src/engine/graph";
-import { closuresFor } from "../../../../gabriel/src/engine/engine";
+import { Graph } from "../../engine/graph";
+import { closuresFor } from "../../engine/engine";
 import { remainingRoute } from "../map/routes";
 import {
   UNIT_KINDS,
