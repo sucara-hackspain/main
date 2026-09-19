@@ -65,6 +65,8 @@ export class GreedyCoordinator implements Coordinator {
      * crew where a warning alone will not get everyone out. Off by default: today's control rooms do not cross these.
      */
     private readonly usesRegistry = false,
+    /** Also phone round the zones nobody has heard from, as many as there are outbound lines. Only an agent has the lines. */
+    private readonly phonesRound = false,
   ) {}
 
   decide({ belief, graph, config }: DecideInput): Action[] {
@@ -200,6 +202,13 @@ export class GreedyCoordinator implements Coordinator {
         actions.push({ type: "dispatch", unitId: unit.id, incidentId: incident.id, node: incident.node, hospitalId: nearestHospital(unit, incident.node) ?? undefined });
         take(unit);
       }
+    }
+
+    if (this.phonesRound) {
+      const warned = actions.filter((a) => a.type === "warn").length;
+      const recently = new Set(belief.outboundRounds.filter((r) => belief.tick - r.tick < 12).map((r) => r.zone));
+      const quiet = infoGaps(belief, graph, belief.tick, 12).filter((g) => g.kind === "silence" && !recently.has(g.id));
+      for (const gap of quiet.slice(0, Math.max(0, config.outboundLines - warned))) actions.push({ type: "call_zone", unitId: "112", zone: gap.id, node: gap.node });
     }
 
     // What we do not know. Only units with nothing better to do go looking: a drone always, the

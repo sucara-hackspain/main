@@ -20,6 +20,8 @@ export function actionText(a: Action) {
   if (a.type === "dispatch")
     return `${a.unitId} → ${a.incidentId}${a.hospitalId ? ` → ${a.hospitalId}` : ""}`;
   if (a.type === "transport") return `${a.unitId} → trasladar a ${a.hospitalId}`;
+  if (a.type === "warn") return `112 → avisar a ${a.siteId}`;
+  if (a.type === "call_zone") return `112 → ronda de llamadas a ${a.zone}`;
   if (a.type === "scout") return `${a.unitId} → reconocer${a.incidentId ? ` ${a.incidentId}` : " la zona"}`;
   return `${a.unitId} → reubicar`;
 }
@@ -40,6 +42,12 @@ export function eventText(e: ObservedEvent, seconds: number): string {
       return `112 llama a ${e.siteId} · empiezan a ponerse a salvo`;
     case "site_flooded":
       return e.caught ? `El agua entra en ${e.siteId} · ${count(e.caught, "persona atrapada", "personas atrapadas")} dentro (${e.safe} a salvo)` : `El agua entra en ${e.siteId} · todos a salvo (${e.safe})`;
+    case "blackout_started":
+      return `Apagón · ${e.radiusM} m sin luz: quien esté dentro apenas podrá llamar`;
+    case "outbound_placed":
+      return `112 inicia una ronda de llamadas a las casas de ${e.zone}`;
+    case "outbound_answered":
+      return e.sceneIds.length ? `Ronda a ${e.zone} · ${count(e.sceneIds.length, "vecino sabe", "vecinos saben")} de alguien que necesita ayuda` : `Ronda a ${e.zone} · nadie sabe de nadie en apuros`;
     case "gauge_reading":
       return `Aforo ${e.name} · cauce al ${Math.round(e.level * 100)} %${e.level >= 1 ? " · DESBORDADO" : ""}`;
     case "scene_created":

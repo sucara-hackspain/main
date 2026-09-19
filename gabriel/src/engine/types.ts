@@ -227,6 +227,23 @@ export interface Gauge {
   asOfTick: number;
 }
 
+/** A district without power: phones die, so hardly anyone inside calls 112, and the landlines barely answer. */
+export interface Outage {
+  id: string;
+  node: number;
+  radiusM: number;
+  fromTick: number;
+  untilTick: number;
+}
+
+/** A round of outbound calls to the homes of a zone nobody has heard from: answers come back a couple of ticks later. */
+export interface OutboundRound {
+  zone: string;
+  node: number;
+  placedTick: number;
+  dueTick: number;
+}
+
 export interface World {
   tick: number;
   config: SimConfig;
@@ -237,6 +254,8 @@ export interface World {
   floods: Flood[];
   sites: Site[];
   gauges: Gauge[];
+  outages: Outage[];
+  outbound: OutboundRound[];
   /** Streets that really cannot be driven. */
   closedEdges: number[];
   /** The subset of closedEdges that is under water: rescue units still get through these. */
@@ -259,6 +278,7 @@ export type MasterAction =
   | { type: "close_road"; edge: number }
   | { type: "open_road"; edge: number }
   | { type: "puncture"; unitId: string; ticks: number }
+  | { type: "blackout"; node: number; radiusM: number; ticks: number }
   | { type: "place_site"; kind: SiteKind; name: string; node: number; people: VictimSpec[] }
   | { type: "gauge_reading"; name: string; node: number; level: number; overflowTick: number; radiusM: number; growthM: number }
   /** The master tells, in a sentence, what it is doing to the city. For whoever is watching; the coordinator never hears it. */
@@ -285,7 +305,12 @@ export type Action =
    * Phone a site and tell them the water is coming: they start moving people up or out on their own. Costs no unit,
    * only one of the outbound lines for the tick. `unitId` is always "112": the call centre, not a vehicle.
    */
-  | { type: "warn"; unitId: "112"; siteId: string };
+  | { type: "warn"; unitId: "112"; siteId: string }
+  /**
+   * Phone round the homes of a zone nobody has heard from and ask: are you all right, do you know of anyone who needs
+   * help? Silence becomes information. Takes one outbound line; the answers arrive a couple of ticks later.
+   */
+  | { type: "call_zone"; unitId: "112"; zone: string; node: number };
 
 // ---------- Event log (ground truth) ----------
 
@@ -303,6 +328,10 @@ type EventBody =
   | { type: "site_warned"; siteId: string }
   | { type: "site_flooded"; siteId: string; sceneId: string | null; caught: number; safe: number }
   | { type: "gauge_reading"; name: string; level: number; overflowTick: number }
+  | { type: "blackout_started"; outageId: string; node: number; radiusM: number; untilTick: number }
+  | { type: "outbound_placed"; zone: string; node: number }
+  /** Truth: the emergencies somebody in the zone knew about when asked. */
+  | { type: "outbound_answered"; zone: string; node: number; sceneIds: string[]; homes: number }
   | { type: "scene_created"; sceneId: string; kind: SceneKind; node: number; victims: number }
   /** `inSight`: not the scene the crew is working, but something else it can see from there. */
   | { type: "scene_assessed"; unitId: string; incidentId: string | null; sceneId: string; kind: SceneKind; node: number; inSight: boolean; victims: AssessedVictim[] }
@@ -362,7 +391,7 @@ export interface Call {
   /** The call in words, for humans and LLMs. */
   text: string;
   /** A person really phoned this in (the HappyRobot 112 line), rather than the simulation making it up. */
-  source?: "phone";
+  source?: "phone" | "citizen" | "outbound";
 }
 
 /** A call taken on the real 112 line, as the operator filed it: no id or tick yet, and a street instead of a node. */
@@ -572,5 +601,9 @@ export interface Belief {
   /** The municipal registry of places with people in them, kept current by phone. */
   sites: KnownSite[];
   gauges: Gauge[];
+  /** Power cuts, as the grid operator reports them. */
+  outages: Outage[];
+  /** Zones phoned round, and when: nobody needs asking twice in ten minutes. */
+  outboundRounds: { zone: string; node: number; tick: number; found: number | null }[];
   nextIncidentNum: number;
 }

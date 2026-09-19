@@ -3,8 +3,25 @@ import { elapsed } from "../engineTrace";
 import type { DecisionCard, OrderLine } from "./model";
 import "./decisions.css";
 
-const ICON = { dispatch: Truck, transport: Route, reposition: MapPin, scout: Eye, warn: Phone } as const;
+const ICON = { dispatch: Truck, transport: Route, reposition: MapPin, scout: Eye, warn: Phone, call_zone: Phone } as const;
 const SOURCE = { llm: "Agente", fallback: "Respaldo por reglas", rules: "Reglas" } as const;
+
+const SOURCES: [RegExp, string][] = [
+  [/Pista ciudadana/, "ciudadano"],
+  [/Llamada saliente|Ronda de llamadas/, "saliente"],
+  [/^112 /, "112"],
+  [/^Aforo/, "aforo"],
+  [/^Apagón/, "red eléctrica"],
+  [/sobrevuela/, "dron"],
+  [/Teleasistencia/, "teleasistencia"],
+  [/^ST\d+:|sitios con gente/, "registro"],
+];
+/** Where each fact came from: a decision that crosses four sources reads differently from one that answers a call. */
+const sourcesOf = (line: string) => {
+  const found = SOURCES.filter(([pattern]) => pattern.test(line)).map(([, name]) => name);
+  // A lead or an outbound answer is filed as a call, but it did not come in through 112.
+  return found.some((name) => name === "ciudadano" || name === "saliente") ? found.filter((name) => name !== "112") : found;
+};
 
 function Order({ order, focused, onFocus }: { order: OrderLine; focused: boolean; onFocus: (key: string | null) => void }) {
   const Icon = ICON[order.kind];
@@ -49,7 +66,10 @@ export default function DecisionPanel({ cards, card, seconds, focus, onFocus, on
 
       <section>
         <h3><Radio size={13} /> Vio</h3>
-        {card.saw.length ? <ul className="decision-saw">{card.saw.map((line, n) => <li key={n} className={n === 0 ? "is-summary" : ""}>{line}</li>)}</ul> : <p className="decision-muted">{card.situation || "Sin resumen de lo que tenía delante."}</p>}
+        {card.saw.length ? <>
+          <div className="decision-sources">{[...new Set(card.saw.flatMap(sourcesOf))].map((name) => <span key={name} data-source={name}>{name}</span>)}</div>
+          <ul className="decision-saw">{card.saw.map((line, n) => <li key={n} className={n === 0 ? "is-summary" : ""}>{line}</li>)}</ul>
+        </> : <p className="decision-muted">{card.situation || "Sin resumen de lo que tenía delante."}</p>}
       </section>
 
       {(card.plan || card.watch || (card.situation && card.saw.length > 0 && card.situation !== card.saw[0])) && <section>

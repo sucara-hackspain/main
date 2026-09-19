@@ -72,7 +72,7 @@ export function incidentScene(
     const action = option.action;
     const unit = action && unitOf(action.unitId);
     // A phone call to a site moves no unit: nothing to draw.
-    if (!action || !unit || action.type === "warn") return;
+    if (!action || !unit || action.type === "warn" || action.type === "call_zone") return;
     const target =
       action.type === "transport" ? nodeOf(action.hospitalId) : action.node;
     if (target === undefined) return;

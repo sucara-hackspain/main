@@ -22,6 +22,10 @@ const SOURCE: Record<WorldEvent["type"], ReportSource | null> = {
   // The care home phones the moment the water is in: it is the scene's own calls that carry the detail.
   site_flooded: "system",
   gauge_reading: "sensor",
+  blackout_started: "sensor",
+  outbound_placed: null,
+  // The answers travel as calls, one per emergency somebody knew about; the round itself is worth a line too.
+  outbound_answered: "system",
   victim_died: null,
   scene_assessed: "ambulance",
   scene_not_found: "ambulance",
@@ -92,6 +96,7 @@ const WHO_CALLS: Record<SceneKind, [CallerKind, number][]> = {
 };
 
 const RECALL_AFTER_TICKS = 16;
+const P_DARK_NO_CALL = 0.8;
 /** Official flood maps: how often they come out and how old the picture in them is. */
 const BULLETIN_EVERY_TICKS = 24;
 const BULLETIN_LAG_TICKS = 10;
@@ -113,6 +118,7 @@ interface PendingCall {
   deliverTick: number;
   sceneId: string;
   caller: CallerKind;
+  outbound?: boolean;
 }
 
 export class CallObserver implements Observer {
@@ -132,10 +138,13 @@ export class CallObserver implements Observer {
   constructor(private readonly options: CallObserverOptions = {}) {}
 
   /** A call that did not come from here (a real phone call) joins the books: numbered like the rest, and followed up like the rest. */
-  adopt(call: Omit<Call, "id" | "tick">, sceneId: string, tick: number): Call {
+  adopt(call: Omit<Call, "id" | "tick">, sceneId: string | null, tick: number): Call {
     const filed: Call = { ...call, id: `L${this.nextCallNum++}`, tick };
-    this.sceneOfCall.set(filed.id, sceneId);
-    this.lastCall.set(sceneId, tick);
+    // A lead from the citizen channel may be about nothing at all: then there is no scene to tie it to.
+    if (sceneId) {
+      this.sceneOfCall.set(filed.id, sceneId);
+      this.lastCall.set(sceneId, tick);
+    }
     return filed;
   }
 
@@ -156,7 +165,9 @@ export class CallObserver implements Observer {
     this.streamFor("", rng);
 
     for (const event of events) {
-      if (event.type === "scene_created") this.scheduleFirstCalls(event.sceneId, world, this.streamFor(event.sceneId, rng));
+      if (event.type === "scene_created") this.scheduleFirstCalls(event.sceneId, world, this.streamFor(event.sceneId, rng), graph);
+      // Asked directly, a neighbour tells what a family member would: close by, and mostly right.
+      if (event.type === "outbound_answered") for (const sceneId of event.sceneIds) this.pending.push({ deliverTick: world.tick, sceneId, caller: "family", outbound: true });
       if (event.type === "road_closed") this.pendingTraffic.push({ deliverTick: world.tick + this.streamFor(`edge${event.edge}`, rng).int(...TRAFFIC_DELAY_TICKS), event });
       if (event.type === "area_surveyed") {
         const report = this.readArea(event, world, graph, rng);
@@ -196,6 +207,10 @@ export class CallObserver implements Observer {
     for (const p of due) {
       const call = this.makeCall(p, world, graph, this.streamFor(p.sceneId, rng));
       if (!call) continue;
+      if (p.outbound) {
+        call.source = "outbound";
+        call.text = `Llamada saliente del 112 · ${call.text}`;
+      }
       this.lastCall.set(p.sceneId, world.tick);
       this.sceneOfCall.set(call.id, p.sceneId);
       const event: ObservedEvent = { type: "call_received", tick: world.tick, call };
@@ -275,8 +290,11 @@ export class CallObserver implements Observer {
   }
 
   /** Busy street scenes get several witnesses; what happens indoors gets one call. */
-  private scheduleFirstCalls(sceneId: string, world: Readonly<World>, rng: Rng): void {
+  private scheduleFirstCalls(sceneId: string, world: Readonly<World>, rng: Rng, graph: Graph): void {
     const scene = world.scenes.find((s) => s.id === sceneId)!;
+    // No power, no phone: most of what happens inside a blackout never reaches 112.
+    const dark = world.outages.some((o) => world.tick < o.untilTick && graph.distanceM(o.node, scene.node) <= o.radiusM);
+    if (dark && !this.options.perfect && rng.chance(P_DARK_NO_CALL)) return;
     // Nobody is going to call about this one. The only way it ever gets known is someone going to look.
     if (this.options.perfect) {
       this.pending.push({ deliverTick: world.tick, sceneId, caller: "bystander" });

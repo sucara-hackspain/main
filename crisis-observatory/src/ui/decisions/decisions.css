@@ -43,3 +43,7 @@
 .decision-strip button.is-bad { box-shadow:inset 0 -2px 0 var(--destructive); }
 .decision-strip button[aria-selected="true"] { background:var(--foreground); border-color:var(--foreground); }
 .decision-strip button[aria-selected="true"] b, .decision-strip button[aria-selected="true"] span { color:var(--background); }
+
+.decision-sources { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+.decision-sources span { font:10px var(--font-mono); padding:2px 7px; border-radius:99px; border:1px solid var(--border); background:var(--popover); }
+.decision-sources span[data-source="ciudadano"], .decision-sources span[data-source="teleasistencia"], .decision-sources span[data-source="saliente"] { border-color:var(--info); color:var(--info); }

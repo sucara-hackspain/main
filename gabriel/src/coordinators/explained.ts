@@ -7,8 +7,12 @@ import { GreedyCoordinator, resolve, SITES, sitesAtRisk, whatWasSeen, type Actio
  */
 export class ExplainedRules implements Coordinator {
   readonly name = "reglas+registro";
-  private readonly rules = new GreedyCoordinator(undefined, true);
+  private readonly rules: GreedyCoordinator;
   private readonly today = new GreedyCoordinator();
+
+  constructor(phonesRound = false) {
+    this.rules = new GreedyCoordinator(undefined, true, phonesRound);
+  }
 
   decide(input: DecideInput): Decision {
     const actions = this.rules.decide(input);
@@ -42,6 +46,7 @@ export class ExplainedRules implements Coordinator {
       return `${incident ? `P${incident.priority}` : "incidente"}: es la unidad adecuada libre que antes llega${incident?.unreachable ? " (no hay ruta por carretera)" : ""}`;
     }
     if (action.type === "transport") return "hospital con cama libre más cercano";
+    if (action.type === "call_zone") return "zona de la que nadie ha llamado mientras alrededor sí: preguntar casa por casa si saben de alguien";
     return "zona donde ahora mismo se decide a ciegas";
   }
 }

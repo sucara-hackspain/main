@@ -58,7 +58,10 @@ export default function RunMap({
   matches,
   filtered,
   explain,
+  signals,
 }: {
+  /** The citizen channel on the map: where messages are coming from, and the leads made out of them. */
+  signals?: { heat: { node: number; relevant: boolean }[]; leads: { id: string; node: number; credibility: number; tone: string }[]; focus: string | null } | null;
   /** A decision being read: its orders as arrows, what the rules would have done instead, the held units and the water ten ticks on. */
   explain?: MapExplanation | null;
   graph: GraphData;
@@ -136,6 +139,9 @@ export default function RunMap({
         "cuts-unknown",
         "cuts-known",
         "sightings",
+        "outages",
+        "rounds",
+        "messages",
         "explain-water",
         "explain-rules",
         "explain-orders",
@@ -215,6 +221,19 @@ export default function RunMap({
           "line-width": 3,
           "line-dasharray": [1.5, 1.5],
           "line-opacity": 0.85,
+        },
+      });
+      m.addLayer({ id: "outages", type: "fill", source: "outages", paint: { "fill-color": "#111827", "fill-opacity": 0.13 } });
+      m.addLayer({ id: "outages-edge", type: "line", source: "outages", paint: { "line-color": "#111827", "line-width": 1.5, "line-dasharray": [1, 2], "line-opacity": 0.6 } });
+      m.addLayer({ id: "rounds", type: "line", source: "rounds", paint: { "line-color": ["case", ["boolean", ["get", "found"], false], "#16a34a", color("--info")], "line-width": 2.5, "line-dasharray": [0.5, 1.5] } });
+      m.addLayer({
+        id: "messages",
+        type: "circle",
+        source: "messages",
+        paint: {
+          "circle-radius": ["case", ["boolean", ["get", "relevant"], false], 5, 3],
+          "circle-color": ["case", ["boolean", ["get", "relevant"], false], color("--info"), color("--muted-foreground")],
+          "circle-opacity": ["case", ["boolean", ["get", "relevant"], false], 0.85, 0.22],
         },
       });
       m.addLayer({ id: "explain-water", type: "line", source: "explain-water", paint: { "line-color": color("--info"), "line-width": 1.5, "line-dasharray": [4, 3], "line-opacity": 0.9 } });
@@ -436,6 +455,19 @@ export default function RunMap({
         })),
       ),
     );
+    (m.getSource("outages") as ml.GeoJSONSource).setData(collection((frame.outages ?? []).map((o) => area(circle(graph.nodes[o.node], o.radiusM)))));
+    (m.getSource("rounds") as ml.GeoJSONSource).setData(collection((frame.outbound ?? []).map((r) => line(circle(graph.nodes[r.node], 450), { found: (r.found ?? 0) > 0 }))));
+    (m.getSource("messages") as ml.GeoJSONSource).setData(
+      collection((signals?.heat ?? []).map((h) => ({ type: "Feature", properties: { relevant: h.relevant }, geometry: { type: "Point", coordinates: graph.nodes[h.node] } }))),
+    );
+    for (const lead of signals?.leads ?? []) {
+      const el = document.createElement("div");
+      el.className = `run-lead ${signals!.focus === lead.id ? "is-focus" : ""}`;
+      el.dataset.tone = lead.tone;
+      el.textContent = lead.id;
+      el.title = `Pista ciudadana ${lead.id} · credibilidad ${Math.round(lead.credibility * 100)} %`;
+      markers.current.push(new ml.Marker({ element: el, anchor: "bottom", offset: [0, -4] }).setLngLat(graph.nodes[lead.node]).addTo(m!));
+    }
     // Reading a decision: straight arrows say "who was sent where" better than the street route does.
     const drawn = explain?.orders.filter((o) => o.to) ?? [];
     (m.getSource("explain-orders") as ml.GeoJSONSource).setData(
@@ -453,7 +485,7 @@ export default function RunMap({
           .map((i) => area(circle(graph.nodes[i.node], i.locationErrorM), { priority: i.priority })),
       ),
     );
-  }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered, explain]);
+  }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered, explain, signals]);
 
   return (
     <div className="app-map-wrap operational-map">

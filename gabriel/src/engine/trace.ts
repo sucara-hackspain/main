@@ -3,6 +3,7 @@ import { unitLonLat, summarize, type Summary } from "./engine";
 import type { Graph } from "./graph";
 import { FLOOD_FRINGE_M } from "./engine";
 import { incidentLine } from "./incidents";
+import type { LeadDesk, ReadMessage } from "./reading";
 import { infoGaps } from "./recon";
 import { waterArrivalTicks } from "./sites";
 import { believedWater, cutOffForecast, projectedRadius } from "./water";
@@ -76,6 +77,18 @@ export interface Frame {
   /** Places with people inside who are fine until the water arrives. Absent in runs older than the sites. */
   sites?: SiteFrame[];
   gauges?: { name: string; node: number; level: number; overflowTick: number }[];
+  outages?: { id: string; node: number; radiusM: number; untilTick: number }[];
+  /** Rounds of outbound calls: in progress (found = null) and answered. */
+  outbound?: { zone: string; node: number; tick: number; found: number | null }[];
+  /** The citizen channel as its reader left it: running totals, this tick's messages, and every lead so far. */
+  channel?: {
+    reader: string;
+    received: number;
+    read: number;
+    relevant: number;
+    fresh: ReadMessage[];
+    leads: { id: string; tick: number; node: number; street: string | null; summary: string; credibility: number; urgency: string; messages: string[]; registry: string | null; real: boolean }[];
+  };
   scenes: SceneFrame[];
   incidents: IncidentFrame[];
   /** Truth: where the water really is. */
@@ -154,6 +167,8 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
       caught: site.floodedTick === null ? null : people.length - site.safe,
     })),
     gauges: world.gauges.map(({ name, node, level, overflowTick }) => ({ name, node, level, overflowTick })),
+    outages: world.outages.filter((o) => world.tick < o.untilTick).map(({ id, node, radiusM, untilTick }) => ({ id, node, radiusM, untilTick })),
+    outbound: belief.outboundRounds.filter((r) => world.tick - r.tick <= 12),
     floods: world.floods.map((f) => ({ id: f.id, name: f.name, node: f.node, radiusM: Math.round(f.radiusM), fringeM: Math.round(f.radiusM + FLOOD_FRINGE_M) })),
     knownWater: {
       zones: belief.floods.map((z) => ({ id: z.id, name: z.name, node: z.node, radiusM: projectedRadius(z, world.tick), ageTicks: world.tick - z.asOfTick })),
@@ -170,11 +185,21 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
   };
 }
 
-export function makeTickRecord(result: TickResult, world: World, belief: Belief, graph: Graph): TickRecord {
+export function makeTickRecord(result: TickResult, world: World, belief: Belief, graph: Graph, desk: LeadDesk | null = null): TickRecord {
   const calls = result.reports.flatMap((r) => (r.event.type === "call_received" ? [r.event.call] : []));
   const record: TickRecord = {
     tick: result.tick,
-    frame: makeFrame(world, belief, graph),
+    frame: {
+      ...makeFrame(world, belief, graph),
+      channel: desk
+        ? {
+            reader: desk.reader.name,
+            ...desk.stats,
+            fresh: desk.lastTick,
+            leads: desk.leads.map((l) => ({ id: l.id, tick: l.tick, node: l.node, street: l.street, summary: l.summary, credibility: l.credibility, urgency: l.urgency, messages: l.messages, registry: l.registry?.who ?? null, real: l.about !== null })),
+          }
+        : undefined,
+    },
     events: [...calls.map((call) => ({ type: "call_received" as const, tick: result.tick, call })), ...result.events],
     calls,
     actions: result.actions,

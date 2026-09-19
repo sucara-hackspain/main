@@ -37,6 +37,8 @@ import {
 import ThoughtsView from "./thoughts/ThoughtsView";
 import DecisionPanel, { DecisionStrip } from "./decisions/DecisionPanel";
 import { decisionCards } from "./decisions/model";
+import SignalsView from "./signals/SignalsView";
+import { channelView } from "./signals/model";
 import { auditItems, laneName } from "./thoughts/model";
 import DecisionBanner from "./interventions/DecisionBanner";
 import DecisionRoom, { PendingDecisionBar } from "./interventions/DecisionRoom";
@@ -110,7 +112,8 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"map" | "flow" | "tickets" | "decisions">("map"),
+    [view, setView] = useState<"map" | "flow" | "tickets" | "decisions" | "signals">("map"),
+    [leadFocus, setLeadFocus] = useState<string | null>(null),
     [orderFocus, setOrderFocus] = useState<string | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
@@ -194,6 +197,16 @@ function RunSession({
   const tickets = useMemo(() => buildTickets(visible, seconds), [visible, seconds]);
   // Decisions are read with hindsight: what came of each order is looked up in the ticks that followed.
   const cards = useMemo(() => (graph && meta ? decisionCards(ticks, graph, meta) : []), [ticks, graph, meta]);
+  const channel = useMemo(() => {
+    if (!graph) return null;
+    const rad = Math.PI / 180;
+    const distanceM = (a: number, b: number) => {
+      const [lon1, lat1] = graph.nodes[a], [lon2, lat2] = graph.nodes[b];
+      const x = (lon2 - lon1) * rad * Math.cos(((lat1 + lat2) / 2) * rad), y = (lat2 - lat1) * rad;
+      return Math.sqrt(x * x + y * y) * 6371000;
+    };
+    return channelView(visible, distanceM);
+  }, [visible, graph]);
   const card = useMemo(() => [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0] ?? null, [cards, current]);
   const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
   const selection =
@@ -374,6 +387,10 @@ function RunSession({
               <Scale size={14} />
               Decisiones
             </button>
+            <button aria-pressed={view === "signals"} className={view === "signals" ? "is-active" : ""} onClick={() => setView("signals")}>
+              <Radio size={14} />
+              Señales{channel ? ` · ${channel.leads.length}` : ""}
+            </button>
           </div>
           {current && (
             <InterventionInbox
@@ -455,12 +472,15 @@ function RunSession({
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
+          ) : view === "signals" ? (
+            <SignalsView view={channel} seconds={seconds} focus={leadFocus} onFocus={setLeadFocus} />
           ) : view === "map" || view === "decisions" ? (
             graph &&
             meta && (
               <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
                 {view === "decisions" && <DecisionStrip cards={cards} active={card} onGo={(c) => seekTick(c.tick)} />}
                 <RunMap
+                  signals={channel ? { heat: channel.heat, leads: channel.leads.map((l) => ({ id: l.id, node: l.node, credibility: l.credibility, tone: l.outcome.tone })), focus: leadFocus } : null}
                   explain={view === "decisions" && card ? {
                     orders: card.orders.map((o) => ({ key: o.key, kind: o.kind, from: o.from, to: o.to, own: card.compared && !o.shared })),
                     rules: card.rulesOnly.map((o) => ({ from: o.from, to: o.to })),

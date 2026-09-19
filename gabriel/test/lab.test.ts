@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CallObserver, Graph, GreedyCoordinator, Simulation, type Action, type Coordinator, type GraphData } from "../src/engine";
+import { buildSignals, CallObserver, Graph, GreedyCoordinator, HumanReader, KeywordReader, LeadDesk, type Reader, Simulation, type Action, type Coordinator, type GraphData } from "../src/engine";
 import { applyEdit, diffDoctrine, EMPTY, renderDoctrine } from "../src/lab/doctrine";
 import { readResearchOutput } from "../src/lab/researcher";
 import { generateScenario, ScriptedMaster, type ScenarioSpec } from "../src/lab/scenario";
@@ -113,5 +113,46 @@ describe("sites: people who are fine until the water arrives", () => {
     await sim.run(2);
     expect(sim.world.sites.filter((s) => s.warnedTick !== null).length).toBeLessThanOrEqual(4);
     expect(sim.world.log.some((e) => e.type === "action_rejected" && e.reason.includes("outbound"))).toBe(true);
+  });
+});
+
+describe("citizen channel: the same night always says the same things, and who reads it decides what is found", () => {
+  const H: ScenarioSpec = { id: "TH", family: "test", split: "train", title: "test", seed: 21, floods: [0], blackoutTick: 3, volume: 2, dana: { pSilent: 0.35, pSilentFlood: 0.5, pSilentInWater: 0.8 } };
+
+  it("is written from the script alone, mostly noise, with traces of the silent scenes", () => {
+    const scenario = generateScenario(H, graph);
+    const a = buildSignals(scenario.script, graph, scenario.seed, scenario.ticks, 2);
+    const b = buildSignals(scenario.script, graph, scenario.seed, scenario.ticks, 2);
+    expect(a.signals.map((s) => s.text)).toEqual(b.signals.map((s) => s.text));
+    const real = a.signals.filter((s) => s.about !== null);
+    expect(real.length).toBeGreaterThan(10);
+    expect(real.length / a.signals.length).toBeLessThan(0.1);
+    const silent = scenario.script.flatMap((x) => (x.action.type === "spawn_scene" && x.action.silent ? [x.action.node] : []));
+    expect(silent.every((node) => real.some((s) => s.about === node))).toBe(true);
+  });
+
+  it("a room reads little and well, keywords read everything and believe the jokes, a perfect reader finds the most", () => {
+    const scenario = generateScenario(H, graph);
+    const night = buildSignals(scenario.script, graph, scenario.seed, scenario.ticks, 2);
+    const desk = (reader: Reader) => {
+      const d = new LeadDesk(graph, night.signals, night.registry, reader);
+      for (let tick = 0; tick < scenario.ticks; tick++) d.take(tick);
+      return d;
+    };
+    const [room, words, perfect] = [desk(new HumanReader(6)), desk(new KeywordReader()), desk(new HumanReader(Infinity))];
+    expect(room.stats.read).toBeLessThan(perfect.stats.read / 3);
+    expect(room.leads.every((l) => l.about !== null)).toBe(true);
+    expect(words.leads.filter((l) => l.about === null).length).toBeGreaterThan(words.leads.filter((l) => l.about !== null).length);
+    expect(perfect.leads.filter((l) => l.about !== null).length).toBeGreaterThan(room.leads.length);
+  });
+
+  it("a lead reaches dispatch as one more call, and phoning round a zone turns silence into calls", async () => {
+    const scenario = generateScenario(H, graph);
+    const night = buildSignals(scenario.script, graph, scenario.seed, scenario.ticks, 2);
+    const sim = new Simulation({ graph, seed: scenario.seed, master: new ScriptedMaster(scenario), coordinator: new GreedyCoordinator(undefined, false, true), config: scenario.config, signals: { night, reader: new HumanReader(Infinity) } });
+    await sim.run(40);
+    expect(sim.belief.calls.some((c) => c.source === "citizen")).toBe(true);
+    expect(sim.world.log.some((e) => e.type === "outbound_placed")).toBe(true);
+    expect(sim.world.outages.length).toBe(1);
   });
 });

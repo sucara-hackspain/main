@@ -34,6 +34,7 @@ export interface Scenario {
   ticks: number;
   config: Partial<SimConfig>;
   script: { tick: number; action: MasterAction }[];
+  volume?: number;
   /**
    * A moment instead of a whole night: the rule-based dispatcher plays up to `tick`, the agent takes the next
    * `decisions` decisions, and the dispatcher plays the rest. Whatever changes in the count is down to those decisions.
@@ -96,6 +97,10 @@ export interface ScenarioSpec {
   floodTicks?: number[];
   /** Care homes, schools and car parks in the water's path, full of people who are fine until it arrives. */
   sites?: number;
+  /** The power goes out over the flooded districts at this tick: hardly anyone inside can phone 112. */
+  blackoutTick?: number;
+  /** How loud the citizen channel is: 1 is a bad night, 5 is everyone posting at once. */
+  volume?: number;
 }
 
 const SITE_NAMES: Record<SiteKind, string[]> = {
@@ -154,6 +159,7 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
 
   for (let tick = 0; tick < TICKS; tick++) {
     const actions = master.act(world, graph, masterRng);
+    if (tick === spec.blackoutTick) for (const f of floods) actions.push({ type: "blackout", node: graph.nearestNode(f.lon, f.lat), radiusM: 1500, ticks: TICKS });
     // A catastrophe is many emergencies at once, not one after another: more rolls of the same dice per tick.
     for (let extra = 1; extra < (spec.intensity ?? 1); extra++) actions.push(...master.act(world, graph, masterRng).filter((a) => a.type === "spawn_scene"));
     for (let i = actions.length - 1; i >= 0; i--) if (tick >= EVENT_TICKS && actions[i].type === "spawn_scene") actions.splice(i, 1);
@@ -185,6 +191,7 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
     ticks: TICKS,
     config: spec.config ?? {},
     script,
+    volume: spec.volume,
     stats: {
       scenes: scenes.length,
       silent: scenes.filter((s) => s.silent).length,
@@ -235,6 +242,11 @@ export const COLLECTION: ScenarioSpec[] = [
   { id: "G2", family: "G · Anticipación", split: "train", title: "La Punta avisa con 10 ticks; sitios en el camino", seed: 702, floods: [LA_PUNTA, SANT_ISIDRE], floodTicks: [10, 24], sites: 6 },
   { id: "G3", family: "G · Anticipación", split: "validation", title: "Natzaret avisa con 14 ticks; sitios en el camino", seed: 703, floods: [NATZARET, LA_TORRE], floodTicks: [14, 28], sites: 6 },
   { id: "G4", family: "G · Anticipación", split: "test", title: "Malilla avisa con 11 ticks; sitios en el camino", seed: 704, floods: [MALILLA, LA_PUNTA], floodTicks: [11, 25], sites: 6 },
+
+  { id: "H1", family: "H · Apagón y redes", split: "train", title: "La Torre a oscuras: casi nadie puede llamar", seed: 801, floods: [LA_TORRE], blackoutTick: 3, volume: 3, dana: SILENT },
+  { id: "H2", family: "H · Apagón y redes", split: "train", title: "La Punta a oscuras", seed: 802, floods: [LA_PUNTA], blackoutTick: 5, volume: 3, dana: SILENT },
+  { id: "H3", family: "H · Apagón y redes", split: "validation", title: "Malilla a oscuras", seed: 803, floods: [MALILLA], blackoutTick: 4, volume: 3, dana: SILENT },
+  { id: "H4", family: "H · Apagón y redes", split: "test", title: "Natzaret a oscuras", seed: 804, floods: [NATZARET], blackoutTick: 2, volume: 3, dana: SILENT },
 
   { id: "E1", family: "E · Dos focos y hospitales saturados", split: "test", title: "La Torre y Natzaret a la vez", seed: 501, floods: [LA_TORRE, NATZARET], config: SATURATED },
   { id: "E2", family: "E · Dos focos y hospitales saturados", split: "test", title: "Sant Isidre y La Punta a la vez", seed: 502, floods: [SANT_ISIDRE, LA_PUNTA], config: SATURATED },

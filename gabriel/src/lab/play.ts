@@ -1,8 +1,8 @@
 // One game: a scenario, a coordinator, and the count of who did not make it.
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ExplainedRules } from "../coordinators/explained";
 import { HappyRobotCoordinator } from "../coordinators/happyrobot";
-import { CallObserver, GreedyCoordinator, makeTickRecord, Simulation, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
+import { buildSignals, CachedReader, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
 import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
 import { renderDoctrine, type Doctrine } from "./doctrine";
 import { ScriptedMaster, type Scenario } from "./scenario";
@@ -33,6 +33,8 @@ export interface Game {
   findings: Finding[];
   /** What the agent ordered and why, decision by decision (kept for moments, where there are only a few). */
   decisions?: { tick: number; situation: string; plan?: string; orders: string[] }[];
+  /** The citizen channel over the night: what came in, what was read, and how the leads turned out. */
+  channel?: { reader: string; received: number; read: number; relevant: number; leads: number; realLeads: number; silentScenes: number; silentFound: number };
 }
 
 /** The dispatcher plays the night, except for a few decisions in the middle that are the agent's. */
@@ -66,7 +68,30 @@ class Handover implements Coordinator {
 
 const MAX_FALLBACK_SHARE = 0.2;
 
+/** Who reads the citizen channel. "sala": a control room, a few messages a tick. "palabras": keyword rules. "agente": an LLM's reading, kept on disk. */
+export type Attention = "sala" | "palabras" | "agente" | "perfecto";
+export const READINGS_DIR = "lab/readings";
+const SALA_PER_TICK = 6;
+
+const nights = new Map<string, NightSignals>();
+export function signalsOf(scenario: Scenario, graph: Graph): NightSignals {
+  const id = scenario.handover?.night ?? scenario.id;
+  if (!nights.has(id)) nights.set(id, buildSignals(scenario.script, graph, scenario.seed, scenario.ticks, scenario.volume ?? 1));
+  return nights.get(id)!;
+}
+
+export function readerFor(attention: Attention, scenario: Scenario): Reader {
+  if (attention === "sala") return new HumanReader(SALA_PER_TICK);
+  if (attention === "perfecto") return new HumanReader(Infinity);
+  if (attention === "palabras") return new KeywordReader();
+  const file = `${READINGS_DIR}/${scenario.handover?.night ?? scenario.id}.json`;
+  if (!existsSync(file)) throw new Error(`${file} does not exist: read the night first (pnpm lab:read ${scenario.id})`);
+  return new CachedReader(JSON.parse(readFileSync(file, "utf8")) as Record<string, Verdict>);
+}
+
 export interface PlayOptions {
+  /** The citizen channel is on, read by this; `outbound` also lets the dispatcher phone round silent zones. */
+  channel?: { attention: Attention; outbound?: boolean };
   rep?: number;
   /** Also leave the game where the viewers can open it (runs/<id>). */
   traceId?: string;
@@ -88,7 +113,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     });
     coordinator = scenario.handover ? new Handover(agent, scenario.handover.tick, scenario.handover.decisions) : agent;
   } else {
-    coordinator = policy.kind === "registry" ? new ExplainedRules() : new GreedyCoordinator();
+    coordinator = policy.kind === "registry" ? new ExplainedRules(options.channel?.outbound) : new GreedyCoordinator(undefined, false, options.channel?.outbound);
   }
 
   const sim = new Simulation({
@@ -98,6 +123,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     coordinator,
     config: scenario.config,
     observer: policy.kind === "informed" ? new CallObserver({ perfect: true }) : undefined,
+    signals: options.channel ? { night: signalsOf(scenario, graph), reader: readerFor(options.channel.attention, scenario) } : undefined,
   });
 
   const meta: RunMeta | null = dir
@@ -145,7 +171,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
       });
       continue;
     }
-    const record = makeTickRecord(result, sim.world, sim.belief, graph);
+    const record = makeTickRecord(result, sim.world, sim.belief, graph, sim.desk);
     records.push(record);
     options.onTick?.(result.tick, sim.world.victims.filter((v) => v.status === "dead").length);
     if (dir) appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
@@ -178,7 +204,16 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     // In a moment, what happened before the agent took over says nothing about it.
     findings: evaluation.findings.filter((f) => f.tick >= from),
     decisions: scenario.handover ? decisions : undefined,
+    channel: sim.desk ? channelSummary(sim, scenario) : undefined,
   };
+}
+
+/** How much of what nobody phoned about got found anyway: a crew reached it, whatever led it there. */
+function channelSummary(sim: Simulation, scenario: Scenario): NonNullable<Game["channel"]> {
+  const silent = scenario.script.flatMap((x) => (x.action.type === "spawn_scene" && x.action.silent ? [x.action.node] : []));
+  const reached = new Set(sim.world.log.flatMap((e) => (e.type === "scene_assessed" ? [e.node] : [])));
+  const desk = sim.desk!;
+  return { reader: desk.reader.name, ...desk.stats, leads: desk.leads.length, realLeads: desk.leads.filter((l) => l.about !== null).length, silentScenes: silent.length, silentFound: silent.filter((node) => reached.has(node)).length };
 }
 
 /** Runs jobs a few at a time: the engine costs milliseconds, the wait is all on the platform. */

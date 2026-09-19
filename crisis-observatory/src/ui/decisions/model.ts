@@ -42,7 +42,7 @@ export interface DecisionCard {
 const AHEAD_TICKS = 10;
 const SEARCH_TICKS = 70;
 
-const target = (a: Action) => (a.type === "dispatch" ? a.incidentId : a.type === "transport" ? a.hospitalId : a.type === "warn" ? a.siteId : String(a.node));
+const target = (a: Action) => (a.type === "dispatch" ? a.incidentId : a.type === "transport" ? a.hospitalId : a.type === "warn" ? a.siteId : a.type === "call_zone" ? a.zone : String(a.node));
 const keyOf = (a: Action) => `${a.type}:${a.unitId}:${target(a)}`;
 
 export function decisionCards(records: TickRecord[], graph: GraphData, meta: RunMeta): DecisionCard[] {
@@ -65,6 +65,7 @@ export function decisionCards(records: TickRecord[], graph: GraphData, meta: Run
       if (a.type === "transport") return `${a.unitId} → trasladar a ${a.hospitalId}`;
       if (a.type === "scout") return `${a.unitId} → mirar ${a.incidentId ?? "zona sin datos"}`;
       if (a.type === "warn") return `112 llama a ${a.siteId}${name(a.siteId)}`;
+      if (a.type === "call_zone") return `112 llama casa por casa en ${a.zone}`;
       const site = siteAt(a.node);
       const hospital = meta.hospitals.find((h) => h.node === a.node);
       return `${a.unitId} → esperar en ${site ? `${site.id}${name(site.id)}` : hospital ? hospital.id : "punto adelantado"}`;
@@ -89,7 +90,7 @@ export function decisionCards(records: TickRecord[], graph: GraphData, meta: Run
       reason: own ? (d.reasons?.[n] ?? "") : "",
       applies: own ? (d.applies?.[n] ?? []) : [],
       etaTicks: applied.find((e) => keyOf(e.action) === keyOf(a))?.etaTicks ?? null,
-      from: a.type === "warn" ? null : (record.frame.units.find((u) => u.id === a.unitId)?.pos ?? null),
+      from: a.type === "warn" || a.type === "call_zone" ? null : (record.frame.units.find((u) => u.id === a.unitId)?.pos ?? null),
       to: place(a),
       shared: own ? baselineKeys.has(keyOf(a)) : false,
       after: own ? aftermath(a, record, later, rejected.find((e) => keyOf(e.action) === keyOf(a))?.reason ?? null) : null,
@@ -133,6 +134,11 @@ function aftermath(a: Action, record: TickRecord, later: TickRecord[], rejection
     return flooded.caught === 0
       ? { tone: "good", text: `al llegar el agua (tick ${flooded.tick}) estaban todos a salvo: ${flooded.safe}` }
       : { tone: "bad", text: `al llegar el agua (tick ${flooded.tick}) quedaban ${flooded.caught} dentro; ${flooded.safe} a salvo` };
+  }
+  if (a.type === "call_zone") {
+    const answered = events.find((e) => e.type === "outbound_answered" && e.zone === a.zone);
+    if (answered?.type !== "outbound_answered") return { tone: "neutral", text: "la ronda aún no ha terminado" };
+    return answered.sceneIds.length ? { tone: "good", text: `~${answered.homes} casas llamadas: ${answered.sceneIds.length} vecino(s) sabían de alguien en apuros` } : { tone: "neutral", text: `~${answered.homes} casas llamadas: nadie sabía de nadie en apuros` };
   }
   // Whatever the unit was told next ends this order's story.
   const next = later.find((r) => r.actions.some((x) => x.unitId === a.unitId));

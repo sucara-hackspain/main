@@ -175,3 +175,9 @@
 .map-explain-legend i.own { border-top-color:var(--info); }
 .map-explain-legend i.rules { border-top:2px dotted var(--muted-foreground); }
 .map-explain-legend i.water { border-top:2px dashed var(--info); }
+
+/* A lead from the citizen channel: a speech-bubble pin, green once a crew confirmed it, red if nobody was there. */
+.run-lead { font:600 10px var(--font-mono); padding:2px 6px; border-radius:8px 8px 8px 2px; background:var(--info); color:#fff; box-shadow:var(--dropdown-shadow); pointer-events:auto; }
+.run-lead[data-tone="good"] { background:#16a34a; }
+.run-lead[data-tone="bad"] { background:var(--destructive); }
+.run-lead.is-focus { outline:3px solid color-mix(in srgb,var(--info) 40%,transparent); transform:scale(1.25); }
