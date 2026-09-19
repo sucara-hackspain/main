@@ -1,22 +1,26 @@
 // Pushes the coordinator's prompt and output schema from git into its HappyRobot workflow, so the
 // platform never drifts from the repo:
 //
-//   pnpm hr:sync              sync and publish
+//   pnpm hr:sync              sync and publish the coordinator
+//   pnpm hr:sync --dream      same for the dream workflow (HAPPYROBOT_DREAM_WORKFLOW_ID / _NODE_ID)
 //   pnpm hr:sync --dry-run    show what would be sent
 //
 // The workflow itself (trigger + decision node) is created once in the HappyRobot UI; this only
 // rewrites the decision node's prompt, input and json_schema.
 import { parseArgs } from "node:util";
 import { HappyRobotClient } from "@happyrobot-ai/sdk";
-import { HR_SCHEMA, SYSTEM_PROMPT } from "../src/coordinators/protocol";
+import { HR_SCHEMA as COORDINATOR_SCHEMA, SYSTEM_PROMPT as COORDINATOR_PROMPT } from "../src/coordinators/protocol";
+import { DREAM_HR_SCHEMA, DREAM_PROMPT } from "../src/memory/dream-protocol";
 
-const { values } = parseArgs({ options: { "dry-run": { type: "boolean", default: false } } });
+const { values } = parseArgs({ options: { "dry-run": { type: "boolean", default: false }, dream: { type: "boolean", default: false } } });
+const SYSTEM_PROMPT = values.dream ? DREAM_PROMPT : COORDINATOR_PROMPT;
+const HR_SCHEMA = values.dream ? DREAM_HR_SCHEMA : COORDINATOR_SCHEMA;
 
 const apiKey = process.env.HAPPYROBOT_API_KEY;
-const workflowId = process.env.HAPPYROBOT_WORKFLOW_ID;
-const nodeId = process.env.HAPPYROBOT_NODE_ID;
+const workflowId = values.dream ? process.env.HAPPYROBOT_DREAM_WORKFLOW_ID : process.env.HAPPYROBOT_WORKFLOW_ID;
+const nodeId = values.dream ? process.env.HAPPYROBOT_DREAM_NODE_ID : process.env.HAPPYROBOT_NODE_ID;
 if (!apiKey || !workflowId || !nodeId) {
-  console.error("Set HAPPYROBOT_API_KEY, HAPPYROBOT_WORKFLOW_ID and HAPPYROBOT_NODE_ID (see .env.example).");
+  console.error(`Set HAPPYROBOT_API_KEY, HAPPYROBOT_${values.dream ? "DREAM_" : ""}WORKFLOW_ID and HAPPYROBOT_${values.dream ? "DREAM_" : ""}NODE_ID (see .env.example).`);
   process.exit(1);
 }
 
