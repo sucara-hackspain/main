@@ -46,6 +46,9 @@ import TicketsView, { TicketDetail } from "./tickets/TicketsView";
 import { buildTickets, type Ticket, type TicketState } from "./tickets/model";
 
 const RunMap = lazy(() => import("./map/RunMap"));
+const ASK_FOR_APPROVAL = false;
+const NO_PENDING: ReturnType<typeof useInterventions>["pending"] = [];
+
 // Read once: a run that mounts while another shows a pending count would take the count as its title.
 const pageTitle = document.title;
 // ?iteracion=1 keeps the first iteration, a banner above the map, to compare with the second:
@@ -127,7 +130,10 @@ function RunSession({
   const current = ticks[Math.min(index, ticks.length - 1)],
     seconds = meta?.config.tickSeconds ?? 30;
   const interventions = useInterventions({ ticks, current, graph, meta });
-  const { pending, router } = interventions;
+  const { router } = interventions;
+  // Approvals are switched off for now: the coordinator acts on its own and nothing takes over the screen,
+  // pauses the replay or rings. Set ASK_FOR_APPROVAL back to true to have the operator asked again.
+  const pending = ASK_FOR_APPROVAL ? interventions.pending : NO_PENDING;
   const sound = useAlertSound();
   const { chime } = sound;
   // A new request brings the operator back to the room. If it opens while time moves on its own
