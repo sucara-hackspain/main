@@ -3,7 +3,7 @@
 //
 // Kept here (not inside a provider) so both back ends share one prompt, and so the prompt stays in
 // git even when it also lives in a HappyRobot workflow: `pnpm hr:sync` pushes this file up there.
-import { resolve, scoutTargetNode, type Action, type DecideInput } from "../engine";
+import { resolve, scoutTargetNode, stagingPoints, type Action, type DecideInput, type Hold, type HoldFor } from "../engine";
 
 export const SYSTEM_PROMPT = `Eres el coordinador de emergencias de una ciudad en plena crisis: mandas ambulancias, bomberos, rescate acuático, un helicóptero y drones de reconocimiento. Cada vez que algo cambia recibes un parte de situación y decides qué órdenes dar. Objetivo único: salvar el máximo de vidas.
 
@@ -28,7 +28,9 @@ REGLAS DEL MUNDO
 ÓRDENES
 - dispatch {unitId, incidentId, hospitalId}: unidad SIN herido a bordo va al incidente y, si traslada, sigue sola al hospital indicado (para bomberos no pongas hospitalId). Puedes desviar una que iba a otro incidente; ese otro se queda sin ella.
 - transport {unitId, hospitalId}: ambulancia CON herido a bordo va a ese hospital.
-- reposition {unitId, hospitalId}: ambulancia vacía va a esperar junto a ese hospital (también sirve para anular una salida).
+- reposition {unitId, target}: unidad vacía va a esperar a un sitio: un hospital (H2) o un PUNTO DE ESPERA del parte (E1N). También sirve para anular una salida. Una unidad que ya está cerca de donde va a hacer falta llega a tiempo; una que sale del otro lado de la ciudad, no.
+- hold {unitId, onlyFor, ticks}: RESERVA una unidad libre durante esos ticks. onlyFor: "agua" (solo para víctimas en el agua o sin ruta por carretera), "P0" (solo para vida en riesgo inmediato) o "nada" (no se toca hasta que tú la sueltes). Mientras dure, nadie la gasta en otra cosa, tampoco tú por despiste. No reserves lo que hace falta ahora mismo.
+- release {unitId}: levanta la reserva.
 - scout {unitId, target}: manda un dron o el helicóptero a mirar. "target" es un id de la sección LO QUE NO SABES: un incidente (C7) o una zona (Z142). No vale ningún otro id.
 
 CÓMO LEER EL PARTE
@@ -36,6 +38,10 @@ CÓMO LEER EL PARTE
 - "FALTAN n" indica cuántas unidades más necesita un incidente según lo que se sabe de él.
 - No puedes dar órdenes a una unidad hasta que esté libre, salvo desviar una que va de camino sin herido a bordo.
 - Si no hay nada que mejorar, devuelve actions vacío.
+
+TU CUADERNO
+- Cada decisión tuya empieza en frío: no recuerdas la anterior. Tu única memoria es el cuaderno. En "plan" escribe (60 palabras como mucho) qué intentas conseguir en los próximos ~10 ticks y por qué tienes cada unidad donde la tienes; en "watch", qué vigilas y qué harás si pasa ("si el agua llega a E1N, saco A2"). El siguiente parte empieza con lo que escribiste y con lo que pasó desde entonces. Mantén el plan mientras funcione; cámbialo cuando los hechos lo contradigan y di por qué.
+- Si el parte dice que en esta sesión no hay cuaderno, no uses hold, release ni puntos de espera, y deja "plan" y "watch" vacíos.
 
 DOCTRINA
 - Cómo decidir no está escrito aquí: se aprende. El parte puede empezar con tu DOCTRINA Y MEMORIA: principios, heurísticas y errores aprendidos en sesiones anteriores, cada uno con un id. Tenla en cuenta al decidir; si en este caso concreto no aplica o ves algo mejor, decide tú. Si no trae doctrina, decide con tu propio criterio.
@@ -53,23 +59,29 @@ export const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          type: { type: "string", enum: ["dispatch", "transport", "reposition", "scout"] },
+          type: { type: "string", enum: ["dispatch", "transport", "reposition", "scout", "hold", "release"] },
           unitId: { type: "string" },
           incidentId: { type: "string" },
           hospitalId: { type: "string" },
-          target: { type: "string", description: "Solo para scout: id de incidente (C7) o de zona (Z142) de LO QUE NO SABES." },
+          target: { type: "string", description: "scout: id de incidente (C7) o de zona (Z142) de LO QUE NO SABES. reposition: hospital (H2) o punto de espera (E1N)." },
+          onlyFor: { type: "string", enum: ["agua", "P0", "nada"], description: "Solo para hold." },
+          ticks: { type: "number", description: "Solo para hold: cuánto dura la reserva." },
           reason: { type: "string" },
           applies: { type: "array", items: { type: "string" }, description: "Ids de la doctrina seguidos en esta orden (D1, H5, A3...)." },
         },
         required: ["type", "unitId", "reason"],
       },
     },
+    plan: { type: "string" },
+    watch: { type: "string" },
   },
   required: ["situation", "actions"],
 };
 
 export interface LlmAction {
-  type: "dispatch" | "transport" | "reposition" | "scout";
+  type: "dispatch" | "transport" | "reposition" | "scout" | "hold" | "release";
+  onlyFor?: string;
+  ticks?: number;
   unitId: string;
   incidentId?: string;
   hospitalId?: string;
@@ -83,6 +95,8 @@ export interface LlmAction {
 export interface LlmOutput {
   situation: string;
   actions: LlmAction[];
+  plan: string;
+  watch: string;
 }
 
 /** What the agent reads each time: the doctrine from memory, then the situation. */
@@ -102,7 +116,7 @@ export interface LlmTrace {
   error?: string;
 }
 
-export function toAction(raw: LlmAction, { belief, graph }: DecideInput): Action | null {
+export function toAction(raw: LlmAction, { belief, graph, tick }: DecideInput): Action | null {
   if (raw.type === "scout") {
     const target = raw.target ?? raw.incidentId;
     const node = target ? scoutTargetNode(belief, graph, target) : null;
@@ -117,10 +131,34 @@ export function toAction(raw: LlmAction, { belief, graph }: DecideInput): Action
     return { type: "transport", unitId: raw.unitId, hospitalId: raw.hospitalId };
   }
   if (raw.type === "reposition") {
-    const hospital = belief.hospitals.find((h) => h.id === raw.hospitalId);
-    if (hospital) return { type: "reposition", unitId: raw.unitId, node: hospital.node };
+    const where = raw.target ?? raw.hospitalId;
+    const node = belief.hospitals.find((h) => h.id === where)?.node ?? stagingPoints(belief, graph, tick).find((p) => p.id === where)?.node;
+    if (node !== undefined) return { type: "reposition", unitId: raw.unitId, node };
   }
   return null;
+}
+
+const HOLD_FOR = new Set<string>(["agua", "P0", "nada"]);
+const MAX_HOLD_TICKS = 40;
+
+/** Standing orders are the coordinator's own business: the engine never hears of them, the dispatch layer enforces them. */
+export function toStanding(output: LlmOutput, { belief, tick }: DecideInput): { holds: Hold[]; releases: string[]; notes: string[] } {
+  const holds: Hold[] = [];
+  const releases: string[] = [];
+  const notes: string[] = [];
+  for (const raw of output.actions ?? []) {
+    if (!belief.units.some((u) => u.id === raw.unitId)) continue;
+    if (raw.type === "release") {
+      releases.push(raw.unitId);
+      notes.push(`release ${raw.unitId}: ${raw.reason}`);
+    }
+    if (raw.type === "hold" && HOLD_FOR.has(raw.onlyFor ?? "")) {
+      const ticks = Math.max(1, Math.min(MAX_HOLD_TICKS, Math.round(raw.ticks ?? 10)));
+      holds.push({ unitId: raw.unitId, onlyFor: raw.onlyFor as HoldFor, untilTick: tick + ticks, reason: raw.reason });
+      notes.push(`hold ${raw.unitId} solo para ${raw.onlyFor} ${ticks} ticks: ${raw.reason}`);
+    }
+  }
+  return { holds, releases, notes };
 }
 
 /**
@@ -155,10 +193,13 @@ export const HR_SCHEMA = {
     actions: {
       type: "string",
       description:
-        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition"|"scout","unitId":"...","incidentId":"...","hospitalId":"...","target":"...","reason":"...","applies":["H5","D2"]}. `target` solo para scout (id de incidente C7 o de zona Z142). `applies` = ids de la doctrina seguidos en esa orden. Sin órdenes: "[]".',
+        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition"|"scout"|"hold"|"release","unitId":"...","incidentId":"...","hospitalId":"...","target":"...","onlyFor":"agua"|"P0"|"nada","ticks":10,"reason":"...","applies":["H5","D2"]}. `target`: para scout, id de incidente (C7) o de zona (Z142); para reposition, hospital (H2) o punto de espera (E1N). `onlyFor` y `ticks` solo para hold. `applies` = ids de la doctrina seguidos en esa orden. Sin órdenes: "[]".',
     },
+    plan: { type: "string", description: "Tu cuaderno: qué intentas conseguir en los próximos ~10 ticks y por qué tienes cada unidad donde la tienes. 60 palabras como mucho. Vacío si en esta sesión no hay cuaderno." },
+    watch: { type: "string", description: "Tu cuaderno: qué vigilas y qué harás si pasa. 40 palabras como mucho." },
   },
-  required: ["situation", "actions"],
+  // Every property is required: the platform's structured output refuses a schema with optional fields.
+  required: ["situation", "actions", "plan", "watch"],
 } as const;
 
 /** Pull `{situation, actions}` out of whatever the platform wrapped the node output in. */
@@ -179,8 +220,8 @@ export function readOutput(raw: unknown): LlmOutput {
   if (typeof body === "string") body = JSON.parse(body);
   if (!body || typeof body !== "object") throw new Error(`unreadable node output: ${JSON.stringify(raw).slice(0, 200)}`);
 
-  const { situation, actions } = body as { situation?: unknown; actions?: unknown };
+  const { situation, actions, plan, watch } = body as { situation?: unknown; actions?: unknown; plan?: unknown; watch?: unknown };
   const parsed = typeof actions === "string" ? JSON.parse(actions || "[]") : actions;
   if (!Array.isArray(parsed)) throw new Error(`node output has no actions array: ${JSON.stringify(body).slice(0, 200)}`);
-  return { situation: typeof situation === "string" ? situation : "", actions: parsed as LlmAction[] };
+  return { situation: typeof situation === "string" ? situation : "", actions: parsed as LlmAction[], plan: typeof plan === "string" ? plan : "", watch: typeof watch === "string" ? watch : "" };
 }

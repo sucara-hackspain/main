@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { believedWater, buildBriefing, cutOffForecast, Graph, GreedyCoordinator, infoGaps, Simulation, UNIT_KINDS, unitsNeeded, type Action, type Coordinator, type DecideInput, type GraphData } from "../engine";
 import { loadScenarios, ScriptedMaster, type MomentRef, type Scenario } from "./scenario";
 
-const DECISIONS = 3;
+const DECISIONS = Number(process.env.MOMENT_DECISIONS ?? 3);
 const MIN_GAP_TICKS = 7;
 
 interface Candidate {
@@ -72,7 +72,8 @@ if (process.argv[1]?.endsWith("moments.ts")) {
     console.log(`${night.id} ${night.split.padEnd(10)} ${moments.map((m) => `t${m.tick}`).join(" ")}`);
     for (const m of moments) console.log(`     t${m.tick}: ${m.why}`);
   }
-  writeFileSync("lab/moments.json", JSON.stringify(out, null, 2));
+  const file = process.env.LAB_MOMENTS ?? "lab/moments.json";
+  writeFileSync(file, JSON.stringify(out, null, 2));
   const count = (split: string) => out.filter((m) => loadScenarios().find((n) => n.id === m.night)!.split === split).length;
-  console.log(`${out.length} momentos: ${count("train")} de entrenamiento, ${count("validation")} de validación, ${count("test")} de test → lab/moments.json`);
+  console.log(`${out.length} momentos: ${count("train")} de entrenamiento, ${count("validation")} de validación, ${count("test")} de test → ${file}`);
 }

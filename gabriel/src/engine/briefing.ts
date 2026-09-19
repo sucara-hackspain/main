@@ -3,6 +3,7 @@ import { clock, describe } from "./describe";
 import { closuresFor, effectiveNode, flightMps, remainingTicks, UNIT_KINDS } from "./engine";
 import { incidentLine, resolve, unitsNeeded } from "./incidents";
 import { infoGaps } from "./recon";
+import { holdOn, stagingPoints, type Hold } from "./staging";
 import { believedWater, cutOffForecast, projectedRadius } from "./water";
 
 export interface Briefing {
@@ -20,7 +21,12 @@ const RECENT_LOOKS = 6;
 /** Below this, a hole in the picture is not worth waking the coordinator for. */
 const WORTH_A_LOOK = 30;
 
-export function buildBriefing({ tick, reports, belief, graph, config }: DecideInput): Briefing {
+export interface BriefingOptions {
+  /** Show what a coordinator can plan with: where units can be told to wait, and which ones it is holding back. */
+  plan?: { holds: Hold[] };
+}
+
+export function buildBriefing({ tick, reports, belief, graph, config }: DecideInput, options: BriefingOptions = {}): Briefing {
   const closed = new Set(belief.closedEdges);
   const toTicks = (seconds: number) => Math.ceil(seconds / config.ambulanceSpeedFactor / config.tickSeconds);
   const lines: string[] = [];
@@ -57,6 +63,8 @@ export function buildBriefing({ tick, reports, belief, graph, config }: DecideIn
     }
     if (a.brokenUntil !== null) state = `AVERIADA hasta el tick ${a.brokenUntil} (${state})`;
     if (a.stranded) state += " — BLOQUEADA, sin ruta abierta";
+    const hold = options.plan ? holdOn(options.plan.holds, a, tick) : undefined;
+    if (hold) state += ` · RESERVADA por ti solo para ${hold.onlyFor === "nada" ? "lo que tú decidas" : hold.onlyFor} hasta el tick ${hold.untilTick}`;
     lines.push(`- ${a.id} [${UNIT_KINDS[a.kind].label}]: ${state}`);
   }
 
@@ -193,6 +201,23 @@ export function buildBriefing({ tick, reports, belief, graph, config }: DecideIn
         `- Últimas pasadas: ${looks.map((s) => `${s.from} hace ${tick - s.tick} (calidad ${s.quality}, ${s.found} cosa(s) vista(s))`).join(" | ")}. ` +
           "Una pasada con calidad baja o que no vio nada NO demuestra que allí no haya nadie.",
       );
+    }
+  }
+
+  if (options.plan) {
+    const points = stagingPoints(belief, graph, tick);
+    const idle = available.filter(({ amb }) => amb.mission === "idle" || amb.mission === "reposition");
+    if (points.length > 0 && idle.length > 0) {
+      lines.push("", "PUNTOS DE ESPERA (sitios secos por delante de donde estará el agua en 10 ticks; reposition manda allí una unidad libre a esperar lo que venga):");
+      for (const point of points) {
+        const near = open.filter((i) => graph.distanceM(i.node, point.node) <= 800).length;
+        const etas = idle
+          .map(({ amb, times }) => ({ id: amb.id, eta: toTicks(times[point.node]) }))
+          .filter((o) => Number.isFinite(o.eta))
+          .sort((a, b) => a.eta - b.eta)
+          .slice(0, 3);
+        lines.push(`- ${point.id} · ${point.label} · ${near} incidentes abiertos a menos de 800 m · ${etas.map((o) => `${o.id} a ${o.eta} ticks`).join(" | ") || "nadie libre llega"}`);
+      }
     }
   }
 

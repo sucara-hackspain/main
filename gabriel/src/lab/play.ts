@@ -10,7 +10,8 @@ export type Policy =
   | { kind: "greedy" }
   /** Greedy told the truth about every emergency the moment it happens: what perfect information is worth. */
   | { kind: "informed" }
-  | { kind: "agent"; doctrine: Doctrine };
+  /** `harness`: "basic" is the reactive dispatcher the agent used to be; the default lets it plan (stage, hold, notebook). */
+  | { kind: "agent"; doctrine: Doctrine; harness?: "plan" | "basic" };
 
 export interface Game {
   scenario: string;
@@ -28,22 +29,24 @@ export interface Game {
   seconds: number;
   findings: Finding[];
   /** What the agent ordered and why, decision by decision (kept for moments, where there are only a few). */
-  decisions?: { tick: number; situation: string; orders: string[] }[];
+  decisions?: { tick: number; situation: string; plan?: string; orders: string[] }[];
 }
 
 /** The dispatcher plays the night, except for a few decisions in the middle that are the agent's. */
 class Handover implements Coordinator {
   readonly name: string;
-  private readonly rules = new GreedyCoordinator();
+  /** The dispatcher takes the night back, but what the agent is holding in reserve stays held until it expires. */
+  private readonly rules: GreedyCoordinator;
   private left: number;
   private until: number;
 
   constructor(
-    private readonly agent: Coordinator,
+    private readonly agent: HappyRobotCoordinator,
     private readonly fromTick: number,
     decisions: number,
   ) {
     this.name = agent.name;
+    this.rules = new GreedyCoordinator(() => agent.standing);
     this.left = decisions;
     // If nothing needs deciding for a while, the agent does not keep the city waiting.
     this.until = fromTick + decisions * 3 + 6;
@@ -75,11 +78,12 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
   let coordinator: Coordinator;
   if (policy.kind === "agent") {
     const doctrine = renderDoctrine(policy.doctrine);
-    coordinator = new HappyRobotCoordinator({
+    const agent = new HappyRobotCoordinator({
+      harness: policy.harness,
       memory: doctrine ? () => doctrine : undefined,
       onTrace: dir ? (trace) => appendFileSync(`${dir}/llm.jsonl`, JSON.stringify(trace) + "\n") : undefined,
     });
-    if (scenario.handover) coordinator = new Handover(coordinator, scenario.handover.tick, scenario.handover.decisions);
+    coordinator = scenario.handover ? new Handover(agent, scenario.handover.tick, scenario.handover.decisions) : agent;
   } else {
     coordinator = new GreedyCoordinator();
   }
@@ -127,7 +131,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
       calls++;
       if (d.source === "fallback") fallbacks++;
       else thinkingMs += d.ms ?? 0;
-      if (scenario.handover) decisions.push({ tick: result.tick, situation: d.situation ?? "", orders: d.actions.map((a, n) => `${a.type} ${a.unitId}${"incidentId" in a && a.incidentId ? ` → ${a.incidentId}` : ""}${"hospitalId" in a && a.hospitalId ? ` (${a.hospitalId})` : ""}: ${d.reasons?.[n] ?? ""}`) });
+      if (scenario.handover) decisions.push({ tick: result.tick, situation: d.situation ?? "", plan: d.plan, orders: d.actions.map((a, n) => `${a.type} ${a.unitId}${"incidentId" in a && a.incidentId ? ` → ${a.incidentId}` : ""}${"hospitalId" in a && a.hospitalId ? ` (${a.hospitalId})` : ""}: ${d.reasons?.[n] ?? ""}`) });
     }
     // A moment is mostly the dispatcher replaying the night: the per-tick record is only worth its cost for a whole game.
     if (scenario.handover && !dir) {

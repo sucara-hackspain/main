@@ -16,7 +16,7 @@ const STATUS = `${LAB_DIR}/status.json`;
 
 export function policyKey(policy: Policy): string {
   if (policy.kind !== "agent") return policy.kind;
-  return `agent:${createHash("sha1").update(renderDoctrine(policy.doctrine)).digest("hex").slice(0, 10)}`;
+  return `agent:${createHash("sha1").update(`${policy.harness === "basic" ? "basic\n" : ""}${renderDoctrine(policy.doctrine)}`).digest("hex").slice(0, 10)}`;
 }
 
 export interface GameRow {

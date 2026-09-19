@@ -2,8 +2,9 @@ import { closuresFor, effectiveNode, flightMps, UNIT_KINDS } from "./engine";
 import type { Graph } from "./graph";
 import { resolve, unitsNeeded } from "./incidents";
 import { infoGaps } from "./recon";
+import { holdAllows, holdOn, type Hold } from "./staging";
 import { believedWater, cutOffForecast } from "./water";
-import type { Action, Belief, Report, SimConfig, Unit, UnitKind } from "./types";
+import type { Action, Belief, Incident, Report, SimConfig, Unit, UnitKind } from "./types";
 
 export interface DecideInput {
   tick: number;
@@ -20,6 +21,8 @@ export interface Decision {
   source: "llm" | "fallback" | "rules";
   /** One-line read of the situation. */
   situation?: string;
+  /** What the coordinator is trying to do over the next few minutes, in its own words (its notebook). */
+  plan?: string;
   /** Why each action, same order as `actions`. */
   reasons?: string[];
   /** Doctrine ids (from the agent's memory) cited for each action, same order as `actions`. */
@@ -44,6 +47,9 @@ export interface Coordinator {
  */
 export class GreedyCoordinator implements Coordinator {
   readonly name = "greedy";
+
+  /** Standing holds somebody above the dispatcher has placed: a held unit is only spent on what it is held for. */
+  constructor(private readonly holds: () => Hold[] = () => []) {}
 
   decide({ belief, graph, config }: DecideInput): Action[] {
     const actions: Action[] = [];
@@ -105,10 +111,13 @@ export class GreedyCoordinator implements Coordinator {
       (u) => canRescue(u) && !u.victimId && u.brokenUntil === null && u.mission !== "to_observe" && (u.mission !== "to_scene" || !isOpen(u.incidentId)),
     );
     const take = (unit: Unit) => free.splice(free.indexOf(unit), 1);
-    const nearest = (kinds: UnitKind[], node: number): Unit | null => {
+    const holds = this.holds();
+    const nearest = (kinds: UnitKind[], node: number, incident: Incident): Unit | null => {
       let best: Unit | null = null;
       for (const u of free) {
         if (!kinds.includes(u.kind) || etaOf(u)(node) === Infinity) continue;
+        const hold = holdOn(holds, u, belief.tick);
+        if (hold && !holdAllows(hold, incident)) continue;
         if (!best || etaOf(u)(node) < etaOf(best)(node)) best = u;
       }
       return best;
@@ -140,7 +149,7 @@ export class GreedyCoordinator implements Coordinator {
       const safeByRoad = (u: Unit) => cutOff === null || cutOff >= etaOf(u)(incident.node) + 8;
 
       if (need.fire > 0) {
-        const crew = incident.unreachable ? nearest(["rescue"], incident.node) : nearest(["fire"], incident.node) ?? nearest(["rescue"], incident.node);
+        const crew = incident.unreachable ? nearest(["rescue"], incident.node, incident) : nearest(["fire"], incident.node, incident) ?? nearest(["rescue"], incident.node, incident);
         if (crew && (UNIT_KINDS[crew.kind].wades || safeByRoad(crew))) {
           actions.push({ type: "dispatch", unitId: crew.id, incidentId: incident.id, node: incident.node, hospitalId: UNIT_KINDS[crew.kind].carries ? (nearestHospital(crew, incident.node) ?? undefined) : undefined });
           take(crew);
@@ -150,10 +159,10 @@ export class GreedyCoordinator implements Coordinator {
 
       for (let n = need.carriers; n > 0; n--) {
         // By road if a road gets there; otherwise only water or air does. The helicopter is kept for the worst cases.
-        const ambulance = incident.unreachable ? null : nearest(["ambulance"], incident.node);
+        const ambulance = incident.unreachable ? null : nearest(["ambulance"], incident.node, incident);
         const byRoad = ambulance && safeByRoad(ambulance) ? ambulance : null;
         const urgentAndFar = incident.priority <= 1 && (!byRoad || etaOf(byRoad)(incident.node) > 12);
-        const unit = (urgentAndFar ? nearest(["helicopter"], incident.node) : null) ?? byRoad ?? nearest(["rescue"], incident.node);
+        const unit = (urgentAndFar ? nearest(["helicopter"], incident.node, incident) : null) ?? byRoad ?? nearest(["rescue"], incident.node, incident);
         if (!unit) break;
         actions.push({ type: "dispatch", unitId: unit.id, incidentId: incident.id, node: incident.node, hospitalId: nearestHospital(unit, incident.node) ?? undefined });
         take(unit);
