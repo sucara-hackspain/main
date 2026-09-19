@@ -52,6 +52,12 @@ Los estilos se reparten por responsabilidad:
 
 Los cambios del Control Center viven en este paquete. El visor de `../gabriel/ui/` es una aplicación independiente.
 
+## Vista de llamada (demo)
+
+«Entrada por llamada» abre un modal amplio con transcripción progresiva y un borrador editable del aviso. También está disponible sin ejecuciones mediante «Ver llamada de ejemplo», o directamente en `/?call=demo`. En móvil, las pestañas alternan entre conversación y borrador.
+
+La llamada está completamente mockeada: el guion, los tiempos y los datos sugeridos están en `src/ui/calls/demoCall.ts`. No utiliza micrófono, telefonía, modelos ni servicios de transcripción. Se puede pausar, minimizar sin perder el estado, consultar la frase de origen de cada dato y descargar la transcripción visible. «Guardar borrador» guarda el contenido y la transcripción en el almacenamiento local del navegador; no crea casos ni modifica las ejecuciones. Los cambios guardados se recuperan al recargar.
+
 ## Integración
 
 [Contrato de datos y funcionamiento de la integración](docs/data-integration.md).

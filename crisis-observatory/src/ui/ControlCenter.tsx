@@ -7,6 +7,7 @@ import {
   Layers,
   Map as MapIcon,
   Pause,
+  PhoneIncoming,
   Play,
   Radio,
   RotateCcw,
@@ -26,11 +27,13 @@ import ThoughtsView from "./thoughts/ThoughtsView";
 import { auditItems, laneName } from "./thoughts/model";
 import SituationSidebar from "./situation/SituationSidebar";
 import { buildSituation, entityExists, matchingEntities, relatedEntities, sameEntity, type EntityRef, type SituationFilter } from "./situation/model";
+import CallIntake from "./calls/CallIntake";
 
 const RunMap = lazy(() => import("./map/RunMap"));
 export default function ControlCenter() {
   const { runs, error, loaded } = useRuns();
   const [selected, setSelected] = useState("");
+  const [callOpen, setCallOpen] = useState(() => new URLSearchParams(window.location.search).get("call") === "demo");
   const id = selected || runs[0]?.id;
   return (
     <div className="control-center run-session">
@@ -41,6 +44,7 @@ export default function ControlCenter() {
           runs={runs}
           onRun={setSelected}
           listError={error}
+          onOpenCall={() => setCallOpen(true)}
         />
       ) : (
         <div className="run-empty">
@@ -59,8 +63,12 @@ export default function ControlCenter() {
           {loaded && (
             <p>Los nuevos registros aparecerán aquí automáticamente.</p>
           )}
+          <button className="call-launch" onClick={() => setCallOpen(true)}>
+            <PhoneIncoming size={15} /> Ver llamada de ejemplo
+          </button>
         </div>
       )}
+      <CallIntake open={callOpen} onOpen={() => setCallOpen(true)} onClose={() => setCallOpen(false)} />
     </div>
   );
 }
@@ -69,11 +77,13 @@ function RunSession({
   runs,
   onRun,
   listError,
+  onOpenCall,
 }: {
   id: string;
   runs: RunMeta[];
   onRun: (id: string) => void;
   listError: string;
+  onOpenCall: () => void;
 }) {
   const { meta, ticks, graph, error } = useRun(id);
   const [index, setIndex] = useState(0),
@@ -157,6 +167,9 @@ function RunSession({
               Actividad de los agentes
             </button>
           </div>
+          <button className="call-launch" onClick={onOpenCall}>
+            <PhoneIncoming size={14} /> Entrada por llamada <span>Demo</span>
+          </button>
         </div>
         <div className="app-context run-context">
           <span className="app-eyebrow">
