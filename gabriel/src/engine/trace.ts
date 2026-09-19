@@ -3,6 +3,7 @@ import { unitLonLat, summarize, type Summary } from "./engine";
 import type { Graph } from "./graph";
 import { FLOOD_FRINGE_M } from "./engine";
 import { incidentLine } from "./incidents";
+import { infoGaps } from "./recon";
 import { believedWater, cutOffForecast, projectedRadius } from "./water";
 import type { TickResult } from "./sim";
 import type { Action, Belief, Call, Incident, InjuryKind, LonLat, Mission, ObservedEvent, SceneKind, SimConfig, Triage, UnitKind, VictimStatus, World } from "./types";
@@ -66,6 +67,11 @@ export interface Frame {
     sightings: { node: number; kind: "wet" | "blocked"; ageTicks: number }[];
   };
   knownClosedEdges: number[];
+  /** Where the coordinator has already looked from the air, and what it is still blind about. */
+  recon: {
+    scouts: { node: number; radiusM: number; ageTicks: number; quality: number; found: number }[];
+    gaps: { id: string; node: number; kind: "incident" | "silence"; why: string }[];
+  };
   hospitals: { id: string; occupied: number }[];
   closedEdges: number[];
   summary: Summary;
@@ -128,6 +134,10 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
       sightings: belief.waterSightings.map((w) => ({ node: w.node, kind: w.kind, ageTicks: world.tick - w.tick })),
     },
     knownClosedEdges: [...belief.closedEdges],
+    recon: {
+      scouts: belief.scouts.map((s) => ({ node: s.node, radiusM: s.radiusM, ageTicks: world.tick - s.tick, quality: s.quality, found: s.found })),
+      gaps: infoGaps(belief, graph, world.tick).map(({ id, node, kind, why }) => ({ id, node, kind, why })),
+    },
     hospitals: world.hospitals.map((h) => ({ id: h.id, occupied: h.occupied })),
     closedEdges: [...world.closedEdges],
     summary: summarize(world),

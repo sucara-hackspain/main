@@ -77,7 +77,17 @@ export function KnowledgeGraph(props: { frame: Frame; meta: RunMeta; calls: Map<
     }
 
     for (const a of frame.units) {
-      const state = a.broken ? "averiada" : a.mission === "to_scene" ? "en camino" : a.mission === "to_hospital" ? "trasladando" : a.victimId ? "cargada, sin destino" : "libre";
+      const state = a.broken
+        ? "averiada"
+        : a.mission === "to_scene"
+          ? "en camino"
+          : a.mission === "to_hospital"
+            ? "trasladando"
+            : a.mission === "to_observe"
+              ? "va a mirar"
+              : a.victimId
+                ? "cargada, sin destino"
+                : "libre";
       add({ id: a.id, kind: "unit", title: `${a.id} · ${KIND_LABELS[a.kind]}`, sub: state, color: a.mission === "idle" && !a.victimId ? "#64748b" : KIND_COLORS[a.kind], dashed: false, incidentId: a.incidentId ?? undefined });
       if (a.mission === "to_scene" && a.incidentId && nodes.some((n) => n.id === a.incidentId)) {
         edges.push({ from: a.incidentId, to: a.id, label: "va hacia", color: "#38bdf8", dashed: false, incidentId: a.incidentId });

@@ -56,6 +56,7 @@ export const unitKind: Record<UnitKind, { label: string; plural: string }> = {
   fire: { label: "Bomberos", plural: "Bomberos" },
   rescue: { label: "Rescate acuático", plural: "Rescate acuático" },
   helicopter: { label: "Helicóptero", plural: "Helicópteros" },
+  drone: { label: "Dron", plural: "Drones" },
 };
 export const sceneLabel = (kind: keyof typeof SCENES) => SCENES[kind].label;
 export const injuryLabel = (kind: keyof typeof INJURIES) => INJURIES[kind].label;
@@ -88,13 +89,14 @@ export function unitStatus(u: UnitFrame): string {
   if (u.mission === "to_hospital") return `Traslado a ${u.hospitalId}`;
   if (u.victimId) return "Víctima a bordo, sin destino";
   if (u.mission === "reposition") return "Reubicándose";
+  if (u.mission === "to_observe") return `Reconociendo${u.incidentId ? ` ${u.incidentId}` : ""}`;
   // The frame has no busyUntil: idle alone is not proof of availability.
   return "Sin misión";
 }
 
 /** Units the coordinator could send now: nothing on board, not broken, not stuck, not on a call. */
 export const isFree = (u: UnitFrame) =>
-  !u.victimId && !u.broken && !u.stranded && u.mission !== "to_scene";
+  !u.victimId && !u.broken && !u.stranded && u.mission !== "to_scene" && u.mission !== "to_observe";
 
 export type EntityKind = "incident" | "unit" | "hospital" | "scene";
 export type Selection = { kind: EntityKind; id: string };

@@ -68,7 +68,7 @@ describe("memory", () => {
 
   it("starts from the seed doctrine and renders it with citable ids", () => {
     const store = new MemoryStore(":memory:");
-    expect(store.rules().length).toBe(22);
+    expect(store.rules().length).toBe(28);
     const view = store.renderView();
     expect(view).toContain("- D1 ·");
     expect(view).toContain("- A3 ·");
@@ -104,23 +104,23 @@ describe("memory", () => {
     expect(changes.skipped.map((s) => s.why)).toEqual(["no evidence cited", "no such live rule"]);
     expect(store.node("H10")!.confidence).toBeCloseTo(0.7);
     expect(store.node("H13")!.confidence).toBeCloseTo(0.45);
-    expect(store.node("H14")).toMatchObject({ status: "candidate", confidence: 0.5, origin: "sueño de s1" });
-    expect(store.node("H15")).toMatchObject({ status: "active", title: "Atrapado" });
+    expect(store.node("H17")).toMatchObject({ status: "candidate", confidence: 0.5, origin: "sueño de s1" });
+    expect(store.node("H18")).toMatchObject({ status: "active", title: "Atrapado" });
     expect(store.node("H5")!.status).toBe("retired");
-    expect(store.renderView()).toContain("H14 (EN PRUEBA)");
+    expect(store.renderView()).toContain("H17 (EN PRUEBA)");
     expect(store.renderView()).not.toContain("- H5 ·");
     const edges = store.edges();
     expect(edges).toContainEqual(expect.objectContaining({ src: "s1:E1", dst: "H10", kind: "supports" }));
-    expect(edges).toContainEqual(expect.objectContaining({ src: "H15", dst: "H5", kind: "replaces" }));
-    expect(edges.filter((e) => e.src === "H14" && e.kind === "about").map((e) => e.dst)).toEqual(["concept:water"]);
+    expect(edges).toContainEqual(expect.objectContaining({ src: "H18", dst: "H5", kind: "replaces" }));
+    expect(edges.filter((e) => e.src === "H17" && e.kind === "about").map((e) => e.dst)).toEqual(["concept:water"]);
     expect(store.history("s1").map((h) => h.op)).toEqual(["reinforce", "weaken", "add", "merge", "retire", "retire"]);
 
     // A rule on trial becomes doctrine only when a later night backs it.
     const second = evaluation("s2", 1);
     recordEpisode(store, second);
-    consolidate(store, second, { lessons: "", ops: [{ op: "reinforce", id: "H14", evidence: ["E1"], reason: "otra vez" }] }, "test");
-    expect(store.node("H14")).toMatchObject({ status: "active", confidence: 0.6 });
-    expect(buildDreamInput(second, store)).toContain("H14 [heuristic, activa");
+    consolidate(store, second, { lessons: "", ops: [{ op: "reinforce", id: "H17", evidence: ["E1"], reason: "otra vez" }] }, "test");
+    expect(store.node("H17")).toMatchObject({ status: "active", confidence: 0.6 });
+    expect(buildDreamInput(second, store)).toContain("H17 [heuristic, activa");
   });
 
   it("reads a dream wrapped the way the platform wraps node outputs", () => {

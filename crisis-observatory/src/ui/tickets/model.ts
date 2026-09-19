@@ -28,6 +28,7 @@ function actionTitle(action: Action, units: UnitFrame[], accepted: boolean) {
   if (!accepted) return `Orden rechazada · ${name}`;
   if (action.type === "dispatch") return `${name} enviada a la zona`;
   if (action.type === "transport") return `${name} · traslado a ${action.hospitalId}`;
+  if (action.type === "scout") return `${name} · reconocimiento de la zona`;
   return `${name} reubicada`;
 }
 

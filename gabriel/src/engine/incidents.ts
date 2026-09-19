@@ -2,7 +2,7 @@ import type { Decision } from "./coordinator";
 import { describe } from "./describe";
 import { SAME_PLACE_M } from "./engine";
 import type { Graph } from "./graph";
-import type { Action, AssessedVictim, Unit, UnitKind, Belief, Breathing, Call, CaseEntry, Focus, Incident, Priority, Report, SceneKind, Signs, Sourced, World, WorldEvent } from "./types";
+import type { Action, AerialSighting, AssessedVictim, Unit, UnitKind, Belief, Breathing, Call, CaseEntry, Focus, Incident, Priority, Report, SceneKind, Signs, Sourced, World, WorldEvent } from "./types";
 import { INJURIES, SCENES } from "./victims";
 import { addSighting, applyBulletin, impliesWater } from "./water";
 
@@ -25,6 +25,7 @@ export function createBelief(world: Readonly<World>): Belief {
     floods: [],
     closedEdges: [],
     floodedEdges: [],
+    scouts: [],
     nextIncidentNum: 1,
   };
 }
@@ -62,6 +63,14 @@ export function updateBelief(belief: Belief, reports: Report[], world: Readonly<
       case "flood_bulletin":
         applyBulletin(belief, event, graph);
         break;
+      case "drone_report": {
+        belief.scouts.push({ tick, node: event.node, radiusM: event.radiusM, quality: event.quality, from: event.unitId, found: event.sightings.length });
+        belief.closedEdges.push(...[...event.closedEdges, ...event.floodedEdges].filter((e) => !belief.closedEdges.includes(e)));
+        belief.floodedEdges.push(...event.floodedEdges.filter((e) => !belief.floodedEdges.includes(e)));
+        if (event.water) addSighting(belief, tick, event.node, `dron ${event.unitId}`, event.floodedEdges.length ? "blocked" : "wet");
+        for (const sighting of event.sightings) attachSighting(belief, sighting, event.unitId, tick, graph);
+        break;
+      }
       case "road_blocked_found": {
         belief.closedEdges.push(...event.edges.filter((e) => !belief.closedEdges.includes(e)));
         if (event.flooded) belief.floodedEdges.push(...event.edges.filter((e) => !belief.floodedEdges.includes(e)));
@@ -215,6 +224,8 @@ function newIncident(belief: Belief, tick: number, node: number, errorM: number)
     node,
     locationErrorM: errorM,
     located: false,
+    seenTick: null,
+    seenBy: null,
     sceneId: null,
     callIds: [],
     foci: [],
@@ -232,7 +243,7 @@ function newIncident(belief: Belief, tick: number, node: number, errorM: number)
 function newFocus(incident: Incident, tick: number, node: number, errorM: number): Focus {
   // Numbered by the incident that opened it: a focus keeps its name if its incident is merged into another.
   const taken = incident.foci.filter((f) => f.id.startsWith(`${incident.id}.`)).length;
-  const focus: Focus = { id: `${incident.id}.${taken + 1}`, status: "reported", openedTick: tick, node, locationErrorM: errorM, sceneId: null, callIds: [], ...NO_SIGNS, victims: [], lastReport: null };
+  const focus: Focus = { id: `${incident.id}.${taken + 1}`, status: "reported", openedTick: tick, node, locationErrorM: errorM, sceneId: null, callIds: [], ...NO_SIGNS, victims: [], lastReport: null, seenTick: null, seenBy: null, peopleSeen: null };
   incident.foci.push(focus);
   return focus;
 }
@@ -338,6 +349,73 @@ function foldSigns(target: Signs, call: Call, changed?: (field: string, value: s
     target.victimsReported = src(call.victims);
     changed?.("nº heridos", String(call.victims));
   }
+}
+
+/**
+ * What an observer radioes in about one spot, folded in the same way a call is. It is worth much more
+ * than a call (the location is good, a count is a count) and much less than a crew: it never confirms
+ * anything, so the focus stays "reported". A sighting matching nothing open opens a new incident,
+ * which is the whole point of flying over a neighbourhood nobody has called from.
+ */
+function attachSighting(belief: Belief, sighting: AerialSighting, unitId: string, tick: number, graph: Graph): void {
+  const from = `dron ${unitId}`;
+  let best: Incident | null = null;
+  let bestM = Infinity;
+  for (const incident of belief.incidents) {
+    if (incident.status !== "open") continue;
+    const d = samePlace(incident, sighting.node, sighting.locationErrorM, graph);
+    if (d !== null && d < bestM) {
+      best = incident;
+      bestM = d;
+    }
+  }
+  const incident = best ?? newIncident(belief, tick, sighting.node, sighting.locationErrorM);
+  const known = matchingFocus(incident, sighting.kind, sighting.node, sighting.locationErrorM, graph, ["reported", "located"]);
+  const focus = known ?? newFocus(incident, tick, sighting.node, sighting.locationErrorM);
+
+  const what = describeSighting(sighting);
+  log(incident, { tick, kind: "radio", flag: "assessment", from, unitId, focusId: focus.id, text: what });
+  if (!best) {
+    incident.history.push({ tick, field: "origen", value: "abierto por avistamiento aéreo, sin ninguna llamada", from });
+  }
+
+  focus.seenTick = tick;
+  focus.seenBy = unitId;
+  incident.seenTick = tick;
+  incident.seenBy = unitId;
+  if (focus.status === "reported" && sighting.locationErrorM < focus.locationErrorM) {
+    focus.node = sighting.node;
+    focus.locationErrorM = sighting.locationErrorM;
+    note(incident, tick, "ubicación", `nodo ${sighting.node} ±${sighting.locationErrorM} m (desde el aire)`, from, focus.id);
+  }
+
+  const src = <T>(value: T): Sourced<T> => ({ value, from, tick });
+  for (const target of [focus, incident] as Signs[]) {
+    if (sighting.kind && !target.mechanism) target.mechanism = src(sighting.kind);
+    // "Not moving" from the air is not a diagnosis: it is the reason to treat it as the worst case.
+    if (sighting.still !== null && sighting.still > 0 && target.conscious?.value !== "no") target.conscious = src("no");
+    if (sighting.trapped !== "unknown" && target.trapped?.value !== "yes") target.trapped = src(sighting.trapped === "yes" ? "yes" : "no");
+    if (sighting.people !== null && sighting.people > (target.victimsReported?.value ?? 0)) target.victimsReported = src(sighting.people);
+  }
+  if (sighting.people !== null) {
+    focus.peopleSeen = src(sighting.people);
+    note(incident, tick, "gente vista", `${sighting.people}${sighting.still !== null ? `, ${sighting.still} sin moverse` : ""}`, from, focus.id);
+  }
+  if (sighting.inWater === "yes" && !incident.unreachable) {
+    incident.unreachable = true;
+    note(incident, tick, "acceso", "rodeado de agua según el dron: rescate acuático o aéreo", from, focus.id, "alert");
+  }
+  refresh(incident, tick);
+}
+
+/** The sighting as the observer would say it over the radio. */
+function describeSighting(s: AerialSighting): string {
+  const kind = s.kind ? SCENES[s.kind].label : "no distingue qué ha pasado";
+  const people = s.people === null ? "no puede contarlos" : `${s.people} persona(s)`;
+  const still = s.still === null ? "" : `, ${s.still} sin moverse`;
+  const trapped = s.trapped === "yes" ? ", parecen atrapados" : "";
+  const water = s.inWater === "yes" ? ", rodeados de agua" : "";
+  return `Visto desde el aire (sin confirmar): ${kind}, ${people}${still}${trapped}${water} · ±${s.locationErrorM} m`;
 }
 
 function breathingRank(b: Breathing | undefined): number {
@@ -536,7 +614,11 @@ function focusLine(focus: Focus): string {
     if (focus.trapped?.value === "yes") signs.push("ATRAPADO");
     if (focus.ageGroup && focus.ageGroup.value !== "adult") signs.push(focus.ageGroup.value === "child" ? "niño" : "mayor");
     parts.push(signs.join(", "));
-    parts.push(focus.victimsReported ? `${focus.victimsReported.value} herido(s) según llamadas` : "nº heridos desconocido");
+    parts.push(
+      focus.victimsReported
+        ? `${focus.victimsReported.value} herido(s) ${focus.victimsReported.from.startsWith("dron") ? "contados desde el aire" : "según llamadas"}`
+        : "nº heridos desconocido",
+    );
     parts.push(`ubicación ±${focus.locationErrorM} m`);
   }
   return parts.join(" · ");
@@ -547,5 +629,10 @@ export function incidentLine(incident: Incident): string {
   const todo = pending(incident);
   const foci = todo.length > 0 ? todo : incident.foci.filter((f) => f.status !== "not_found").slice(0, 1);
   const what = foci.length > 1 ? `${foci.length} focos en el mismo sitio, una salida los cubre: ${foci.map((f) => `[${focusLine(f)}]`).join(" + ")}` : foci.map(focusLine).join("");
-  return [`${incident.id} · P${incident.priority}`, what, `${incident.callIds.length} llamada(s)`].filter(Boolean).join(" · ");
+  // An incident nobody ever called about is the whole point of having sent someone to look.
+  const heard =
+    incident.callIds.length === 0 && incident.seenTick !== null
+      ? `SIN NINGUNA LLAMADA · lo abrió ${incident.seenBy} desde el aire`
+      : `${incident.callIds.length} llamada(s)`;
+  return [`${incident.id} · P${incident.priority}`, what, heard].filter(Boolean).join(" · ");
 }

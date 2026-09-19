@@ -17,6 +17,10 @@ export const unitIcon: Record<UnitKind, string> = {
   helicopter: svg(
     '<path d="M3 4h18M12 4v4"/><path d="M4 12c0-2.2 2.2-4 5-4h6l4 4-4 4H9c-2.8 0-5-1.8-5-4z"/><path d="M19 12h3M8 16l-1 3M15 16l1 3M5 19h14"/>',
   ),
+  // Quadcopter: four arms, four rotors and a camera slung underneath. It only ever looks.
+  drone: svg(
+    '<rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 9 5 5M15 9l4-4M9 15l-4 4M15 15l4 4"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>',
+  ),
 };
 
 export const hospitalIcon =
