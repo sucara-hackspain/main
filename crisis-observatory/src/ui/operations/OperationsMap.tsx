@@ -3,15 +3,14 @@ import * as ml from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { LocateFixed, Minus, Plus } from "lucide-react";
-import type { GraphData, TickRecord } from "../engineTrace";
-import { circle } from "../map/routes";
+import type { GraphData } from "../engineTrace";
 import { number, type Sector } from "./model";
 ml.setWorkerUrl(workerUrl);
 const collection = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
 const empty = collection([]);
 
-export default function OperationsMap({ graph, sectors, selected, record, onSector, onTicket }: {
-  graph: GraphData; sectors: Sector[]; selected: string | null; record: TickRecord;
+export default function OperationsMap({ graph, sectors, selected, onSector, onTicket }: {
+  graph: GraphData; sectors: Sector[]; selected: string | null;
   onSector: (id: string | null) => void; onTicket: (id: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null), map = useRef<ml.Map | null>(null);
@@ -51,11 +50,10 @@ export default function OperationsMap({ graph, sectors, selected, record, onSect
       const m = new ml.Map({ container: host.current!, bounds: [[w, s], [e, n]], fitBoundsOptions: { padding: 30 },
         attributionControl: { compact: true }, style });
     map.current = m;
-    m.on("error", (e) => { if ("sourceId" in e && !["ops-streets", "sectors", "water", "cases"].includes(String(e.sourceId))) setBasemapError(true); });
+    m.on("error", (e) => { if ("sourceId" in e && !["ops-streets", "sectors", "cases"].includes(String(e.sourceId))) setBasemapError(true); });
     m.on("idle", () => { if (host.current) host.current.dataset.rendered = "true"; });
     m.on("style.load", () => {
       m.addSource("sectors", { type: "geojson", data: empty });
-      m.addSource("water", { type: "geojson", data: empty });
       m.addSource("cases", { type: "geojson", data: empty, cluster: true, clusterMaxZoom: 14, clusterRadius: 42 });
       m.addLayer({ id: "sector-fill", type: "fill", source: "sectors", paint: {
         "fill-color": ["case", [">", ["get", "critical"], 0], "#dca05f", "#7b9f96"],
@@ -65,8 +63,6 @@ export default function OperationsMap({ graph, sectors, selected, record, onSect
         "line-color": ["case", ["boolean", ["get", "selected"], false], "#26745f", "#84958c"],
         "line-width": ["case", ["boolean", ["get", "selected"], false], 2, 1], "line-dasharray": [3, 3], "line-opacity": .5,
       } });
-      m.addLayer({ id: "water-fill", type: "fill", source: "water", paint: { "fill-color": "#60a5cd", "fill-opacity": .2 } });
-      m.addLayer({ id: "water-edge", type: "line", source: "water", paint: { "line-color": "#5c9fc1", "line-width": 1.5, "line-dasharray": [2, 2] } });
       m.addLayer({ id: "clusters", type: "circle", source: "cases", filter: ["has", "point_count"], paint: {
         "circle-color": "#26745f", "circle-radius": ["step", ["get", "point_count"], 10, 20, 15, 100, 21],
         "circle-stroke-color": "#fff", "circle-stroke-width": 2, "circle-opacity": .85,
@@ -115,10 +111,6 @@ export default function OperationsMap({ graph, sectors, selected, record, onSect
       const pos = graph.nodes[t.incident.node];
       return t.incident.status === "open" && pos ? [{ type: "Feature", properties: { id: t.id, priority: t.incident.priority }, geometry: { type: "Point", coordinates: pos } }] : [];
     })));
-    (m.getSource("water") as ml.GeoJSONSource).setData(collection(record.frame.knownWater.zones.flatMap((z): GeoJSON.Feature[] => {
-      const pos = graph.nodes[z.node];
-      return pos ? [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [circle(pos, z.radiusM)] } }] : [];
-    })));
     markers.current.forEach((marker) => marker.remove());
     markers.current = sectors.flatMap((s) => {
       if (!s.center || (selected && s.id !== selected)) return [];
@@ -133,7 +125,7 @@ export default function OperationsMap({ graph, sectors, selected, record, onSect
       el.onclick = () => callbacks.current.onSector(selected === s.id ? null : s.id);
       return [new ml.Marker({ element: el, anchor: selected ? "bottom" : "center", offset: selected ? [0, -24] : [0, 0] }).setLngLat(s.center).addTo(m)];
     });
-  }, [ready, sectors, selected, record, graph]);
+  }, [ready, sectors, selected, graph]);
   useEffect(() => {
     if (!ready) return;
     const sector = sectors.find((s) => s.id === selected);
@@ -148,7 +140,7 @@ export default function OperationsMap({ graph, sectors, selected, record, onSect
     <div className="ops-map-tools"><button aria-label="Acercar mapa de operaciones" onClick={() => map.current?.zoomIn()}><Plus size={16} /></button>
       <button aria-label="Alejar mapa de operaciones" onClick={() => map.current?.zoomOut()}><Minus size={16} /></button>
       <button aria-label="Encuadrar territorio completo" onClick={() => { callbacks.current.onSector(null); reset(); }}><LocateFixed size={16} /></button></div>
-    <div className="ops-map-legend"><span><i />Sector operativo</span><span><i className="water" />Agua observada</span>{selected && <span><i className="case" />Incidencias agrupadas</span>}</div>
+    <div className="ops-map-legend"><span><i />Sector operativo</span>{selected && <span><i className="case" />Incidencias agrupadas</span>}</div>
     {basemapError && <span className="ops-map-offline">Cartografía base sin conexión · callejero local</span>}
   </div>;
 }

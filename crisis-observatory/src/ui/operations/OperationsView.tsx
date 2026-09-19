@@ -3,9 +3,8 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, CircleHelp, Clo
 import { elapsed, type GraphData, type RunMeta, type TickRecord } from "../engineTrace";
 import { duration, type Situation } from "../situation/model";
 import { type Pending } from "../interventions/model";
-import { TicketStatus } from "../tickets/TicketsView";
 import type { Ticket } from "../tickets/model";
-import { buildOperations, inQueue, number, type Queue, type Sector } from "./model";
+import { buildOperations, number, type Queue, type Sector } from "./model";
 import { SCALE_ID } from "./demo";
 import "./operations.css";
 
@@ -19,12 +18,11 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
   onDecision: (id: string) => void; runs: RunMeta[]; onRun: (id: string) => void; received: number;
 }) {
   const operations = useMemo(() => buildOperations(tickets, record, records, graph, situation), [tickets, record, records, graph, situation]);
-  const [query, setQuery] = useState(""), [onlyAttention, setOnlyAttention] = useState(false), [queue, setQueue] = useState<Queue>("all");
+  const [query, setQuery] = useState(""), [onlyAttention, setOnlyAttention] = useState(false);
   const [sources, setSources] = useState(false);
   const sector = operations.sectors.find((s) => s.id === sectorId) ?? null;
   const scope = sector ?? operations;
   const scopedTickets = sector?.tickets ?? tickets;
-  const priorityTickets = scopedTickets.filter((t) => t.incident.status === "open" && inQueue(t, queue));
   const sectors = operations.sectors.filter((s) => normalize(s.name).includes(normalize(query)) && (!onlyAttention || s.critical || s.blocked || s.gaps || s.stale))
     .sort((a, b) => b.critical - a.critical || b.blocked - a.blocked || b.open - a.open || a.id.localeCompare(b.id));
   const incidentIds = new Set(scopedTickets.map((t) => t.id));
@@ -36,7 +34,7 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
   const trendStart = operations.trend[0]?.tick ?? 0, trendEnd = operations.trend.at(-1)?.tick ?? 0;
   const points = operations.trend.map((p) => `${((p.tick - trendStart) / Math.max(1, trendEnd - trendStart)) * 260},${38 - p.open / maxOpen * 32}`).join(" ");
   const simulated = meta.id === SCALE_ID;
-  function select(id: string | null) { onSector(id); setQueue("all"); }
+  function select(id: string | null) { onSector(id); }
   return <section className="operations-view" aria-label="Panorama operativo">
     <header className="ops-heading">
       <div><div className="ops-eyebrow"><span className="ops-live-dot" />CENTRO DE COORDINACIÓN <span>/</span> VALÈNCIA</div>
@@ -71,18 +69,10 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
         <div className="ops-sector-foot"><CircleHelp size={13} /><span>Los sectores conservan cada incidencia. Carga comparada con hace {operations.windowMinutes} min; unidades según su posición.</span></div>
       </aside>
       <div className="ops-center">
-        <div className="ops-map-breadcrumb"><button onClick={() => select(null)}><MapPin size={13} />Territorio completo</button>{sector && <><ChevronRight size={12} /><strong>{sector.name}</strong><button className="ops-clear-sector" aria-label="Cerrar sector" onClick={() => select(null)}><X size={13} /></button></>}<span>{sector ? `${number(sector.open)} abiertas` : `${operations.sectors.length} sectores`}</span></div>
+        <div className="ops-map-breadcrumb"><button onClick={() => select(null)}><MapPin size={13} />Territorio completo</button>{sector && <><ChevronRight size={12} /><strong>{sector.name}</strong><button className="ops-clear-sector" aria-label="Cerrar sector" onClick={() => select(null)}><X size={13} /></button></>}<span>{sector ? `${number(sector.open)} abiertas` : `${operations.sectors.length} sectores`}</span>{sector && <button className="ops-open-cases" onClick={() => onQueue(sector, "all")}>Ver incidencias<ArrowRight size={13} /></button>}</div>
         <Suspense fallback={<div className="ops-map ops-loading">Preparando el territorio…</div>}>
-          <OperationsMap graph={graph} sectors={operations.sectors} selected={sector?.id ?? null} record={record} onSector={select} onTicket={(id) => onTicket(id, sector)} />
+          <OperationsMap graph={graph} sectors={operations.sectors} selected={sector?.id ?? null} onSector={select} onTicket={(id) => onTicket(id, sector)} />
         </Suspense>
-        <section className="ops-case-panel" aria-label="Incidencias del ámbito seleccionado">
-          <div className="ops-section-heading"><div><h2>{sector ? `Incidencias · ${sector.name}` : "Foco de atención"}</h2><p>Prioridad y actualización de los casos abiertos</p></div><button className="ops-text-button" onClick={() => onQueue(sector, queue)}>Ver todas <ArrowRight size={13} /></button></div>
-          <div className="ops-queue-tabs" aria-label="Filtrar foco de atención">{(["all", "critical", "blocked", "unconfirmed"] as Queue[]).map((q) => <button key={q} aria-pressed={queue === q} onClick={() => setQueue(q)}>{q === "all" ? "Abiertas" : q === "critical" ? "Urgentes" : q === "blocked" ? "Acceso" : "Por confirmar"}<span>{q === "all" ? scope.open : q === "critical" ? scope.critical : q === "blocked" ? scope.blocked : scope.unconfirmed}</span></button>)}</div>
-          <div className="ops-focus-list">{priorityTickets.slice(0, 4).map((t) => <button key={t.id} className="ops-focus-row" onClick={() => onTicket(t.id, sector)} aria-label={`Abrir incidencia ${t.id}: ${t.title}`}>
-            <span className="ops-priority" data-priority={t.incident.priority}>P{t.incident.priority}</span><span><strong>{t.title}</strong><small>{t.id} · {t.location}</small></span><TicketStatus state={t.state} /><ChevronRight size={13} />
-          </button>)}{!priorityTickets.length && <div className="ops-empty">{scope.open ? "No hay casos abiertos en esta cola." : "Sin incidencias abiertas en este ámbito."}</div>}</div>
-          <div className="ops-list-foot">{Math.min(4, priorityTickets.length)} de {number(priorityTickets.length)} casos abiertos<span>Ordenados por prioridad</span></div>
-        </section>
       </div>
       <aside className="ops-attention" aria-label="Atención y capacidad">
         <div className="ops-section-heading"><div><h2>Requiere atención</h2><p>{sector ? `Sector ${sector.name}` : "Todo el territorio"}</p></div><span className="ops-attention-icon"><ShieldAlert size={16} /></span></div>

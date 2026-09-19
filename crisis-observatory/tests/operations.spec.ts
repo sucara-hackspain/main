@@ -15,6 +15,7 @@ test("operations scopes cases by sector and queue, opens evidence and preserves 
   await expect(page.getByTestId("ops-open")).toHaveText("5");
   await page.getByRole("button", { name: "Abrir sector Norte", exact: true }).click();
   await expect(page.locator(".ops-map-breadcrumb")).toContainText("Norte");
+  await page.getByRole("button", { name: "Ver incidencias", exact: true }).click();
   await page.getByRole("button", { name: /^Abrir incidencia C1:/ }).click();
   const detail = page.getByRole("complementary", { name: "Detalle de incidencia" });
   await expect(detail).toContainText("A1 es la ambulancia disponible más cercana");
