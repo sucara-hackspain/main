@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  CallObserver,
   Graph,
   GreedyCoordinator,
+  makeVictim,
   RandomMaster,
+  Rng,
   Simulation,
   type EdgeData,
   type GraphData,
+  type InjuryKind,
   type Master,
   type MasterAction,
+  type SceneKind,
+  type VictimSpec,
 } from "../src/engine";
 
 /** n x n grid, 100 m two-way streets at 36 km/h = 10 s per edge. Node id = row * n + col. */
@@ -32,7 +38,27 @@ function scripted(script: Record<number, MasterAction[]>): Master {
   return { act: (world) => script[world.tick] ?? [] };
 }
 
-const CONFIG = { ambulances: 1, ambulanceSpeedFactor: 1, pickupTicks: 0, dropoffTicks: 0 };
+const CONFIG = { ambulances: 1, fireUnits: 0, rescueUnits: 0, helicopters: 0, ambulanceSpeedFactor: 1, pickupTicks: 0, dropoffTicks: 0, treatTicks: 0, extricateTicks: 0 };
+
+function victim(injury: InjuryKind, ttl: number | null = null): VictimSpec {
+  return { ...makeVictim(injury, new Rng(1)), ttl, trapped: false };
+}
+
+function scene(node: number, victims: VictimSpec[], kind: SceneKind = "traffic"): MasterAction {
+  return { type: "spawn_scene", kind, node, victims };
+}
+
+/** Family callers give the exact spot, which keeps these scenarios deterministic. */
+function sim(graph: Graph, script: Record<number, MasterAction[]>, config = CONFIG) {
+  return new Simulation({
+    graph,
+    master: scripted(script),
+    coordinator: new GreedyCoordinator(),
+    observer: new CallObserver({ callers: ["family"] }),
+    config,
+  });
+}
+
 
 describe("graph", () => {
   it("routes around a closed road", () => {
@@ -52,113 +78,235 @@ describe("graph", () => {
 });
 
 describe("simulation", () => {
-  it("picks a patient up and delivers them to hospital", async () => {
-    const sim = new Simulation({
-      graph: grid(5),
-      master: scripted({ 0: [{ type: "spawn_patient", node: 24, ttl: 50 }] }),
-      coordinator: new GreedyCoordinator(),
-      config: CONFIG,
-    });
-    await sim.run(20);
-    expect(sim.world.log.map((e) => e.type)).toEqual([
-      "patient_spawned",
-      "action_applied",
-      "patient_picked_up",
-      "patient_delivered",
-    ]);
-    expect(sim.summary()).toMatchObject({ saved: 1, dead: 0 });
-    expect(sim.world.hospitals[0].occupied).toBe(1);
+  it("hears a call, opens an incident, and the crew delivers the victim", async () => {
+    const s = sim(grid(5), { 0: [scene(24, [victim("polytrauma", 60)])] });
+    await s.run(25);
+    const types = s.world.log.map((e) => e.type);
+    expect(types).toEqual(["scene_created", "action_applied", "scene_assessed", "victim_picked_up", "victim_delivered"]);
+    expect(s.summary()).toMatchObject({ saved: 1, dead: 0 });
+    expect(s.belief.incidents).toHaveLength(1);
+    expect(s.belief.incidents[0]).toMatchObject({ status: "closed", closedReason: "resolved", located: true });
   });
 
-  it("lets a patient die when nobody can reach them in time", async () => {
-    const sim = new Simulation({
+  it("never tells the coordinator the diagnosis or the time left before a crew is there", async () => {
+    const s = sim(grid(5), { 0: [scene(24, [victim("cardiac_arrest", 40)], "collapse")] });
+    while (s.belief.incidents.length === 0) await s.step();
+    const incident = s.belief.incidents[0];
+    expect(incident.victims).toEqual([]);
+    expect(JSON.stringify(s.belief)).not.toContain("cardiac_arrest");
+    expect(JSON.stringify(s.belief.calls)).not.toContain("ttl");
+    // Not breathing is enough for the protocol to call it a P0.
+    expect(incident.priority).toBe(0);
+  });
+
+  it("attaches several calls about the same place to one incident", async () => {
+    const s = new Simulation({
       graph: grid(5),
-      master: scripted({ 0: [{ type: "spawn_patient", node: 24, ttl: 1 }] }),
-      coordinator: new GreedyCoordinator(),
+      seed: 5,
+      master: scripted({ 0: [scene(12, [victim("polytrauma", 90), victim("fracture"), victim("minor")])] }),
+      coordinator: { name: "idle", decide: () => [] },
       config: CONFIG,
     });
-    await sim.run(5);
-    expect(sim.summary()).toMatchObject({ saved: 0, dead: 1 });
-    // Triage: the ambulance was never sent.
-    expect(sim.world.ambulances[0].mission).toBe("idle");
+    await s.run(20);
+    expect(s.belief.calls.length).toBeGreaterThan(1);
+    expect(s.belief.incidents.filter((i) => !i.mergedInto)).toHaveLength(1);
+    expect(s.belief.incidents[0].callIds).toHaveLength(s.belief.calls.length);
+  });
+
+  it("finds the scene even when the caller was vague about where", async () => {
+    const s = new Simulation({
+      graph: grid(9),
+      master: scripted({ 0: [scene(40, [victim("hemorrhage", 80)])] }),
+      coordinator: new GreedyCoordinator(),
+      observer: new CallObserver({ callers: ["driver"] }),
+      config: CONFIG,
+    });
+    await s.run(40);
+    expect(s.summary().saved).toBe(1);
+    expect(s.belief.incidents[0]).toMatchObject({ node: 40, located: true, locationErrorM: 0 });
+  });
+
+  it("takes the worst victim first and treats minor ones on the spot", async () => {
+    const s = sim(grid(5), { 0: [scene(6, [victim("minor"), victim("hemorrhage", 70), victim("minor")])] }, { ...CONFIG, ambulances: 2 });
+    await s.run(30);
+    const firstPickup = s.world.log.find((e) => e.type === "victim_picked_up");
+    expect(firstPickup).toMatchObject({ victimId: "V2" });
+    expect(s.world.victims.map((v) => v.status)).toEqual(["treated", "delivered", "treated"]);
+    expect(s.world.hospitals[0].occupied).toBe(1);
+  });
+
+  it("lets a cardiac arrest die if nobody gets there in time, and only learns it on scene", async () => {
+    const s = sim(grid(5), { 0: [scene(24, [victim("cardiac_arrest", 3)], "collapse")] });
+    await s.run(20);
+    expect(s.summary()).toMatchObject({ saved: 0, dead: 1 });
+    const assessed = s.world.log.find((e) => e.type === "scene_assessed");
+    expect(assessed).toMatchObject({ victims: [{ triage: "black" }] });
+    expect(s.belief.incidents[0].status).toBe("closed");
+  });
+
+  it("closes the incident when the crew finds nobody", async () => {
+    const s = new Simulation({ graph: grid(5), master: scripted({}), coordinator: { name: "test", decide: () => [] }, config: CONFIG });
+    s.order({ type: "dispatch", unitId: "A1", incidentId: "C9", node: 24 });
+    await s.run(12);
+    expect(s.world.log.some((e) => e.type === "scene_not_found")).toBe(true);
+    expect(s.world.units[0].mission).toBe("idle");
   });
 
   it("reroutes an ambulance when the road ahead is closed", async () => {
     const g = grid(5);
     const lastEdge = g.route(0, 24)!.steps.at(-1)!.edge;
-    const sim = new Simulation({
-      graph: g,
-      master: scripted({
-        0: [{ type: "spawn_patient", node: 24, ttl: 50 }],
-        1: [{ type: "close_road", edge: lastEdge }],
-      }),
-      coordinator: new GreedyCoordinator(),
-      config: CONFIG,
-    });
-    await sim.run(20);
-    expect(sim.world.log.some((e) => e.type === "ambulance_rerouted")).toBe(true);
-    expect(sim.summary().saved).toBe(1);
+    const s = sim(g, { 0: [scene(24, [victim("polytrauma", 90)])], 3: [{ type: "close_road", edge: lastEdge }] });
+    await s.run(30);
+    expect(s.world.log.some((e) => e.type === "unit_rerouted")).toBe(true);
+    expect(s.summary().saved).toBe(1);
   });
 
   it("freezes a broken-down ambulance until it is repaired", async () => {
-    const sim = new Simulation({
-      graph: grid(5),
-      master: scripted({
-        0: [{ type: "spawn_patient", node: 24, ttl: 80 }],
-        1: [{ type: "puncture", ambulanceId: "A1", ticks: 10 }],
-      }),
-      coordinator: new GreedyCoordinator(),
-      config: CONFIG,
+    const s = sim(grid(5), {
+      0: [scene(24, [victim("hypothermia", 100)], "flooded_home")],
+      4: [{ type: "puncture", unitId: "A1", ticks: 10 }],
     });
-    await sim.run(5);
-    const stuckAt = sim.world.ambulances[0].node;
-    await sim.run(5);
-    expect(sim.world.ambulances[0].node).toBe(stuckAt);
-    await sim.run(20);
-    expect(sim.summary().saved).toBe(1);
+    await s.run(8);
+    const stuckAt = s.world.units[0].node;
+    await s.run(5);
+    expect(s.world.units[0].node).toBe(stuckAt);
+    await s.run(25);
+    expect(s.summary().saved).toBe(1);
   });
 
   it("turns ambulances away from a full hospital", async () => {
-    const sim = new Simulation({
-      graph: grid(5),
-      master: scripted({ 0: [{ type: "spawn_patient", node: 6, ttl: 50 }] }),
-      // Ignores capacity on purpose.
-      coordinator: {
-        name: "test",
-        decide: ({ reports }) =>
-          reports.some((r) => r.event.type === "patient_spawned")
-            ? [{ type: "dispatch", ambulanceId: "A1", patientId: "P1", hospitalId: "H1" }]
-            : [],
-      },
-      config: { ...CONFIG, hospitalCapacity: 0 },
-    });
-    await sim.run(10);
-    expect(sim.world.log.some((e) => e.type === "hospital_full")).toBe(true);
-    expect(sim.world.ambulances[0]).toMatchObject({ patientId: "P1", mission: "idle" });
+    const s = sim(grid(5), { 0: [scene(24, [victim("fracture")], "fall")] }, { ...CONFIG, hospitalCapacity: 0 } as typeof CONFIG);
+    // Greedy respects capacity, so force the hospital by hand.
+    while (s.belief.incidents.length === 0) await s.step();
+    s.order({ type: "dispatch", unitId: "A1", incidentId: "C1", node: 24, hospitalId: "H1" });
+    await s.run(12);
+    expect(s.world.log.some((e) => e.type === "hospital_full")).toBe(true);
+    expect(s.world.units[0]).toMatchObject({ victimId: "V1", mission: "idle" });
   });
 
   it("rejects invalid orders and tells the coordinator", async () => {
-    const sim = new Simulation({ graph: grid(3), master: scripted({}), coordinator: { name: "test", decide: () => [] } });
-    sim.order({ type: "dispatch", ambulanceId: "A1", patientId: "P99" });
-    await sim.step();
-    const { reports } = await sim.step();
+    const s = new Simulation({ graph: grid(3), master: scripted({}), coordinator: { name: "test", decide: () => [] } });
+    s.order({ type: "transport", unitId: "A1", hospitalId: "H1" });
+    await s.step();
+    const { reports } = await s.step();
     expect(reports.map((r) => r.event.type)).toEqual(["action_rejected"]);
   });
 
   it("is reproducible: same seed, same history", async () => {
     const run = async (seed: number) => {
-      const sim = new Simulation({
+      const s = new Simulation({
         graph: grid(8),
         seed,
-        master: new RandomMaster({ pPatient: 0.3, pRoadClosure: 0.1, pPuncture: 0.02 }),
+        master: new RandomMaster({ pScene: 0.3, pRoadClosure: 0.1, pPuncture: 0.02 }),
         coordinator: new GreedyCoordinator(),
-        config: { ambulances: 3 },
+        config: { ambulances: 3, fireUnits: 1, rescueUnits: 1, helicopters: 1 },
       });
-      await sim.run(150);
-      return JSON.stringify(sim.world.log);
+      await s.run(150);
+      return JSON.stringify([s.world.log, s.belief.calls]);
     };
     const first = await run(42);
     expect(await run(42)).toBe(first);
     expect(await run(43)).not.toBe(first);
+  });
+});
+
+describe("flood", () => {
+  it("spreads and makes covered streets impassable, without anyone telling the coordinator", async () => {
+    const g = grid(9);
+    const s = sim(g, { 0: [{ type: "start_flood", name: "test", node: 0, radiusM: 50, growthM: 30, maxRadiusM: 400 }] });
+    await s.run(20);
+    expect(s.world.floods[0].radiusM).toBe(400);
+    expect(g.route(80, 1, new Set(s.world.closedEdges))).toBeNull();
+    expect(g.route(80, 44, new Set(s.world.closedEdges))).not.toBeNull();
+    expect(s.belief.closedEdges).toEqual([]);
+    expect(s.belief.floods).toEqual([]);
+  });
+
+  it("learns of the water late, from an official map that is already old", async () => {
+    const s = sim(grid(9), { 0: [{ type: "start_flood", name: "test", node: 0, radiusM: 100, growthM: 10, maxRadiusM: 600 }] });
+    await s.run(25);
+    expect(s.belief.floods[0]).toMatchObject({ radiusM: 250, asOfTick: 14 });
+    expect(s.world.floods[0].radiusM).toBe(350);
+    expect(s.belief.closedEdges.length).toBeGreaterThan(0);
+    expect(s.belief.closedEdges.length).toBeLessThan(s.world.closedEdges.length);
+  });
+
+  it("has crews find the water themselves, radio it in and turn back", async () => {
+    const g = grid(9);
+    const s = sim(g, {
+      0: [{ type: "start_flood", name: "test", node: 80, radiusM: 250, growthM: 0, maxRadiusM: 250 }],
+      1: [scene(80, [victim("drowning", 200)], "flooded_home")],
+    });
+    await s.run(23);
+    const found = s.world.log.find((e) => e.type === "road_blocked_found");
+    expect(found).toMatchObject({ unitId: "A1", flooded: true });
+    expect(s.belief.waterSightings.some((w) => w.kind === "blocked")).toBe(true);
+    expect(s.belief.incidents[0]).toMatchObject({ status: "open", unreachable: true });
+    expect(s.world.units[0].mission).not.toBe("to_scene");
+    expect(s.summary()).toMatchObject({ inWater: 1 });
+  });
+
+  it("never reopens a street that is under water", async () => {
+    const g = grid(9);
+    const edge = g.route(0, 1)!.steps[0].edge;
+    const s = sim(g, {
+      0: [{ type: "start_flood", name: "test", node: 0, radiusM: 250, growthM: 0, maxRadiusM: 250 }],
+      2: [{ type: "open_road", edge }],
+    });
+    await s.run(4);
+    expect(s.world.closedEdges).toContain(edge);
+  });
+});
+
+describe("units", () => {
+  // Stations are looked up by coordinates, which on the toy grid all land on the same corner.
+  const config = (extra: object) => ({ ...CONFIG, ...extra });
+
+  it("needs firefighters before an ambulance can take a trapped victim", async () => {
+    const trapped = { ...victim("polytrauma", 200), trapped: true };
+    const alone = sim(grid(5), { 0: [scene(24, [trapped], "building_collapse")] });
+    await alone.run(40);
+    expect(alone.world.victims[0].status).toBe("waiting");
+
+    const withFire = sim(grid(5), { 0: [scene(24, [trapped], "building_collapse")] }, config({ fireUnits: 1 }) as typeof CONFIG);
+    await withFire.run(60);
+    expect(withFire.world.log.some((e) => e.type === "victim_freed" && e.unitId === "B1")).toBe(true);
+    expect(withFire.world.victims[0].status).toBe("delivered");
+  });
+
+  it("sends a rescue crew through the water to someone no ambulance can reach", async () => {
+    const s = sim(
+      grid(9),
+      {
+        0: [{ type: "start_flood", name: "test", node: 80, radiusM: 250, growthM: 0, maxRadiusM: 250 }],
+        1: [scene(80, [victim("hypothermia", 400)], "flooded_home")],
+      },
+      config({ rescueUnits: 1 }) as typeof CONFIG,
+    );
+    await s.run(120);
+    expect(s.belief.incidents[0].unreachable).toBe(true);
+    const pickup = s.world.log.find((e) => e.type === "victim_picked_up");
+    expect(pickup).toMatchObject({ unitId: "R1" });
+    expect(s.summary().saved).toBe(1);
+  });
+
+  it("flies the helicopter in a straight line and only to a helipad", async () => {
+    const s = new Simulation({
+      graph: grid(9),
+      master: scripted({ 0: [scene(80, [victim("cardiac_arrest", 60)], "collapse")] }),
+      coordinator: { name: "test", decide: () => [] },
+      observer: new CallObserver({ callers: ["family"] }),
+      config: config({ ambulances: 0, helicopters: 1 }),
+    });
+    s.world.hospitals[0].helipad = false;
+    s.order({ type: "dispatch", unitId: "HEL1", incidentId: "C1", node: 80, hospitalId: "H1" });
+    await s.step();
+    expect(s.world.log.at(-1)).toMatchObject({ type: "action_rejected", reason: "hospital has no helipad" });
+
+    s.world.hospitals[0].helipad = true;
+    s.order({ type: "dispatch", unitId: "HEL1", incidentId: "C1", node: 80, hospitalId: "H1" });
+    await s.run(6);
+    expect(s.world.units[0].route).toEqual([]);
+    expect(s.summary().saved).toBe(1);
   });
 });
