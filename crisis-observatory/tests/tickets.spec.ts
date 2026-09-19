@@ -5,12 +5,12 @@ import { ticketGraph, ticketRun } from "./support/ticketRun";
 test.beforeEach(async ({ page }) => {
   await serve(page, [ticketRun()]);
   await page.route("**/api/graph/ticket-test", (route) => route.fulfill({ json: ticketGraph }));
-  await page.goto("/");
+  await page.goto("/?inicio=1");
   await expect(page.getByText("6 registros recibidos", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Incidencias", exact: true }).click();
 });
 
-test("ticket list, filters, reasons, historical details and map focus work together", async ({ page }) => {
+test("ticket list, filters, reasons, historical details and sector navigation work together", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   const seek = page.getByLabel("Navegar por el historial", { exact: true });
@@ -21,9 +21,10 @@ test("ticket list, filters, reasons, historical details and map focus work toget
   await expect(detail).toContainText("Esperando valoración en la zona");
   await expect(detail).toContainText("A1 es la ambulancia disponible más cercana");
   await expect(detail).not.toContainText("A2 cubre el aviso");
-  await detail.getByRole("button", { name: "Enfocar en el mapa" }).click();
-  await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator('.operational-map [data-entity="incident:C1"]')).toHaveAttribute("aria-pressed", "true");
+  await detail.getByRole("button", { name: "Ver sector en operaciones" }).click();
+  await expect(page.getByRole("button", { name: "Operaciones", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Abrir sector Norte", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".operational-map")).toHaveCount(0);
   await page.getByRole("button", { name: "Incidencias", exact: true }).click();
   await seek.fill("3");
   await expect(detail).toContainText("La incidencia es más grave de lo previsto");
@@ -41,10 +42,11 @@ test("ticket list, filters, reasons, historical details and map focus work toget
   await seek.fill("5");
   await filters.getByRole("button", { name: /^Resuelto/ }).click();
   await expect(page.locator('.tickets-table tr[data-ticket="C1"]')).toBeVisible();
-  await expect(detail).toContainText("Se abrirá el último registro");
-  await detail.getByRole("button", { name: "Enfocar en el mapa" }).click();
-  await expect(seek).toHaveValue("4");
-  await expect(page.locator('.operational-map [data-entity="incident:C1"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(detail).toContainText("El sector muestra la situación del instante seleccionado");
+  await detail.getByRole("button", { name: "Ver sector en operaciones" }).click();
+  await expect(seek).toHaveValue("5");
+  await expect(page.getByRole("button", { name: "Abrir sector Norte", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".operational-map")).toHaveCount(0);
   await page.getByRole("button", { name: "Incidencias", exact: true }).click();
   await seek.fill("0");
   await expect(detail).toContainText("Selecciona un ticket");
@@ -62,7 +64,8 @@ test("tickets support keyboard selection and mobile navigation without horizonta
   await expect(detail.getByRole("heading", { name: "accidente de tráfico", exact: true })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: "test-results/tickets-mobile.png", fullPage: true });
-  await detail.getByRole("button", { name: "Enfocar en el mapa" }).click();
-  await expect(page.locator(".operational-map")).toBeInViewport();
-  await expect(page.locator('.operational-map [data-entity="incident:C1"]')).toHaveAttribute("aria-pressed", "true");
+  await detail.getByRole("button", { name: "Ver sector en operaciones" }).click();
+  await expect(page.getByRole("heading", { name: /Panorama operativo/ })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "Abrir sector Norte", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".operational-map")).toHaveCount(0);
 });

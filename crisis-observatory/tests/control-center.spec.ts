@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import type { IncidentFrame, RunMeta, TickRecord } from "../src/ui/engineTrace";
+import type { RunMeta, TickRecord } from "../src/ui/engineTrace";
 import { serve, simulate } from "./support/engineRun";
 let id: string, meta: RunMeta, records: TickRecord[];
 // A DANA night with the rule coordinator, simulated in memory from a fixed seed.
@@ -8,43 +8,33 @@ test.beforeAll(async () => {
   id = meta.id;
 });
 async function open(page: any) {
-  await page.goto("/");
+  await page.goto("/?inicio=1");
   await page.getByLabel("Seleccionar ejecución").selectOption(id);
   await expect(
     page.getByText(`${records.length} registros recibidos`, { exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Incidencias", exact: true }).click();
 }
 // Cartography is external; keep state, markers and interactions deterministic offline.
 test.beforeEach(async ({ page }) => {
   await serve(page, [{ meta, records }]);
 });
-test("engine run drives units, incidents, hospital capacity, GPS, playback and historical state", async ({
+test("engine run drives operational totals, playback and historical state", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await open(page);
-  await page.getByRole("button", { name: "Territorio", exact: true }).click();
+  await page.getByRole("button", { name: "Operaciones", exact: true }).click();
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => document.fonts.check("12px 'Geist Variable'"))).toBe(true);
-  await expect(page.locator(".run-hospital")).toHaveCount(
-    meta.hospitals.length,
-    { timeout: 30000 },
-  );
   for (const i of [25, records.length - 2, records.length - 1, 0]) {
     await page
       .getByLabel("Navegar por el historial", { exact: true })
       .fill(String(i));
-    for (const u of records[i].frame.units)
-      await expect(page.locator(`.app-map-wrap [data-unit="${u.id}"]`)).toHaveAttribute(
-        "data-position",
-        u.pos.join(","),
-      );
     const open = records[i].frame.incidents.filter((x) => x.status === "open");
-    await expect(page.locator(".app-map-wrap .run-incident")).toHaveCount(open.length);
-    await expect(page.getByTestId("saved-count")).toHaveText(
-      String(records[i].frame.summary.saved),
-    );
+    await expect(page.getByTestId("ops-open")).toHaveText(String(open.length));
+    await expect(page.locator(".operational-map")).toHaveCount(0);
   }
   await page.getByLabel("Reproducir historial", { exact: true }).click();
   await expect(
@@ -56,54 +46,25 @@ test("engine run drives units, incidents, hospital capacity, GPS, playback and h
   await expect(page.getByLabel("Tiempo transcurrido")).toHaveText(paused!);
   expect(errors).toEqual([]);
 });
-test("navigation keeps territory and tickets available on desktop and mobile", async ({
+test("navigation contains only operations and incidents on desktop and mobile", async ({
   page,
 }) => {
   await open(page);
-  // Incidents come first, and the page opens on them.
+  // The legacy case workspace remains reachable beside the operations overview.
   await expect(page.getByRole("button", { name: "Incidencias", exact: true })).toHaveAttribute("aria-pressed", "true");
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
-    await expect(page.locator(".app-tabs button")).toHaveText(["Incidencias", "Territorio"]);
-    await page.getByRole("button", { name: "Territorio", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("complementary", { name: "Estado de la situación" })).toBeVisible();
-    await expect(page.locator(".operational-map")).toBeVisible();
+    await expect(page.locator(".app-tabs button")).toHaveText(["Operaciones", "Incidencias"]);
+    await page.getByRole("button", { name: "Operaciones", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Operaciones", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("region", { name: "Panorama operativo", exact: true })).toBeVisible();
+    await expect(page.locator(".ops-map")).toBeVisible();
+    await expect(page.locator(".operational-map")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await page.getByRole("button", { name: "Incidencias", exact: true }).click();
     await expect(page.getByRole("button", { name: "Incidencias", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("complementary", { name: "Detalle de incidencia" })).toBeVisible();
   }
-});
-test("focusing an incident from its ticket puts it in the spotlight: its crews stay lit, the rest fades", async ({
-  page,
-}) => {
-  // An instant with an open incident that has crews on it, and other units that have nothing to do with it.
-  const index = records.findIndex((r) =>
-    r.frame.incidents.some((i) => i.status === "open" && r.frame.units.some((u) => u.incidentId === i.id)),
-  );
-  const { frame } = records[index];
-  const incident = frame.incidents.find((i) => i.status === "open" && frame.units.some((u) => u.incidentId === i.id))!;
-  const crews = frame.units.filter((u) => u.incidentId === incident.id).map((u) => u.id);
-  const other = frame.units.find((u) => !u.incidentId)!;
-  await open(page);
-  await page.getByLabel("Navegar por el historial", { exact: true }).fill(String(index));
-  await page.getByRole("button", { name: `Abrir incidencia ${incident.id}:`, exact: false }).click();
-  await page
-    .getByRole("complementary", { name: "Detalle de incidencia" })
-    .getByRole("button", { name: "Enfocar en el mapa" })
-    .click();
-  await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
-  const pin = (ref: string) => page.locator(`.operational-map [data-entity="${ref}"]`);
-  await expect(pin(`incident:${incident.id}`)).toHaveAttribute("aria-pressed", "true");
-  await expect(pin(`incident:${incident.id}`)).not.toHaveClass(/is-muted/);
-  for (const id of crews) await expect(pin(`unit:${id}`)).not.toHaveClass(/is-muted/);
-  await expect(pin(`unit:${other.id}`)).toHaveClass(/is-muted/);
-  // Its detail docks in a corner of the map, clear of the assets around it.
-  const detail = page.locator(".entity-popover.docked").getByRole("dialog", { name: "Detalle de la selección" });
-  await expect(detail).toContainText(incident.id);
-  await detail.getByRole("button", { name: "Cerrar detalle" }).click();
-  await expect(page.locator(".operational-map [data-entity].is-muted")).toHaveCount(0);
 });
 test("new records follow on demand, paused history stays fixed and connection errors recover", async ({
   page,
@@ -123,7 +84,7 @@ test("new records follow on demand, paused history stays fixed and connection er
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/?inicio=1");
   await expect(
     page.getByText("8 registros recibidos", { exact: true }),
   ).toBeVisible();
@@ -157,7 +118,7 @@ test("empty and incompatible executions are explicit, with no mock fallback", as
   page,
 }) => {
   await page.route("**/api/runs", (r) => r.fulfill({ json: [] }));
-  await page.goto("/");
+  await page.goto("/?inicio=1");
   await expect(
     page.getByRole("heading", { name: "No hay ejecuciones todavía" }),
   ).toBeVisible();
@@ -178,7 +139,7 @@ test("recordings in the previous format show an explicit error while the run pic
   await page.route(`**/api/runs/${meta.id}?*`, (route) => route.fulfill({
     json: { meta, ticks: [{ tick: 0, frame: { ambulances: [], patients: [], hospitals: [], closedEdges: [] }, events: [], actions: [] }] },
   }));
-  await page.goto("/");
+  await page.goto("/?inicio=1");
   await expect(page.getByRole("alert")).toContainText("formato anterior de ambulancias y pacientes");
   await expect(page.getByLabel("Seleccionar ejecución")).toBeEnabled();
   await expect(page.locator(".run-incident")).toHaveCount(0);
@@ -199,7 +160,7 @@ test("completion drains trailing records even if finished metadata races the fil
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/?inicio=1");
   await expect(
     page.getByText(`${records.length} registros recibidos`, { exact: true }),
   ).toBeVisible();
@@ -207,118 +168,4 @@ test("completion drains trailing records even if finished metadata races the fil
   await expect(
     page.getByLabel("Navegar por el historial", { exact: true }),
   ).toHaveValue(String(records.length - 1));
-});
-
-test("operational sidebar explores the map, keeps global context and respects the selected instant", async ({ page }) => {
-  const idle = { ...records[0].frame.units[0], kind: "ambulance" as const, mission: "idle" as const, incidentId: null, victimId: null, hospitalId: null, broken: false, stranded: false, route: [] as [number, 0 | 1][] };
-  const hospitals = meta.hospitals.slice(0, 2);
-  const operationalMeta = { ...meta, id: "operational-sidebar", hospitals, status: "finished" as const };
-  const incident = (id: string, openedTick: number, priority: 0 | 1 | 2 | 3, node: number): IncidentFrame => ({
-    id, status: "open", closedReason: null, mergedInto: null, emergencyId: null, openedTick, updatedTick: openedTick, node, locationErrorM: 120,
-    located: false, sceneId: null, callIds: [`L${id.slice(1)}`], mechanism: null, conscious: null, breathing: null, bleeding: null, trapped: null,
-    ageGroup: null, victimsReported: null, victims: [], priority, unreachable: false, history: [], line: `${id} · P${priority}`, cutOffIn: null,
-  });
-  const summary = { ...records[0].frame.summary, saved: 0, dead: 0, inWater: 0 };
-  const initial: TickRecord = { ...records[0], tick: 0, events: [], calls: [], actions: [], decision: undefined, frame: {
-    ...records[0].frame, incidents: [], scenes: [], closedEdges: [], knownClosedEdges: [], floods: [], knownWater: { zones: [], sightings: [] },
-    units: ["A1", "A2", "A3"].map((id) => ({ ...idle, id })),
-    hospitals: hospitals.map((h) => ({ id: h.id, occupied: 0 })), summary,
-  } };
-  const busy: TickRecord = { ...initial, tick: 5, events: [{ type: "unit_broken", tick: 5, unitId: "A3", untilTick: 9 }], frame: { ...initial.frame,
-    units: [
-      { ...idle, id: "A1", mission: "to_scene", incidentId: "C7", hospitalId: hospitals[0].id },
-      { ...idle, id: "A2", mission: "to_hospital", incidentId: "C6", victimId: "V9", hospitalId: hospitals[0].id, pos: records[30].frame.units[0].pos },
-      { ...idle, id: "A3", broken: true },
-    ],
-    incidents: [incident("C6", 0, 1, hospitals[0].node), incident("C7", 1, 1, hospitals[0].node), incident("C8", 2, 2, hospitals[1].node)],
-    hospitals: hospitals.map((h, i) => ({ id: h.id, occupied: h.capacity - (i === 0 ? 1 : 0) })),
-  } };
-  const unloading: TickRecord = { ...busy, tick: 6,
-    events: [{ type: "victim_delivered", tick: 6, victimId: "V9", unitId: "A2", hospitalId: hospitals[0].id }],
-    frame: { ...busy.frame,
-      units: busy.frame.units.map((u) => u.id === "A2" ? { ...idle, id: "A2" } : u),
-      incidents: busy.frame.incidents.map((i) => i.id === "C6" ? { ...i, status: "closed" as const, closedReason: "resolved" as const, updatedTick: 6 } : i),
-      hospitals: hospitals.map((h) => ({ id: h.id, occupied: h.capacity })),
-      summary: { ...summary, saved: 1 },
-    },
-  };
-  const available = { ...unloading, tick: 6 + meta.config.dropoffTicks, events: [] };
-  const snapshots = [initial, busy, unloading, available];
-  await page.route("**/api/runs", (r) => r.fulfill({ json: [operationalMeta] }));
-  await page.route("**/api/runs/operational-sidebar?*", (r) => r.fulfill({ json: { meta: operationalMeta, ticks: snapshots.slice(Number(new URL(r.request().url()).searchParams.get("from"))) } }));
-  await page.goto("/");
-  await page.getByRole("button", { name: "Territorio", exact: true }).click();
-  const sidebar = page.getByRole("complementary", { name: "Estado de la situación" });
-  const row = (ref: string) => sidebar.locator(`.situation-row[data-entity="${ref}"]`);
-  const pin = (ref: string) => page.locator(`.operational-map [data-entity="${ref}"]`);
-  // The selection's detail opens on the map, next to what was picked.
-  const detail = page.getByRole("dialog", { name: "Detalle de la selección" });
-  await expect(sidebar.getByTestId("available-units")).toHaveText("3/3");
-  await page.getByLabel("Navegar por el historial", { exact: true }).fill("1");
-  await expect(sidebar).toContainText("3 incidentes abiertos");
-  await expect(sidebar.getByTestId("available-units")).toHaveText("0/3");
-  await expect(sidebar).toContainText("Revisando el pasado");
-  await expect(sidebar).not.toContainText("Master");
-  await expect(sidebar).not.toContainText("Coordinador");
-  // Units and hospitals start folded to a summary line.
-  const unitsSection = sidebar.getByRole("button", { name: /^Unidades/ });
-  await expect(unitsSection).toHaveAttribute("aria-expanded", "false");
-  await expect(unitsSection).toContainText("0 disponibles · 2 ocupadas · 1 averiada");
-  await expect(row("unit:A3")).toHaveCount(0);
-  await unitsSection.click();
-  await sidebar.getByRole("button", { name: /^Hospitales/ }).click();
-  await expect(row(`hospital:${hospitals[0].id}`)).toContainText("margen 0");
-  await expect(row("unit:A3")).toContainText("Reparación prevista en 2 min");
-  await expect(pin("incident:C8")).toBeAttached();
-  await sidebar.getByRole("button", { name: "Sin unidad 1", exact: true }).click();
-  await expect(sidebar.locator(".situation-row")).toHaveCount(1);
-  await expect(pin("incident:C8")).not.toHaveClass(/is-muted/);
-  await expect(pin("unit:A1")).toHaveClass(/is-muted/);
-  await row("incident:C8").click();
-  await expect(detail).toContainText("1 min 30 s");
-  await expect(sidebar).toContainText("3 incidentes abiertos");
-  await expect(sidebar.getByTestId("available-units")).toHaveText("0/3");
-  await sidebar.getByRole("button", { name: "Todos", exact: true }).click();
-  await row("unit:A1").click();
-  await expect(pin("unit:A1")).toHaveAttribute("aria-pressed", "true");
-  await expect(row("incident:C7")).toHaveClass(/related/);
-  await expect(pin(`hospital:${hospitals[0].id}`)).toHaveClass(/related/);
-  await pin("incident:C7").focus();
-  await page.keyboard.press("Enter");
-  await expect(pin("incident:C7")).toBeFocused();
-  await expect(row("incident:C7")).toHaveAttribute("aria-pressed", "true");
-  await expect(detail).toContainText("C7");
-  await detail.getByRole("button", { name: "Cerrar detalle" }).click();
-  await expect(detail).toHaveCount(0);
-  await sidebar.getByLabel("Buscar entidades").fill("c8");
-  await expect(sidebar.locator(".situation-row")).toHaveCount(1);
-  await sidebar.getByLabel("Buscar entidades").fill("sin-coincidencias");
-  await expect(sidebar.getByText("No hay coincidencias", { exact: true })).toBeVisible();
-  await sidebar.getByRole("button", { name: "Borrar búsqueda" }).click();
-  await sidebar.getByRole("button", { name: "Sin camas 1", exact: true }).click();
-  await expect(row(`hospital:${hospitals[1].id}`)).toBeVisible();
-  await expect(sidebar.locator(".situation-row")).toHaveCount(1);
-  await sidebar.getByRole("button", { name: "Todos", exact: true }).click();
-  await page.getByLabel("Navegar por el historial", { exact: true }).fill("2");
-  await expect(row("unit:A2")).toContainText("Descargando");
-  await expect(sidebar.getByTestId("available-units")).toHaveText("0/3");
-  await expect(sidebar.getByTestId("saved-count")).toHaveText("1");
-  await page.getByLabel("Navegar por el historial", { exact: true }).fill("3");
-  await expect(sidebar.getByTestId("available-units")).toHaveText("1/3");
-  await expect(sidebar).toContainText("Estado final de la ejecución");
-  await page.getByLabel("Navegar por el historial", { exact: true }).fill("1");
-  await row("incident:C8").click();
-  await page.screenshot({ path: "test-results/operational-sidebar-desktop.png", fullPage: true });
-  await page.getByLabel("Navegar por el historial", { exact: true }).fill("0");
-  await expect(detail).toHaveCount(0);
-  await expect(sidebar.getByTestId("saved-count")).toHaveText("0");
-  await expect(sidebar.locator('.situation-row[data-entity^="incident:"]')).toHaveCount(0);
-  await page.getByLabel("Navegar por el historial", { exact: true }).fill("1");
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(row("incident:C8")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-  await page.screenshot({ path: "test-results/operational-sidebar-mobile.png", fullPage: true });
-  await row("incident:C8").click();
-  await expect(page.locator(".operational-map")).toBeInViewport();
-  await expect(detail).toBeInViewport();
 });

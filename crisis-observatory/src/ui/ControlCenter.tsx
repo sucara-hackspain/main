@@ -1,11 +1,10 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Layers,
-  Map as MapIcon,
+  LayoutDashboard,
   Pause,
   Play,
   Radio,
@@ -15,24 +14,14 @@ import {
 import { useRun, useRuns } from "./useRuns";
 import {
   elapsed,
-  sameSelection,
-  selectionExists,
   type RunMeta,
-  type Selection,
 } from "./engineTrace";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "../theme.css";
 import "./control-center.css";
 import "./session.css";
-import SituationSidebar from "./situation/SituationSidebar";
-import EntityCard from "./situation/EntityCard";
-import {
-  buildSituation,
-  matchingEntities,
-  relatedEntities,
-  type SituationFilter,
-} from "./situation/model";
+import { buildSituation } from "./situation/model";
 import { auditItems } from "./audit/model";
 import DecisionBanner from "./interventions/DecisionBanner";
 import DecisionRoom, { PendingDecisionBar } from "./interventions/DecisionRoom";
@@ -43,18 +32,21 @@ import { useAlertSound } from "./interventions/sound";
 import type { InterventionView, Option } from "./interventions/model";
 import TicketsView, { TicketDetail } from "./tickets/TicketsView";
 import { buildTickets, type Ticket, type TicketState } from "./tickets/model";
+import OperationsView from "./operations/OperationsView";
+import { SCALE_ID, scaleMeta } from "./operations/demo";
+import { inQueue, queueLabels, sectorDefinitions, sectorIndex, type Queue, type Sector } from "./operations/model";
 
-const RunMap = lazy(() => import("./map/RunMap"));
 // Read once: a run that mounts while another shows a pending count would take the count as its title.
 const pageTitle = document.title;
-// ?iteracion=1 keeps the first iteration, a banner above the map, to compare with the second:
-// every request takes over the page in a decision room, with the map and the thread to decide.
-const iteration =
-  new URLSearchParams(window.location.search).get("iteracion") === "1" ? 1 : 2;
+const noRecords: import("./engineTrace").TickRecord[] = [];
+// The operations queue is the default; earlier banner and interruption layouts remain opt-in.
+const params = new URLSearchParams(window.location.search);
+const iteration = params.get("iteracion") === "1" ? 1 : params.get("iteracion") === "2" ? 2 : 3;
 export default function ControlCenter() {
-  const { runs, error, loaded } = useRuns();
-  const [selected, setSelected] = useState("");
-  const id = selected || runs[0]?.id;
+  const { runs: recordedRuns, error, loaded } = useRuns();
+  const runs = useMemo(() => [...recordedRuns, scaleMeta], [recordedRuns]);
+  const [selected, setSelected] = useState(params.get("escala") === "1" ? SCALE_ID : "");
+  const id = selected || recordedRuns[0]?.id;
   return (
     <div className="control-center run-session">
       {id ? (
@@ -82,6 +74,7 @@ export default function ControlCenter() {
           {loaded && (
             <p>Los nuevos registros aparecerán aquí automáticamente.</p>
           )}
+          <button onClick={() => setSelected(SCALE_ID)}>Explorar escenario simulado · 2.400 casos</button>
         </div>
       )}
     </div>
@@ -101,18 +94,14 @@ function RunSession({
   const { meta, ticks, graph, error } = useRun(id);
   const [index, setIndex] = useState(0),
     [playing, setPlaying] = useState(false),
-    [follow, setFollow] = useState(false),
+    [follow, setFollow] = useState(iteration === 3 && !params.has("inicio")),
     [speed, setSpeed] = useState(2),
-    // Incidents first: the operator starts from what is happening, then goes to the territory.
-    [view, setView] = useState<"map" | "tickets">("tickets"),
+    [view, setView] = useState<"operations" | "tickets">(iteration === 3 ? "operations" : "tickets"),
+    [sectorId, setSectorId] = useState<string | null>(null),
+    [ticketScope, setTicketScope] = useState<{ sectorId: string | null; queue: Queue } | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
-    [entity, setEntity] = useState<Selection | null>(null),
-    [filter, setFilter] = useState<SituationFilter>("all"),
-    [query, setQuery] = useState(""),
-    [showClosed, setShowClosed] = useState(false),
-    [focusRequest, setFocusRequest] = useState(0),
     [decisionId, setDecisionId] = useState<string | null>(null),
     [held, setHeld] = useState(false),
     // Left the decision room to look around: the request waits in a bar until the operator returns.
@@ -124,18 +113,18 @@ function RunSession({
     } | null>(null);
   const current = ticks[Math.min(index, ticks.length - 1)],
     seconds = meta?.config.tickSeconds ?? 30;
-  const interventions = useInterventions({ ticks, current, graph, meta });
+  const interventions = useInterventions({ ticks: id === SCALE_ID ? noRecords : ticks, current,
+    graph: id === SCALE_ID ? null : graph, meta: id === SCALE_ID ? null : meta });
   const { pending, router } = interventions;
   const sound = useAlertSound();
   const { chime } = sound;
-  // A new request brings the operator back to the room. If it opens while time moves on its own
-  // it sounds, and during the replay it also stops it; pressing play again carries on.
-  // Scrubbing by hand stays silent.
+  // Legacy layouts interrupt playback; the operations queue leaves navigation under operator control.
   const asked = useRef(new Set<string>());
   useEffect(() => {
     const fresh = pending.filter((x) => !asked.current.has(x.item.id));
     asked.current = new Set(pending.map((x) => x.item.id));
     if (!fresh.length) return;
+    if (iteration === 3) return;
     setInvestigating(false);
     if ((playing || follow) && iteration === 2) chime();
     if (playing) {
@@ -180,27 +169,21 @@ function RunSession({
   const visible = useMemo(() => ticks.slice(0, index + 1), [ticks, index]);
   const all = useMemo(() => auditItems(visible), [visible]);
   const tickets = useMemo(() => buildTickets(visible, seconds), [visible, seconds]);
+  const scopedTickets = useMemo(() => ticketScope ? tickets.filter((t) =>
+    (!ticketScope.sectorId || !graph || `sector-${sectorIndex(graph.nodes[t.incident.node], graph) + 1}` === ticketScope.sectorId) && inQueue(t, ticketScope.queue)) : tickets,
+    [tickets, ticketScope, graph]);
+  const scopeName = ticketScope?.sectorId && graph ? sectorDefinitions(graph).find((s) => s.id === ticketScope.sectorId)?.name : null;
   const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
-  const selection =
-    entity && selectionExists(entity, current, meta) ? entity : null;
-  // The situation at the selected instant, from what is known up to it.
+  // Only the operations overview needs the territorial summary.
   const situation = useMemo(
-    () => (current && meta ? buildSituation(current, meta, visible, graph) : null),
-    [current, meta, visible, graph],
+    () => (view === "operations" && current && meta ? buildSituation(current, meta, visible, graph) : null),
+    [view, current, meta, visible, graph],
   );
-  const related = useMemo(
-    () => (situation ? relatedEntities(situation, selection) : new Set<string>()),
-    [situation, selection],
-  );
-  const matches = useMemo(
-    () =>
-      situation ? matchingEntities(situation, filter, query, showClosed) : new Set<string>(),
-    [situation, filter, query, showClosed],
-  );
-  const filtered = filter !== "all" || !!query.trim();
+  const workspace = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (entity && current && !selectionExists(entity, current, meta)) setEntity(null);
-  }, [current, meta, entity]);
+    if (view === "operations" && window.matchMedia("(max-width: 800px)").matches)
+      workspace.current?.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [view]);
   function seek(i: number) {
     setIndex(i);
     setPlaying(false);
@@ -213,8 +196,9 @@ function RunSession({
   }
   function decide(item: InterventionView, option: Option, prescribed: Option) {
     interventions.decide(item, option, prescribed);
-    if (iteration === 2)
+    if (iteration !== 1)
       setReceipt({ id: item.id, label: option.label, key: Date.now() });
+    if (iteration === 3) setDecisionId(null);
     const others = pending.filter((x) => x.item.id !== item.id);
     if (held && others.length === 0) {
       setHeld(false);
@@ -226,23 +210,21 @@ function RunSession({
     setDecisionId(id);
     if (pending.some((x) => x.item.id === id)) setInvestigating(false);
   }
-  function chooseEntity(value: Selection | null) {
-    setEntity(value);
+  function openTicketSector(ticket: Ticket) {
+    setSectorId(graph ? `sector-${sectorIndex(graph.nodes[ticket.incident.node], graph) + 1}` : null);
+    setTicketId(ticket.id);
+    setView("operations");
   }
-  function chooseIncident(id: string | null) {
-    chooseEntity(id ? { kind: "incident", id } : null);
-  }
-  function locateTicket(ticket: Ticket) {
-    // Closed incidents leave the engine's current frame after twenty ticks.
-    if (!current?.frame.incidents.some((i) => i.id === ticket.id)) seekTick(ticket.lastSeenTick);
-    setFilter("all");
-    setQuery("");
-    chooseIncident(ticket.id);
-    setView("map");
-    setFocusRequest((n) => n + 1);
+  function openOperationsQueue(sector: Sector | null, queue: Queue, selectedId: string | null = null) {
+    setTicketScope({ sectorId: sector?.id ?? null, queue });
+    setTicketFilter("all");
+    setTicketQuery("");
+    setTicketId(selectedId);
+    setView("tickets");
   }
   const room =
-    iteration === 2 &&
+    iteration !== 1 &&
+    (iteration === 2 || pending.some((p) => p.item.id === decisionId)) &&
     !investigating &&
     pending.length > 0 &&
     current &&
@@ -278,17 +260,16 @@ function RunSession({
       onDecide={decide}
       onUndo={interventions.undo}
       onLocate={(incidentId) => {
-        chooseIncident(incidentId);
-        setView("map");
-        setFocusRequest((n) => n + 1);
+        const ticket = tickets.find((t) => t.id === incidentId);
+        if (ticket) openTicketSector(ticket);
       }}
     />
   );
   // While the room is open everything else stays out of reach.
   const blocked = Boolean(room);
   return (
-    <main className="app-layout">
-      <section className="app-workspace" inert={blocked}>
+    <main className={`app-layout${view === "operations" ? " operations-layout" : ""}`}>
+      <section className="app-workspace" inert={blocked} ref={workspace}>
         {iteration === 2 && investigating && urgent && current && (
           <PendingDecisionBar
             pending={pending}
@@ -300,24 +281,16 @@ function RunSession({
         )}
         <div className="app-toolbar">
           <div className="app-tabs">
+            <button aria-pressed={view === "operations"} className={view === "operations" ? "is-active" : ""} onClick={() => setView("operations")}>
+              <LayoutDashboard size={14} />Operaciones
+            </button>
             <button
               aria-pressed={view === "tickets"}
               className={view === "tickets" ? "is-active" : ""}
-              onClick={() => {
-                if (selection?.kind === "incident") setTicketId(selection.id);
-                setView("tickets");
-              }}
+              onClick={() => setView("tickets")}
             >
               <ClipboardList size={14} />
               Incidencias
-            </button>
-            <button
-              aria-pressed={view === "map"}
-              className={view === "map" ? "is-active" : ""}
-              onClick={() => setView("map")}
-            >
-              <MapIcon size={14} />
-              Territorio
             </button>
           </div>
           {current && (
@@ -336,7 +309,7 @@ function RunSession({
         </div>
         <div className="app-context run-context">
           <span className="app-eyebrow">
-            VALENCIA <span>GESTIÓN</span>
+            VALENCIA <span>{id === SCALE_ID ? "DATOS SIMULADOS · ESCENARIO DE ESCALA" : "GESTIÓN"}</span>
           </span>
           <span
             className={`run-status ${meta?.status === "failed" ? "danger" : ""}`}
@@ -357,82 +330,26 @@ function RunSession({
             {ticks.length > 0 && "Se conserva el último registro recibido."}
           </div>
         )}
-        {view !== "tickets" && <div className="app-scope">
-          <div>
-            <button
-              className={!selection && !filtered ? "is-active" : ""}
-              onClick={() => {
-                chooseEntity(null);
-                setFilter("all");
-                setQuery("");
-              }}
-            >
-              <Layers size={13} />
-              Contexto global
-            </button>
-            {selection && (
-              <button className="app-filter" onClick={() => chooseEntity(null)}>
-                {selection.id}
-                <X size={12} />
-              </button>
-            )}
-          </div>
-          <span>
-            {current?.frame.incidents.filter((i) => i.status === "open").length ?? 0} incidentes abiertos{" "}
-            · +{elapsed(current?.tick ?? 0, seconds)}
-          </span>
-        </div>}
         {banner}
+        {view === "tickets" && ticketScope && <div className="ticket-scope"><span>{scopeName ?? "Todo el territorio"} · {queueLabels[ticketScope.queue]}</span><button onClick={() => setTicketScope(null)}>Quitar ámbito <X size={12} /></button></div>}
         <div className="app-stage">
           {!current ? (
             <div className="app-empty">
               {error
                 ? "No hay registros compatibles disponibles."
                 : "Esperando el primer registro de actividad…"}
+              {view === "operations" && <label className="run-picker"><span>Ejecución</span><select aria-label="Seleccionar ejecución" value={id} onChange={(e) => onRun(e.target.value)}>{runs.map((r) => <option key={r.id} value={r.id}>{r.id}</option>)}</select></label>}
             </div>
+          ) : view === "operations" && graph && meta && situation ? (
+            <OperationsView graph={graph} meta={meta} record={current} records={visible} tickets={tickets} situation={situation}
+              pending={pending} sectorId={sectorId} onSector={setSectorId} onTicket={(id, sector) => openOperationsQueue(sector, "all", id)}
+              onQueue={openOperationsQueue} onDecision={activate} runs={runs} onRun={onRun} received={ticks.length} />
           ) : view === "tickets" ? (
-            <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
+            <TicketsView tickets={scopedTickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
           ) : (
-            graph &&
-            meta && (
-              <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
-                <RunMap
-                  graph={graph}
-                  meta={meta}
-                  record={current}
-                  selected={selection}
-                  onSelect={(ref) =>
-                    chooseEntity(ref && sameSelection(selection, ref) ? null : ref)
-                  }
-                  focusRequest={focusRequest}
-                  related={related}
-                  matches={matches}
-                  filtered={filtered}
-                  detail={
-                    selection &&
-                    situation && (
-                      <EntityCard
-                        s={situation}
-                        selection={selection}
-                        graph={graph}
-                        ticket={
-                          selection.kind === "incident"
-                            ? (tickets.find((t) => t.id === selection.id) ?? null)
-                            : null
-                        }
-                        onSelect={chooseEntity}
-                        onOpenTicket={(incidentId) => {
-                          setTicketId(incidentId);
-                          setView("tickets");
-                        }}
-                      />
-                    )
-                  }
-                />
-              </Suspense>
-            )
+            <div className="app-empty">Preparando operaciones…</div>
           )}
         </div>
         <div className="app-playback">
@@ -524,34 +441,10 @@ function RunSession({
           </div>
         </div>
       </section>
-      <div className="app-sidebar-slot" inert={blocked}>
-        {view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
-          onLocate={locateTicket} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} /> : <SituationSidebar
-          id={id}
-          runs={runs}
-          onRun={onRun}
-          situation={situation}
-          selection={selection}
-          onSelect={(ref) => {
-            chooseEntity(ref);
-            // On a phone the map is above the list: bring it into view, where the detail opens.
-            if (ref && view === "map") setFocusRequest((n) => n + 1);
-          }}
-          related={related}
-          matches={matches}
-          filter={filter}
-          onFilter={setFilter}
-          query={query}
-          onQuery={setQuery}
-          showClosed={showClosed}
-          onShowClosed={() => setShowClosed(!showClosed)}
-          historical={!!current && current.tick < (ticks.at(-1)?.tick ?? 0)}
-          following={follow}
-          running={meta?.status === "running"}
-          records={ticks.length}
-          error={!!(error || listError)}
-        />}
-      </div>
+      {view === "tickets" && <div className="app-sidebar-slot" inert={blocked}>
+        <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
+          onOpenSector={openTicketSector} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} />
+      </div>}
       {room}
       {receipt && (
         <DecisionReceipt

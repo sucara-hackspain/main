@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, CheckCheck, ChevronRight, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
+import { Check, CheckCheck, ChevronLeft, ChevronRight, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
 import { elapsed, injuryLabel, priority, sceneLabel, triageLabel, unitKind, unitStatus, victimStatus, type Focus, type IncidentFrame, type RunMeta } from "../engineTrace";
 import { duration } from "../situation/model";
 import { ticketNextStep, ticketStates, type Ticket, type TicketState, type TicketStep } from "./model";
@@ -19,10 +19,21 @@ export default function TicketsView({ tickets, selected, onSelect, filter, onFil
   filter: TicketState | "all"; onFilter: (state: TicketState | "all") => void;
   query: string; onQuery: (value: string) => void; seconds: number; tick: number;
 }) {
+  const [page, setPage] = useState(0);
+  const scroll = useRef<HTMLDivElement>(null);
   const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
   const search = normalize(query.trim());
   const matches = tickets.filter((t) => (filter === "all" || t.state === filter) &&
     (!search || normalize([t.id, t.title, t.location, ...t.crews.map((u) => u.id), ...t.calls.map((c) => c.text)].join(" ")).includes(search)));
+  const pageSize = 50, pages = Math.max(1, Math.ceil(matches.length / pageSize)), currentPage = Math.min(page, pages - 1);
+  useEffect(() => { setPage(0); }, [filter, query]);
+  useEffect(() => {
+    if (selected) {
+      const index = matches.findIndex((t) => t.id === selected);
+      if (index >= 0) setPage(Math.floor(index / pageSize));
+    }
+  }, [selected]);
+  useEffect(() => { scroll.current?.scrollTo({ top: 0 }); }, [currentPage, filter, query]);
   return <section className="tickets-view" aria-label="Tickets de incidencias">
     <header className="tickets-heading">
       <div><span className="app-eyebrow">CENTRO DE COORDINACIÓN</span><h1>Incidencias <span>{tickets.length}</span></h1>
@@ -40,10 +51,10 @@ export default function TicketsView({ tickets, selected, onSelect, filter, onFil
         {query && <button aria-label="Borrar búsqueda de incidencias" onClick={() => onQuery("")}><X size={13} /></button>}
       </label>
     </div>
-    <div className="tickets-table-scroll">
+    <div className="tickets-table-scroll" ref={scroll}>
       {matches.length ? <table className="tickets-table">
         <thead><tr><th scope="col">Incidencia</th><th scope="col">Estado</th><th scope="col">Prioridad</th><th scope="col">Unidades</th><th scope="col">Actualización</th></tr></thead>
-        <tbody>{matches.map((ticket) => <tr key={ticket.id} data-ticket={ticket.id} className={selected === ticket.id ? "selected" : ""} onClick={() => onSelect(ticket.id)}>
+        <tbody>{matches.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((ticket) => <tr key={ticket.id} data-ticket={ticket.id} className={selected === ticket.id ? "selected" : ""} onClick={() => onSelect(ticket.id)}>
           <td><button className="ticket-open" aria-label={`Abrir incidencia ${ticket.id}: ${ticket.title}`} aria-pressed={selected === ticket.id} onClick={(e) => { e.stopPropagation(); onSelect(ticket.id); }}>
             <span className="ticket-row-icon"><ClipboardList size={16} /></span>
             <span><span className="ticket-row-title"><code>{ticket.id}</code><strong>{ticket.title}</strong></span><small><MapPin size={11} />{ticket.location}
@@ -58,7 +69,9 @@ export default function TicketsView({ tickets, selected, onSelect, filter, onFil
         {(query || filter !== "all") && <button onClick={() => { onQuery(""); onFilter("all"); }}>Limpiar filtros</button>}
       </div>}
     </div>
-    <footer className="tickets-footer"><span>{matches.length} de {tickets.length} incidencias</span><span><span className="tickets-live-dot" />Datos del instante seleccionado</span></footer>
+    <footer className="tickets-footer"><span>{matches.length} de {tickets.length} incidencias</span>
+      {pages > 1 && <nav className="ticket-pagination" aria-label="Páginas de incidencias"><button aria-label="Página anterior de incidencias" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={13} /></button><span>{currentPage + 1} / {pages}</span><button aria-label="Página siguiente de incidencias" disabled={currentPage >= pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={13} /></button></nav>}
+      <span><span className="tickets-live-dot" />Datos del instante seleccionado</span></footer>
   </section>;
 }
 
@@ -119,8 +132,8 @@ function TimelineStep({ step, seconds }: { step: TicketStep; seconds: number }) 
   </li>;
 }
 
-export function TicketDetail({ ticket, seconds, tick, onLocate, onClose, runs, runId, onRun, records }: {
-  ticket: Ticket | null; seconds: number; tick: number; onLocate: (ticket: Ticket) => void; onClose: () => void;
+export function TicketDetail({ ticket, seconds, tick, onOpenSector, onClose, runs, runId, onRun, records }: {
+  ticket: Ticket | null; seconds: number; tick: number; onOpenSector: (ticket: Ticket) => void; onClose: () => void;
   runs: RunMeta[]; runId: string; onRun: (id: string) => void; records: number;
 }) {
   const panel = useRef<HTMLElement>(null), body = useRef<HTMLDivElement>(null);
@@ -150,8 +163,8 @@ export function TicketDetail({ ticket, seconds, tick, onLocate, onClose, runs, r
           <div><dt>Avisos recibidos</dt><dd>{incident.callIds.length}</dd></div>
           {incident.splitFrom && <div><dt>Separada de</dt><dd><code>{incident.splitFrom}</code> · otro sitio</dd></div>}
         </dl>
-        <button type="button" className="ticket-locate" onClick={() => onLocate(ticket)}><MapPin size={16} aria-hidden="true" />Enfocar en el mapa</button>
-        {ticket.lastSeenTick < tick && <small className="ticket-archive-note">Se abrirá el último registro de esta incidencia en el mapa.</small>}
+        <button type="button" className="ticket-locate" onClick={() => onOpenSector(ticket)}><MapPin size={16} aria-hidden="true" />Ver sector en operaciones</button>
+        {ticket.lastSeenTick < tick && <small className="ticket-archive-note">El sector muestra la situación del instante seleccionado.</small>}
       </section>
       <section className="ticket-next" data-state={ticket.state} aria-label="Seguimiento de la incidencia"><span className="ticket-next-icon">{ticket.state === "resolved" ? <CheckCheck size={16} /> : <Clock3 size={16} />}</span><div><span className="app-eyebrow">{ticket.state === "resolved" ? "CIERRE" : "SEGUIMIENTO"}</span><h3>{next.title}</h3><p>{next.detail}</p><small>Según el estado registrado</small></div></section>
       {ticket.crews.length > 0 && <section className="ticket-assigned"><h3>Unidades vinculadas <span>{ticket.crews.length}</span></h3>{ticket.crews.map((u) => <div key={u.id}><Truck size={14} /><strong>{u.id}</strong><span>{unitKind[u.kind].label}<small>{unitStatus(u)}</small></span></div>)}</section>}
