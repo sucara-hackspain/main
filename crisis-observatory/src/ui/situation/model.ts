@@ -1,5 +1,5 @@
 import {
-  elapsed, isFree, priority, sceneLabel, unitKind, UNIT_KINDS,
+  attention, elapsed, isFree, priority, sceneLabel, unitKind, UNIT_KINDS,
   type GraphData, type IncidentFrame, type RunMeta, type Selection, type TickRecord, type UnitFrame,
 } from "../engineTrace";
 
@@ -105,7 +105,7 @@ export function buildSituation(record: TickRecord, meta: RunMeta, history: TickR
     const crews = open ? units.filter((u) => u.incidentId === i.id) : [];
     const state = incidentState(i, crews, seconds);
     return {
-      ...i, ref: { kind: "incident", id: i.id } as Selection, open, crews, ...state,
+      ...i, ref: { kind: "incident", id: i.id } as Selection, open, crews, ...state, attention: attention(i, crews),
       unattended: open && crews.length === 0, isolated: open && isolated(i),
       wait: open ? tick - i.openedTick : null,
       detail: [
