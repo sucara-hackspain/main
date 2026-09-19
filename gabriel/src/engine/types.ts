@@ -234,7 +234,8 @@ export interface AssessedVictim {
 
 type EventBody =
   | { type: "scene_created"; sceneId: string; kind: SceneKind; node: number; victims: number }
-  | { type: "scene_assessed"; unitId: string; incidentId: string | null; sceneId: string; node: number; victims: AssessedVictim[] }
+  /** `inSight`: not the scene the crew is working, but something else it can see from there. */
+  | { type: "scene_assessed"; unitId: string; incidentId: string | null; sceneId: string; kind: SceneKind; node: number; inSight: boolean; victims: AssessedVictim[] }
   | { type: "scene_not_found"; unitId: string; incidentId: string | null; node: number }
   | { type: "victim_picked_up"; victimId: string; unitId: string; incidentId: string | null }
   | { type: "victim_freed"; victimId: string; unitId: string; incidentId: string | null }
@@ -314,22 +315,8 @@ export interface Sourced<T> {
 
 export type Priority = 0 | 1 | 2 | 3;
 
-/** One place, one response. Calls get attached to it; crews confirm what is really there. */
-export interface Incident {
-  id: string;
-  status: "open" | "closed";
-  closedReason: "resolved" | "not_found" | "merged" | null;
-  mergedInto: string | null;
-  /** Reserved: parent emergency (flood, blackout...) once those exist. */
-  emergencyId: string | null;
-  openedTick: number;
-  updatedTick: number;
-  node: number;
-  locationErrorM: number;
-  /** A crew has confirmed the exact spot. */
-  located: boolean;
-  sceneId: string | null;
-  callIds: string[];
+/** What callers say about whoever is hurt. "Unknown" is simply absent. */
+export interface Signs {
   mechanism: Sourced<SceneKind> | null;
   conscious: Sourced<"yes" | "no"> | null;
   breathing: Sourced<Breathing> | null;
@@ -337,13 +324,87 @@ export interface Incident {
   trapped: Sourced<"yes" | "no"> | null;
   ageGroup: Sourced<"child" | "adult" | "elderly"> | null;
   victimsReported: Sourced<number> | null;
+}
+
+/** reported = only calls so far. located = a crew is or was there and someone still waits. */
+export type FocusStatus = "reported" | "located" | "cleared" | "not_found";
+
+/** One thing going on inside an incident: a collapse and a trapped car on the same corner are two foci of one incident. */
+export interface Focus extends Signs {
+  /** `C3.2`: second focus of incident C3. */
+  id: string;
+  status: FocusStatus;
+  openedTick: number;
+  node: number;
+  locationErrorM: number;
+  sceneId: string | null;
+  callIds: string[];
   /** Confirmed on scene by a crew. */
+  victims: AssessedVictim[];
+  /** What the last crew said it saw here, to tell news from repetition. */
+  lastReport: string | null;
+}
+
+/** One line of an incident's case file. Written by the engine as things happen, never rebuilt afterwards. */
+export interface CaseEntry {
+  tick: number;
+  /**
+   * call = a 112 call attached. update = something we know changed. radio = a crew or hospital reports.
+   * order = the coordinator's order and what became of it. operator = the same, given by the human supervisor.
+   * link = merged with, or split from, another incident. closed = the incident ends.
+   */
+  kind: "call" | "update" | "radio" | "order" | "operator" | "link" | "closed";
+  text: string;
+  /** Call id, `radio A2`, `hospital H3`, `reglas`, `agente`, `operador`... */
+  from: string;
+  focusId?: string;
+  callId?: string;
+  unitId?: string;
+  /** Orders only. */
+  action?: Action;
+  accepted?: boolean;
+  etaTicks?: number;
+  /** Why the coordinator gave the order, and the rules of its doctrine it cited. */
+  reason?: string;
+  applies?: string[];
+  decidedBy?: "llm" | "rules" | "fallback" | "operator";
+}
+
+/**
+ * One place, one response: whatever the same crews on the same trip can deal with is the same incident,
+ * however many calls and however many different things are going on there (its foci).
+ * The top-level signs, victims and node sum the foci up for whoever only needs the headline.
+ */
+export interface Incident extends Signs {
+  id: string;
+  status: "open" | "closed";
+  closedReason: "resolved" | "not_found" | "merged" | null;
+  mergedInto: string | null;
+  /** A crew sent here found this somewhere else: a different place, so a different incident. */
+  splitFrom: string | null;
+  /** Reserved: parent emergency (flood, blackout...) once those exist. */
+  emergencyId: string | null;
+  openedTick: number;
+  updatedTick: number;
+  /** Where to send the next crew: the most pressing focus that still needs someone. */
+  node: number;
+  locationErrorM: number;
+  /** A crew has confirmed at least one focus on the spot. */
+  located: boolean;
+  /** Scene of the first focus a crew confirmed. */
+  sceneId: string | null;
+  callIds: string[];
+  foci: Focus[];
+  /** Confirmed on scene by a crew, all foci together. */
   victims: AssessedVictim[];
   /** 0 = life at risk right now ... 3 = can wait. Deduced from the signs, never told. */
   priority: Priority;
   /** No road gets there (as far as we know): it needs a boat or a helicopter, not an ambulance. */
   unreachable: boolean;
+  /** Where each thing we know came from. */
   history: { tick: number; field: string; value: string; from: string }[];
+  /** The case file: calls, reports, orders and their reasons, in the order they happened. */
+  timeline: CaseEntry[];
 }
 
 /** Somebody saw water. wet = a caller or crew reports water there. blocked = a crew could not drive any further. */
