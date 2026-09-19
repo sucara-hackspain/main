@@ -102,8 +102,9 @@ export function updateBelief(belief: Belief, reports: Report[], world: Readonly<
       }
       case "scene_not_found": {
         const incident = resolve(belief, event.incidentId);
+        // A wasted trip belongs in the file even when the incident was already closed by then.
+        if (incident) radio(incident, event);
         if (incident?.status !== "open") break;
-        radio(incident, event);
         const reported = incident.foci.filter((f) => f.status === "reported");
         const searched = reported.filter((f) => graph.distanceM(event.node, f.node) <= world.config.searchRadiusM);
         for (const focus of searched.length > 0 ? searched : reported) focus.status = "not_found";
