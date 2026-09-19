@@ -1,9 +1,9 @@
-import type { GraphData } from "../../gabriel/src/engine/types";
+import type { GraphData } from "../../../gabriel/src/engine/types";
 import type {
   AmbulanceFrame,
   RunMeta,
   TickRecord,
-} from "../../gabriel/src/engine/trace";
+} from "../../../gabriel/src/engine/trace";
 export type { GraphData, RunMeta, TickRecord, AmbulanceFrame };
 export const elapsed = (tick: number, seconds: number) => {
   const n = Math.floor(tick * seconds);

@@ -1,4 +1,4 @@
-import type { Action, WorldEvent } from "../../../gabriel/src/engine/types";
+import type { Action, WorldEvent } from "../../../../gabriel/src/engine/types";
 import { elapsed, type TickRecord } from "../runModel";
 
 export const laneName = {

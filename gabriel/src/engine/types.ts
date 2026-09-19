@@ -43,12 +43,85 @@ export interface Step {
   forward: boolean;
 }
 
-// ---------- Entities ----------
+// ---------- Ground truth: scenes and victims ----------
+// The coordinator never sees any of this directly. It hears calls, and later what crews radio in.
 
-export type Mission = "idle" | "to_patient" | "to_hospital" | "reposition";
+export type InjuryKind = "cardiac_arrest" | "drowning" | "hemorrhage" | "respiratory" | "polytrauma" | "hypothermia" | "fracture" | "minor";
+export type Breathing = "normal" | "difficult" | "none";
+export type VictimStatus = "waiting" | "in_ambulance" | "delivered" | "treated" | "dead";
+/** What a crew assigns on scene. black = dead. */
+export type Triage = "red" | "yellow" | "green" | "black";
 
-export interface Ambulance {
+export interface VictimSpec {
+  injury: InjuryKind;
+  age: number;
+  conscious: boolean;
+  breathing: Breathing;
+  bleeding: boolean;
+  /** Stuck in a car or under rubble: nobody can carry them until firefighters free them. */
+  trapped: boolean;
+  /** Ticks of life left if untreated. null = not life-threatening. */
+  ttl: number | null;
+}
+
+export interface Victim extends VictimSpec {
   id: string;
+  sceneId: string;
+  node: number;
+  status: VictimStatus;
+  spawnTick: number;
+  /** Tick a crew first took charge (pickup or on-scene treatment). */
+  attendedTick: number | null;
+  endTick: number | null;
+  /** The water reached them before any crew did: no ambulance can get there. */
+  inWater: boolean;
+}
+
+export type SceneKind = "vehicle_trapped" | "flooded_home" | "swept_away" | "building_collapse" | "collapse" | "fall" | "traffic";
+
+/** Something that happened at one place: one response, one or more victims. */
+export interface Scene {
+  id: string;
+  kind: SceneKind;
+  node: number;
+  tick: number;
+  victimIds: string[];
+  /** A crew has been here and nobody is left waiting. */
+  resolved: boolean;
+}
+
+/**
+ * Water spreading from a point. Inside `radiusM` streets cannot be driven. Around it there is a
+ * shallower fringe (FLOOD_FRINGE_M wide): cars stall and ground floors fill, but an ambulance gets through.
+ */
+export interface Flood {
+  id: string;
+  name: string;
+  node: number;
+  radiusM: number;
+  /** Metres gained per tick until maxRadiusM. */
+  growthM: number;
+  maxRadiusM: number;
+  startTick: number;
+}
+
+// ---------- Resources ----------
+
+export type Mission = "idle" | "to_scene" | "to_hospital" | "reposition";
+
+/**
+ * ambulance: carries one victim to hospital, by road.
+ * fire: frees trapped victims so that someone else can carry them. Carries nobody.
+ * rescue: high-clearance/amphibious crew. Slow, but drives through flooded streets: the only road unit that reaches people inside the water.
+ * helicopter: flies straight, fast, ignores streets and water. One victim, and only to hospitals with a helipad.
+ */
+export type UnitKind = "ambulance" | "fire" | "rescue" | "helicopter";
+
+export interface Unit {
+  id: string;
+  kind: UnitKind;
+  /** Helicopters only: the leg being flown. */
+  flight: { from: LonLat; toNode: number; distM: number; doneM: number } | null;
   /** Last node reached. While route[0] is in progress the ambulance is between `node` and that step's end. */
   node: number;
   mission: Mission;
@@ -57,35 +130,27 @@ export interface Ambulance {
   route: Step[];
   /** Seconds already driven along route[0]. */
   progressS: number;
-  /** Patient on board ("llena"). mission "idle" + patientId set = waiting for a transport order. */
-  patientId: string | null;
-  targetPatientId: string | null;
+  /** Coordinator's incident this mission belongs to. Opaque to the engine: it is only echoed back in events. */
+  incidentId: string | null;
+  /** Real scene, once the crew has found it. */
+  sceneId: string | null;
+  /** Victim on board. mission "idle" + victimId set = waiting for a transport order. */
+  victimId: string | null;
   hospitalId: string | null;
-  /** Broken down ("pinchada") until this tick. */
+  /** Broken down until this tick. */
   brokenUntil: number | null;
-  /** Busy loading/unloading until this tick. */
+  /** Busy loading/unloading/treating until this tick. */
   busyUntil: number;
   /** Has a destination but no open route to it. */
   stranded: boolean;
-}
-
-export type PatientStatus = "waiting" | "in_ambulance" | "delivered" | "dead";
-
-export interface Patient {
-  id: string;
-  node: number;
-  status: PatientStatus;
-  /** Ticks of life left if untreated. */
-  ttl: number;
-  spawnTick: number;
-  pickupTick: number | null;
-  endTick: number | null;
 }
 
 export interface Hospital {
   id: string;
   name: string;
   node: number;
+  /** Helicopters can only deliver here if true. */
+  helipad: boolean;
   capacity: number;
   occupied: number;
 }
@@ -95,6 +160,9 @@ export interface Hospital {
 export interface SimConfig {
   tickSeconds: number;
   ambulances: number;
+  fireUnits: number;
+  rescueUnits: number;
+  helicopters: number;
   /** Max hospitals taken from the map (emergency ones first). */
   hospitals: number;
   hospitalCapacity: number;
@@ -102,87 +170,216 @@ export interface SimConfig {
   ambulanceSpeedFactor: number;
   pickupTicks: number;
   dropoffTicks: number;
-  /** TTL lost per tick while on board (1 = same as on the street). */
-  ttlDecayInAmbulance: number;
+  /** On-scene treatment of one minor victim. */
+  treatTicks: number;
+  /** Firefighters freeing one trapped victim. */
+  extricateTicks: number;
+  /** How far from the reported spot a crew will look for the scene. */
+  searchRadiusM: number;
 }
 
 export interface World {
   tick: number;
   config: SimConfig;
-  ambulances: Ambulance[];
-  patients: Patient[];
+  units: Unit[];
+  scenes: Scene[];
+  victims: Victim[];
   hospitals: Hospital[];
+  floods: Flood[];
+  /** Streets that really cannot be driven. */
   closedEdges: number[];
+  /** The subset of closedEdges that is under water: rescue units still get through these. */
+  floodedEdges: number[];
+  /**
+   * Streets dispatch and crews KNOW are closed: the only ones routes avoid. A mirror of the
+   * coordinator's belief, refreshed every tick; crews add to it when they run into a closure.
+   */
+  knownClosedEdges: number[];
   log: WorldEvent[];
-  nextPatientNum: number;
+  nextSceneNum: number;
+  nextVictimNum: number;
 }
 
 // ---------- What the master can do to the world ----------
 
 export type MasterAction =
-  | { type: "spawn_patient"; node: number; ttl: number }
+  | { type: "spawn_scene"; kind: SceneKind; node: number; victims: VictimSpec[] }
+  | { type: "start_flood"; name: string; node: number; radiusM: number; growthM: number; maxRadiusM: number }
   | { type: "close_road"; edge: number }
   | { type: "open_road"; edge: number }
-  | { type: "puncture"; ambulanceId: string; ticks: number };
+  | { type: "puncture"; unitId: string; ticks: number };
 
 // ---------- What the coordinator can order ----------
 
 export type Action =
-  /** Send an empty ambulance to a patient. With hospitalId it continues there after pickup. */
-  | { type: "dispatch"; ambulanceId: string; patientId: string; hospitalId?: string }
+  /**
+   * Send an empty ambulance to an incident. `node` is where the coordinator believes it is;
+   * the crew looks around there. With hospitalId it continues there once it has loaded someone.
+   */
+  | { type: "dispatch"; unitId: string; incidentId: string; node: number; hospitalId?: string }
   /** Send a loaded ambulance to a hospital. */
-  | { type: "transport"; ambulanceId: string; hospitalId: string }
-  /** Move an empty ambulance to a node (staging). */
-  | { type: "reposition"; ambulanceId: string; node: number };
+  | { type: "transport"; unitId: string; hospitalId: string }
+  /** Move an empty ambulance to a node (staging). Also the way to call one off. */
+  | { type: "reposition"; unitId: string; node: number };
 
 // ---------- Event log (ground truth) ----------
 
+export interface AssessedVictim {
+  id: string;
+  injury: InjuryKind;
+  triage: Triage;
+  status: VictimStatus;
+  trapped: boolean;
+}
+
 type EventBody =
-  | { type: "patient_spawned"; patientId: string; node: number; ttl: number }
-  | { type: "patient_picked_up"; patientId: string; ambulanceId: string }
-  | { type: "patient_delivered"; patientId: string; ambulanceId: string; hospitalId: string }
-  | { type: "patient_died"; patientId: string; where: "street" | "ambulance" }
+  | { type: "scene_created"; sceneId: string; kind: SceneKind; node: number; victims: number }
+  | { type: "scene_assessed"; unitId: string; incidentId: string | null; sceneId: string; node: number; victims: AssessedVictim[] }
+  | { type: "scene_not_found"; unitId: string; incidentId: string | null; node: number }
+  | { type: "victim_picked_up"; victimId: string; unitId: string; incidentId: string | null }
+  | { type: "victim_freed"; victimId: string; unitId: string; incidentId: string | null }
+  | { type: "victim_treated"; victimId: string; unitId: string; incidentId: string | null }
+  | { type: "victim_delivered"; victimId: string; unitId: string; hospitalId: string }
+  | { type: "victim_died"; victimId: string; where: "street" | "ambulance" }
+  | { type: "flood_started"; floodId: string; name: string; node: number; radiusM: number; growthM: number }
+  | { type: "flood_grew"; floodId: string; radiusM: number; closed: number[] }
   | { type: "road_closed"; edge: number; name: string | null }
   | { type: "road_opened"; edge: number; name: string | null }
-  | { type: "ambulance_broken"; ambulanceId: string; untilTick: number }
-  | { type: "ambulance_repaired"; ambulanceId: string }
-  | { type: "ambulance_rerouted"; ambulanceId: string; etaTicks: number }
-  | { type: "ambulance_stranded"; ambulanceId: string }
-  | { type: "ambulance_arrived"; ambulanceId: string; node: number }
-  | { type: "dispatch_void"; ambulanceId: string; patientId: string; reason: string }
-  | { type: "hospital_full"; hospitalId: string; ambulanceId: string }
+  | { type: "unit_broken"; unitId: string; untilTick: number }
+  | { type: "unit_repaired"; unitId: string }
+  | { type: "unit_rerouted"; unitId: string; etaTicks: number }
+  | { type: "unit_stranded"; unitId: string; incidentId: string | null }
+  /** A crew runs into streets it thought were open. `edges` = what it can see closed from there. */
+  | { type: "road_blocked_found"; unitId: string; node: number; edges: number[]; flooded: boolean }
+  | { type: "unit_arrived"; unitId: string; node: number }
+  | { type: "hospital_full"; hospitalId: string; unitId: string }
   | { type: "action_applied"; action: Action; etaTicks: number }
   | { type: "action_rejected"; action: Action; reason: string };
 
 export type WorldEvent = EventBody & { tick: number };
 export type EventInput = EventBody;
 
-// ---------- What the coordinator sees ----------
+// ---------- What reaches the coordinator ----------
 
+export type CallerKind = "victim" | "family" | "bystander" | "driver";
+export type Answer = "yes" | "no" | "unknown";
+
+/** A 112 call as the operator files it: answers to the protocol questions. No diagnosis, no time to live. */
+export interface Call {
+  id: string;
+  tick: number;
+  caller: CallerKind;
+  /** What happened, if the caller could tell. */
+  mechanism: SceneKind | null;
+  /** Best node for "where are you?", and how loose that answer was. */
+  node: number;
+  locationErrorM: number;
+  street: string | null;
+  conscious: Answer;
+  breathing: Breathing | "unknown";
+  bleeding: Answer;
+  /** "Can they get out on their own?" */
+  trapped: Answer;
+  ageGroup: "child" | "adult" | "elderly" | "unknown";
+  /** How many hurt, as far as the caller could see. */
+  victims: number | null;
+  /** The call in words, for humans and LLMs. */
+  text: string;
+}
+
+export type ObservedEvent =
+  | WorldEvent
+  | { type: "call_received"; tick: number; call: Call }
+  /** Official flood map. Reliable, but it shows the water as it was `asOfTick`, not now. */
+  | { type: "flood_bulletin"; tick: number; asOfTick: number; floods: { id: string; name: string; node: number; radiusM: number }[] };
 export type ReportSource = "call_112" | "ambulance" | "hospital" | "traffic" | "system";
 
-/** The coordinator never reads the world, only reports. v0: report = truth, confidence 1. */
+/** The coordinator never reads the world, only reports. */
 export interface Report {
   id: number;
   tick: number;
   source: ReportSource;
   confidence: number;
-  event: WorldEvent;
+  event: ObservedEvent;
 }
 
-export interface PatientView {
+// ---------- The coordinator's picture: incidents ----------
+
+/** A belief plus where it came from (call id, or the ambulance that radioed it). */
+export interface Sourced<T> {
+  value: T;
+  from: string;
+  tick: number;
+}
+
+export type Priority = 0 | 1 | 2 | 3;
+
+/** One place, one response. Calls get attached to it; crews confirm what is really there. */
+export interface Incident {
   id: string;
+  status: "open" | "closed";
+  closedReason: "resolved" | "not_found" | "merged" | null;
+  mergedInto: string | null;
+  /** Reserved: parent emergency (flood, blackout...) once those exist. */
+  emergencyId: string | null;
+  openedTick: number;
+  updatedTick: number;
   node: number;
-  status: PatientStatus;
-  ttlReported: number;
-  reportedTick: number;
+  locationErrorM: number;
+  /** A crew has confirmed the exact spot. */
+  located: boolean;
+  sceneId: string | null;
+  callIds: string[];
+  mechanism: Sourced<SceneKind> | null;
+  conscious: Sourced<"yes" | "no"> | null;
+  breathing: Sourced<Breathing> | null;
+  bleeding: Sourced<"yes" | "no"> | null;
+  trapped: Sourced<"yes" | "no"> | null;
+  ageGroup: Sourced<"child" | "adult" | "elderly"> | null;
+  victimsReported: Sourced<number> | null;
+  /** Confirmed on scene by a crew. */
+  victims: AssessedVictim[];
+  /** 0 = life at risk right now ... 3 = can wait. Deduced from the signs, never told. */
+  priority: Priority;
+  /** No road gets there (as far as we know): it needs a boat or a helicopter, not an ambulance. */
+  unreachable: boolean;
+  history: { tick: number; field: string; value: string; from: string }[];
+}
+
+/** Somebody saw water. wet = a caller or crew reports water there. blocked = a crew could not drive any further. */
+export interface WaterSighting {
+  tick: number;
+  node: number;
+  from: string;
+  kind: "wet" | "blocked";
+}
+
+/** A flood as the last official map showed it. The coordinator extrapolates from there; the real one is ahead. */
+export interface WaterZone {
+  id: string;
+  name: string;
+  node: number;
+  /** Impassable radius published in the last map, which showed the water as of `asOfTick`. */
+  radiusM: number;
+  asOfTick: number;
+  /** Speed of the front, from the difference between maps (a guess until there are two). */
+  growthM: number;
+  bulletins: number;
 }
 
 export interface Belief {
   tick: number;
   /** Fleet telemetry: assumed reliable. */
-  ambulances: Ambulance[];
+  units: Unit[];
   hospitals: Hospital[];
-  patients: PatientView[];
+  incidents: Incident[];
+  calls: Call[];
+  /** Places where someone has seen water: flood calls, crews turning back, crews on scene. */
+  waterSightings: WaterSighting[];
+  /** Floods known from official maps: always some minutes old. */
+  floods: WaterZone[];
   closedEdges: number[];
+  /** Known closures that are water: rescue units are routed through them. */
+  floodedEdges: number[];
+  nextIncidentNum: number;
 }

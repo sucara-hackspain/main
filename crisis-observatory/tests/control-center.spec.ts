@@ -16,7 +16,7 @@ test.beforeAll(async ({ request }) => {
       "--ticks",
       "120",
     ],
-    { cwd: resolve("gabriel"), encoding: "utf8" },
+    { cwd: resolve("../gabriel"), encoding: "utf8" },
   );
   id = output.match(/trace: runs\/(.+)/)![1].trim();
   const data = await (await request.get(`/api/runs/${id}`)).json();
