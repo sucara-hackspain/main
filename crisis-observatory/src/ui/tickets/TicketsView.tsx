@@ -1,0 +1,113 @@
+import { useEffect, useRef } from "react";
+import { ArrowUpRight, Check, CheckCheck, ChevronRight, CircleDot, ClipboardList, Clock3, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
+import { elapsed, priority, unitKind, unitStatus, type RunMeta } from "../engineTrace";
+import { duration } from "../situation/model";
+import { ticketNextStep, ticketStates, type Ticket, type TicketState, type TicketStep } from "./model";
+import "./tickets.css";
+
+export function TicketStatus({ state }: { state: TicketState }) {
+  return <span className="ticket-status" data-state={state}>
+    {state === "resolved" ? <CheckCheck size={12} /> : state === "progress" ? <CircleDot size={12} /> : <span className="ticket-triage-dot" />}
+    {ticketStates[state]}
+  </span>;
+}
+
+export default function TicketsView({ tickets, selected, onSelect, filter, onFilter, query, onQuery, seconds, tick }: {
+  tickets: Ticket[]; selected: string | null; onSelect: (id: string) => void;
+  filter: TicketState | "all"; onFilter: (state: TicketState | "all") => void;
+  query: string; onQuery: (value: string) => void; seconds: number; tick: number;
+}) {
+  const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
+  const search = normalize(query.trim());
+  const matches = tickets.filter((t) => (filter === "all" || t.state === filter) &&
+    (!search || normalize([t.id, t.title, t.location, ...t.crews.map((u) => u.id), ...t.calls.map((c) => c.text)].join(" ")).includes(search)));
+  return <section className="tickets-view" aria-label="Tickets de incidencias">
+    <header className="tickets-heading">
+      <div><span className="app-eyebrow">CENTRO DE COORDINACIÓN</span><h1>Incidencias <span>{tickets.length}</span></h1>
+        <p>Cada aviso, su evolución y las decisiones que lo acompañan.</p></div>
+      <span className="tickets-snapshot"><Clock3 size={13} />+{elapsed(tick, seconds)}</span>
+    </header>
+    <div className="tickets-tools">
+      <div className="tickets-filters" aria-label="Filtrar tickets por estado">
+        {(["all", "triage", "progress", "resolved"] as const).map((state) => <button key={state}
+          aria-pressed={filter === state} onClick={() => onFilter(state)} data-state={state}>
+          {state === "all" ? "Todos" : ticketStates[state]}<span>{state === "all" ? tickets.length : tickets.filter((t) => t.state === state).length}</span>
+        </button>)}
+      </div>
+      <label className="tickets-search"><Search size={14} /><input aria-label="Buscar incidencias" placeholder="Buscar incidencia, calle o unidad…" value={query} onChange={(e) => onQuery(e.target.value)} />
+        {query && <button aria-label="Borrar búsqueda de incidencias" onClick={() => onQuery("")}><X size={13} /></button>}
+      </label>
+    </div>
+    <div className="tickets-table-scroll">
+      {matches.length ? <table className="tickets-table">
+        <thead><tr><th scope="col">Incidencia</th><th scope="col">Estado</th><th scope="col">Prioridad</th><th scope="col">Unidades</th><th scope="col">Actualización</th></tr></thead>
+        <tbody>{matches.map((ticket) => <tr key={ticket.id} data-ticket={ticket.id} className={selected === ticket.id ? "selected" : ""} onClick={() => onSelect(ticket.id)}>
+          <td><button className="ticket-open" aria-label={`Abrir incidencia ${ticket.id}: ${ticket.title}`} aria-pressed={selected === ticket.id} onClick={(e) => { e.stopPropagation(); onSelect(ticket.id); }}>
+            <span className="ticket-row-icon"><ClipboardList size={16} /></span>
+            <span><span className="ticket-row-title"><code>{ticket.id}</code><strong>{ticket.title}</strong></span><small><MapPin size={11} />{ticket.location}</small></span>
+          </button></td>
+          <td><TicketStatus state={ticket.state} /></td>
+          <td><span className="ticket-priority" data-priority={ticket.incident.priority}><i />P{ticket.incident.priority}<span>{priority[ticket.incident.priority].label}</span></span></td>
+          <td><span className={`ticket-crews ${ticket.crews.length ? "" : "empty"}`}>{ticket.crews.length ? <><Truck size={13} />{ticket.crews.map((u) => u.id).join(", ")}</> : "Sin asignar"}</span></td>
+          <td><span className="ticket-updated">{tick === ticket.updatedTick ? "Ahora" : `Hace ${duration(tick - ticket.updatedTick, seconds)}`}<ChevronRight size={14} /></span></td>
+        </tr>)}</tbody>
+      </table> : <div className="tickets-empty"><ClipboardList size={28} /><h2>{tickets.length ? "No hay coincidencias" : "Todavía no hay incidencias"}</h2><p>{tickets.length ? "Prueba otro estado o busca por calle o identificador." : "Los avisos aparecerán al avanzar la ejecución."}</p>
+        {(query || filter !== "all") && <button onClick={() => { onQuery(""); onFilter("all"); }}>Limpiar filtros</button>}
+      </div>}
+    </div>
+    <footer className="tickets-footer"><span>{matches.length} de {tickets.length} incidencias</span><span><span className="tickets-live-dot" />Datos del instante seleccionado</span></footer>
+  </section>;
+}
+
+const stepIcons = { call: Phone, action: Truck, assessment: ClipboardList, update: CircleDot, alert: ShieldAlert, resolved: Check };
+function TimelineStep({ step, seconds }: { step: TicketStep; seconds: number }) {
+  const Icon = stepIcons[step.kind];
+  return <li className="ticket-step" data-kind={step.kind}>
+    <span className="ticket-step-icon"><Icon size={13} /></span>
+    <div><div className="ticket-step-meta"><span>{step.source}</span><time>+{elapsed(step.tick, seconds)}</time></div>
+      <h4>{step.title}</h4>{step.detail && <p>{step.detail}</p>}
+      {step.reason && <div className="ticket-reason"><MessageSquare size={12} /><div><strong>Motivo de la decisión</strong><p>{step.reason}</p></div></div>}
+    </div>
+  </li>;
+}
+
+export function TicketDetail({ ticket, seconds, tick, onLocate, onClose, runs, runId, onRun, records }: {
+  ticket: Ticket | null; seconds: number; tick: number; onLocate: (ticket: Ticket) => void; onClose: () => void;
+  runs: RunMeta[]; runId: string; onRun: (id: string) => void; records: number;
+}) {
+  const panel = useRef<HTMLElement>(null), body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    body.current?.scrollTo({ top: 0 });
+    if (ticket && window.matchMedia("(max-width: 800px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [ticket?.id]);
+  const next = ticket ? ticketNextStep(ticket) : null;
+  const incident = ticket?.incident;
+  return <aside className="app-sidebar ticket-detail" aria-label="Detalle de incidencia" ref={panel}>
+    <header className="ticket-detail-top"><span><ClipboardList size={15} />Detalle de incidencia</span>{ticket && <button aria-label="Cerrar detalle de incidencia" onClick={onClose}><X size={16} /></button>}</header>
+    <label className="run-picker"><span>Ejecución</span><select aria-label="Seleccionar ejecución" value={runId} onChange={(e) => onRun(e.target.value)}>
+      {runs.map((r) => <option key={r.id} value={r.id}>{new Date(r.startedAt).toLocaleString("es-ES")} · {r.id}</option>)}
+    </select></label>
+    {ticket && incident && next ? <div className="ticket-detail-body" ref={body}>
+      <section className="ticket-summary">
+        <div className="ticket-summary-meta"><code>{ticket.id}</code><TicketStatus state={ticket.state} /></div>
+        <h2>{ticket.title}</h2><p className="ticket-location"><MapPin size={14} />{ticket.location}</p>
+        <div className="ticket-progress" aria-label={`Estado del ticket: ${ticketStates[ticket.state]}`}>
+          {(["triage", "progress", "resolved"] as const).map((state, n) => <span key={state} className={n <= ["triage", "progress", "resolved"].indexOf(ticket.state) ? "reached" : ""}><i>{state === "resolved" ? <Check size={10} /> : n + 1}</i>{ticketStates[state]}</span>)}
+        </div>
+        <dl className="ticket-facts"><div><dt>Prioridad actual</dt><dd><span className="ticket-priority" data-priority={incident.priority}><i />P{incident.priority} · {priority[incident.priority].label}</span></dd></div>
+          <div><dt>Abierta a las</dt><dd>+{elapsed(incident.openedTick, seconds)}</dd></div>
+          <div><dt>Personas afectadas</dt><dd>{incident.located ? `${incident.victims.length} confirmadas` : incident.victimsReported ? `${incident.victimsReported.value} según aviso` : "Por confirmar"}</dd></div>
+          <div><dt>Ubicación</dt><dd>{incident.located ? "Confirmada por dotación" : `Aproximada · ±${incident.locationErrorM} m`}</dd></div>
+        </dl>
+        <button className="ticket-locate" onClick={() => onLocate(ticket)}><MapPin size={14} />Enfocar en el mapa<ArrowUpRight size={14} /></button>
+        {ticket.lastSeenTick < tick && <small className="ticket-archive-note">Se abrirá el último registro de esta incidencia en el mapa.</small>}
+      </section>
+      <section className="ticket-next" data-state={ticket.state} aria-label="Seguimiento de la incidencia"><span className="ticket-next-icon">{ticket.state === "resolved" ? <CheckCheck size={16} /> : <Clock3 size={16} />}</span><div><span className="app-eyebrow">{ticket.state === "resolved" ? "CIERRE" : "SEGUIMIENTO"}</span><h3>{next.title}</h3><p>{next.detail}</p><small>Según el estado registrado</small></div></section>
+      {ticket.crews.length > 0 && <section className="ticket-assigned"><h3>Unidades vinculadas <span>{ticket.crews.length}</span></h3>{ticket.crews.map((u) => <div key={u.id}><Truck size={14} /><strong>{u.id}</strong><span>{unitKind[u.kind].label}<small>{unitStatus(u)}</small></span></div>)}</section>}
+      <section className="ticket-history" aria-label="Cronología de la incidencia"><header><h3>Actividad y decisiones <span>{ticket.steps.length}</span></h3><span>Del primer aviso al último parte</span></header>
+        <ol>{ticket.steps.map((step) => <TimelineStep key={step.id} step={step} seconds={seconds} />)}</ol>
+      </section>
+    </div> : <div className="ticket-detail-empty"><span><ClipboardList size={26} /></span><h2>El contexto de cada incidencia</h2><p>Selecciona un ticket para ver sus actuaciones, las decisiones del coordinador y qué falta por confirmar.</p></div>}
+    <div className="app-last-update"><span>{records} registros recibidos</span><span>Solo observación</span></div>
+  </aside>;
+}

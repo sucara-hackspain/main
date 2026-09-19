@@ -9,7 +9,6 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ClaudeCliCoordinator } from "./coordinators/claude-cli";
-import { HappyRobotCoordinator } from "./coordinators/happyrobot";
 import {
   clock,
   describe,
@@ -55,7 +54,7 @@ const coordinator: Coordinator =
   values.coordinator === "greedy"
     ? new GreedyCoordinator()
     : values.coordinator === "happyrobot"
-      ? new HappyRobotCoordinator({ onTrace })
+      ? new (await import("./coordinators/happyrobot")).HappyRobotCoordinator({ onTrace })
       : new ClaudeCliCoordinator({ model: values.model, onTrace });
 
 const graph = new Graph(JSON.parse(readFileSync(`data/${values.map}.json`, "utf8")) as GraphData);

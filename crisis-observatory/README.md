@@ -30,6 +30,10 @@ La aplicación lee las ejecuciones de `gabriel/runs/`. Si todavía no hay ningun
 
 El runner admite `--coordinator claude --model haiku`, con Claude CLI instalado y autenticado. La aplicación distingue IA, reglas y respaldo por reglas, y muestra las justificaciones que figuran en la ejecución.
 
+La pestaña **Incidencias** abre una tabla independiente del mapa, con búsqueda por identificador, calle, llamada o unidad y filtros **Triage**, **Progreso** y **Resuelto**. Triage reúne los avisos sin intervención iniciada; Progreso indica una asignación, una orden de envío aceptada o una valoración en el lugar; Resuelto corresponde al cierre del motor, con su motivo (atención finalizada, aviso agrupado o nadie en el lugar). Un cierre de atención en el lugar puede preceder al ingreso en hospital.
+
+Al seleccionar un ticket, el lateral muestra sus datos, unidades, información pendiente y cronología: llamadas, órdenes aceptadas o rechazadas, motivos registrados por el coordinador, valoraciones, cambios de prioridad y cierre. Los siguientes pasos deducidos del estado se identifican como tales; si falta una justificación se indica expresamente. Los tickets cerrados se conservan en el historial, sin usar información posterior al instante seleccionado. **Enfocar en el mapa** selecciona y centra la incidencia; si ya salió del registro actual, abre el último instante en que aparecía.
+
 ## Trabajar en paralelo en la UI
 
 | Área | Archivos dentro de `src/ui/` | Qué tocar |

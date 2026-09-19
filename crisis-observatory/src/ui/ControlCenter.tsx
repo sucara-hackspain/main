@@ -3,6 +3,7 @@ import {
   Activity,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   GitBranch,
   Layers,
   Map as MapIcon,
@@ -41,6 +42,8 @@ import InterventionInbox from "./interventions/InterventionInbox";
 import { useInterventions } from "./interventions/useInterventions";
 import { useAlertSound } from "./interventions/sound";
 import type { InterventionView, Option } from "./interventions/model";
+import TicketsView, { TicketDetail } from "./tickets/TicketsView";
+import { buildTickets, type Ticket, type TicketState } from "./tickets/model";
 
 const RunMap = lazy(() => import("./map/RunMap"));
 // Read once: a run that mounts while another shows a pending count would take the count as its title.
@@ -101,7 +104,10 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"map" | "flow">("map"),
+    [view, setView] = useState<"map" | "flow" | "tickets">("map"),
+    [ticketId, setTicketId] = useState<string | null>(null),
+    [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
+    [ticketQuery, setTicketQuery] = useState(""),
     [entity, setEntity] = useState<Selection | null>(null),
     [filter, setFilter] = useState<SituationFilter>("all"),
     [query, setQuery] = useState(""),
@@ -175,6 +181,8 @@ function RunSession({
   }, [index, ticks.length, playing]);
   const visible = useMemo(() => ticks.slice(0, index + 1), [ticks, index]);
   const all = useMemo(() => auditItems(visible), [visible]);
+  const tickets = useMemo(() => buildTickets(visible, seconds), [visible, seconds]);
+  const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
   const selection =
     entity && selectionExists(entity, current, meta) ? entity : null;
   // The situation at the selected instant, from what is known up to it.
@@ -235,6 +243,15 @@ function RunSession({
   }
   function chooseIncident(id: string | null) {
     chooseEntity(id ? { kind: "incident", id } : null);
+  }
+  function locateTicket(ticket: Ticket) {
+    // Closed incidents leave the engine's current frame after twenty ticks.
+    if (!current?.frame.incidents.some((i) => i.id === ticket.id)) seekTick(ticket.lastSeenTick);
+    setFilter("all");
+    setQuery("");
+    chooseIncident(ticket.id);
+    setView("map");
+    setFocusRequest((n) => n + 1);
   }
   const room =
     iteration === 2 &&
@@ -314,6 +331,17 @@ function RunSession({
               Territorio
             </button>
             <button
+              aria-pressed={view === "tickets"}
+              className={view === "tickets" ? "is-active" : ""}
+              onClick={() => {
+                if (selection?.kind === "incident") setTicketId(selection.id);
+                setView("tickets");
+              }}
+            >
+              <ClipboardList size={14} />
+              Incidencias
+            </button>
+            <button
               aria-pressed={view === "flow"}
               className={view === "flow" ? "is-active" : ""}
               onClick={() => setView("flow")}
@@ -359,7 +387,7 @@ function RunSession({
             {ticks.length > 0 && "Se conserva el último registro recibido."}
           </div>
         )}
-        <div className="app-scope">
+        {view !== "tickets" && <div className="app-scope">
           <div>
             <button
               className={!selection && !lane && !filtered ? "is-active" : ""}
@@ -389,7 +417,7 @@ function RunSession({
               : `${items.length} registros`}{" "}
             · +{elapsed(current?.tick ?? 0, seconds)}
           </span>
-        </div>
+        </div>}
         {banner}
         <div className="app-stage">
           {!current ? (
@@ -398,6 +426,10 @@ function RunSession({
                 ? "No hay registros compatibles disponibles."
                 : "Esperando el primer registro de actividad…"}
             </div>
+          ) : view === "tickets" ? (
+            <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
+              filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
+              seconds={seconds} tick={current.tick} />
           ) : view === "map" ? (
             graph &&
             meta && (
@@ -518,7 +550,8 @@ function RunSession({
         </div>
       </section>
       <div className="app-sidebar-slot" inert={blocked}>
-        <SituationSidebar
+        {view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
+          onLocate={locateTicket} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} /> : <SituationSidebar
           id={id}
           runs={runs}
           onRun={onRun}
@@ -542,7 +575,7 @@ function RunSession({
           running={meta?.status === "running"}
           records={ticks.length}
           error={!!(error || listError)}
-        />
+        />}
       </div>
       {room}
       {receipt && (
