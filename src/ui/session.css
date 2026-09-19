@@ -1,0 +1,202 @@
+/* Shared session UI: connection, run picker, patients, fleet and playback. */
+.run-session .run-empty {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+}
+.run-empty h1 {
+  font-size: 20px;
+  font-weight: 500;
+}
+.run-empty p {
+  color: var(--muted-foreground);
+  margin: 0;
+}
+.run-empty code {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.run-empty a {
+  color: var(--foreground);
+  margin-top: 16px;
+}
+.run-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.run-status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.run-error {
+  margin: 0 24px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius);
+  color: var(--destructive-foreground);
+  background: var(--card);
+  font-size: 12px;
+}
+.run-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 12px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.run-picker select {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  font: 12px var(--font-sans);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  padding: 3px 5px;
+  box-shadow: var(--input-shadow);
+}
+.run-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 0 16px 16px;
+  gap: 8px;
+}
+.run-kpis strong {
+  display: block;
+  font: 500 18px var(--font-mono);
+}
+.run-kpis span {
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.run-session .danger {
+  color: var(--destructive-foreground);
+}
+.run-patient-list {
+  max-height: clamp(130px, 22vh, 260px);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ring) transparent;
+}
+.run-case {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--sidebar-border);
+  text-align: left;
+  border-radius: var(--radius-md);
+}
+.run-case.selected {
+  border-color: var(--ring);
+  background: var(--accent);
+}
+.run-case-id {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 40px;
+  font: 11px var(--font-mono);
+}
+.run-case-id b {
+  font: 500 9px var(--font-sans);
+  color: var(--destructive-foreground);
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  border-radius: 999px;
+  padding: 1px 4px;
+}
+.run-case strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.run-case small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.run-case > span:last-child {
+  margin-left: auto;
+  font: 10px var(--font-mono);
+  white-space: nowrap;
+}
+.run-ttl {
+  color: var(--warning-foreground);
+}
+.run-session .app-unit {
+  grid-template-columns: 16px 42px 1fr 44px;
+  min-height: 28px;
+  font-size: 11px;
+}
+.run-session .app-unit-list {
+  max-height: 180px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.run-hospitals {
+  font-size: 11px;
+  margin-top: 8px;
+}
+.run-hospitals summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.run-hospitals[open] summary {
+  color: var(--foreground);
+}
+.run-hospitals > div {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-top: 1px solid var(--sidebar-border);
+}
+.run-hospitals > div strong {
+  white-space: nowrap;
+  font: 11px var(--font-mono);
+}
+.run-session .app-controls .run-follow {
+  width: auto;
+  display: flex;
+  gap: 5px;
+  padding: 3px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+}
+.run-follow.selected {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.run-session .app-empty {
+  flex: 1;
+}
+@media (max-width: 800px) {
+  .run-session .app-sidebar {
+    min-height: 1000px;
+  }
+  .run-session .app-workspace {
+    height: 850px;
+  }
+  .run-session .app-playback-title {
+    font-size: 10px;
+  }
+}

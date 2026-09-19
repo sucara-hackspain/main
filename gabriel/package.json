@@ -6,7 +6,7 @@
     "fetch-graph": "tsx scripts/fetch-graph.ts",
     "sim": "tsx src/cli.ts",
     "run-sim": "tsx src/run.ts",
-    "ui": "vite ui",
+    "ui": "npm --prefix .. run dev",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
