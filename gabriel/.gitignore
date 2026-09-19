@@ -5,3 +5,8 @@ runs
 .env
 memory/*.db
 memory/*.db-*
+lab/status.json
+lab/loop.log
+lab/*/status.json
+lab/*/loop.log
+lab/*/ab.log

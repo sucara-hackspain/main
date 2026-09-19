@@ -1,5 +1,5 @@
 import type { Rng } from "./rng";
-import type { InjuryKind, SceneKind, Triage, Victim, VictimSpec } from "./types";
+import type { InjuryKind, SceneKind, Triage, Victim, VictimSpec, Call } from "./types";
 
 interface InjuryProfile {
   label: string;
@@ -122,6 +122,34 @@ export function makeSceneVictims(kind: SceneKind, rng: Rng): VictimSpec[] {
     ...makeVictim(pickWeighted(scene.injuries, rng), rng, scene.elderly),
     trapped: rng.chance(scene.trapped),
   }));
+}
+
+const WATER_KINDS: SceneKind[] = ["vehicle_trapped", "flooded_home", "swept_away"];
+
+/**
+ * The emergency behind a call somebody really phoned in: what the caller described becomes what is true there.
+ * The worst victim is as bad as the answers to the protocol say; the rest are whatever that kind of thing does to people.
+ */
+export function sceneFromCall(call: Pick<Call, "mechanism" | "conscious" | "breathing" | "bleeding" | "trapped" | "ageGroup" | "victims">, rng: Rng): { kind: SceneKind; victims: VictimSpec[] } {
+  const kind = call.mechanism ?? "collapse";
+  const water = WATER_KINDS.includes(kind);
+  const worst: InjuryKind =
+    call.breathing === "none" ? (water ? "drowning" : "cardiac_arrest")
+    : call.bleeding === "yes" ? "hemorrhage"
+    : call.breathing === "difficult" ? "respiratory"
+    : call.conscious === "no" ? "polytrauma"
+    : water ? "hypothermia"
+    : kind === "fall" || kind === "traffic" || kind === "building_collapse" ? "fracture"
+    : "minor";
+  const count = Math.max(1, Math.min(4, Math.round(call.victims ?? 1)));
+  const victims = Array.from({ length: count }, (_, n) => {
+    const spec = makeVictim(n === 0 ? worst : pickWeighted(SCENES[kind].injuries, rng), rng, SCENES[kind].elderly);
+    if (n === 0 && call.ageGroup === "child") spec.age = rng.int(3, 15);
+    if (n === 0 && call.ageGroup === "elderly") spec.age = rng.int(66, 92);
+    if (n === 0 && call.ageGroup === "adult") spec.age = rng.int(16, 65);
+    return { ...spec, trapped: n === 0 ? call.trapped === "yes" : call.trapped === "yes" && rng.chance(0.4) };
+  });
+  return { kind, victims };
 }
 
 export function pickSceneKind(rng: Rng, where: "flood" | "city"): SceneKind {

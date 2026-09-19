@@ -1,5 +1,5 @@
 import type { Graph } from "./graph";
-import type { Rng } from "./rng";
+import { Rng } from "./rng";
 import type { AerialSighting, Answer, Breathing, Call, CallerKind, ObservedEvent, Report, ReportSource, SceneKind, Victim, World, WorldEvent } from "./types";
 import { bySeverity } from "./victims";
 
@@ -16,6 +16,16 @@ export interface Observer {
 const SOURCE: Record<WorldEvent["type"], ReportSource | null> = {
   // Nobody announces a scene or a death in the street: calls do, or the crew that finds them.
   scene_created: null,
+  master_narration: null,
+  site_placed: null,
+  site_warned: null,
+  // The care home phones the moment the water is in: it is the scene's own calls that carry the detail.
+  site_flooded: "system",
+  gauge_reading: "sensor",
+  blackout_started: "sensor",
+  outbound_placed: null,
+  // The answers travel as calls, one per emergency somebody knew about; the round itself is worth a line too.
+  outbound_answered: "system",
   victim_died: null,
   scene_assessed: "ambulance",
   scene_not_found: "ambulance",
@@ -86,6 +96,7 @@ const WHO_CALLS: Record<SceneKind, [CallerKind, number][]> = {
 };
 
 const RECALL_AFTER_TICKS = 16;
+const P_DARK_NO_CALL = 0.8;
 /** Official flood maps: how often they come out and how old the picture in them is. */
 const BULLETIN_EVERY_TICKS = 24;
 const BULLETIN_LAG_TICKS = 10;
@@ -94,12 +105,34 @@ const TRAFFIC_DELAY_TICKS: [number, number] = [8, 20];
 export interface CallObserverOptions {
   /** Force who calls (tests, scripted demos). */
   callers?: CallerKind[];
+  /**
+   * Every emergency is phoned in the moment it happens, by someone who knows exactly where it is and what is wrong.
+   * No real night is like this: it is the reference for how much of the damage comes from not knowing.
+   */
+  perfect?: boolean;
+  /**
+   * Chance that a life-or-death detail the caller gives stays in the words and never reaches its field. 0 is a calm
+   * shift; 0.5 is a control room with forty calls waiting.
+   */
+  buried?: number;
 }
+
+// How people actually say it. None of these sentences contains the word the field is named after.
+const SAID = {
+  trapped: ["Dice que la puerta no abre y el agua le llega ya por la cintura.", "Está en el coche y no consigue bajar la ventanilla.", "Tiene una viga encima de las piernas."],
+  none: ["Está morado y no se le mueve el pecho.", "Le hablan y nada, y no le notan el aire."],
+  difficult: ["Hace un ruido raro al coger aire.", "Se ahoga al hablar, le cuesta mucho."],
+  elderly: ["Es su abuela, tiene noventa años.", "Es un señor muy mayor, va con andador."],
+  child: ["Es la cría de los vecinos, tendrá seis años.", "Es un niño pequeño."],
+} as const;
+
+const PERFECT_CALLER: CallerProfile = { label: "Un testigo que lo ve todo", errorM: 0, knows: 1, wrong: 0 };
 
 interface PendingCall {
   deliverTick: number;
   sceneId: string;
   caller: CallerKind;
+  outbound?: boolean;
 }
 
 export class CallObserver implements Observer {
@@ -107,17 +140,49 @@ export class CallObserver implements Observer {
   private pendingTraffic: { deliverTick: number; event: WorldEvent }[] = [];
   private lastCall = new Map<string, number>();
   private nextCallNum = 1;
+  /**
+   * Each scene rolls its own dice for who calls and what they say. With one shared stream, a coordinator that flies
+   * more drones would shift every later call, and the same night could not be played twice.
+   */
+  private streamSeed: number | null = null;
+  private readonly streams = new Map<string, Rng>();
   /** Which real scene each call was about. Never shown to the coordinator: only hindsight (evaluation) may read it. */
   readonly sceneOfCall = new Map<string, string>();
 
   constructor(private readonly options: CallObserverOptions = {}) {}
 
+  /** A call that did not come from here (a real phone call) joins the books: numbered like the rest, and followed up like the rest. */
+  adopt(call: Omit<Call, "id" | "tick">, sceneId: string | null, tick: number): Call {
+    const filed: Call = { ...call, id: `L${this.nextCallNum++}`, tick };
+    // A lead from the citizen channel may be about nothing at all: then there is no scene to tie it to.
+    if (sceneId) {
+      this.sceneOfCall.set(filed.id, sceneId);
+      this.lastCall.set(sceneId, tick);
+    }
+    return filed;
+  }
+
+  private streamFor(key: string, rng: Rng): Rng {
+    this.streamSeed ??= Math.floor(rng.next() * 4294967296);
+    let stream = this.streams.get(key);
+    if (!stream) {
+      let hash = this.streamSeed;
+      for (const char of key) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+      this.streams.set(key, (stream = new Rng(hash)));
+    }
+    return stream;
+  }
+
   observe(events: WorldEvent[], world: Readonly<World>, graph: Graph, rng: Rng): Omit<Report, "id">[] {
     const reports: Omit<Report, "id">[] = [];
+    // Drawn before anything else so it never depends on what happened first.
+    this.streamFor("", rng);
 
     for (const event of events) {
-      if (event.type === "scene_created") this.scheduleFirstCalls(event.sceneId, world, rng);
-      if (event.type === "road_closed") this.pendingTraffic.push({ deliverTick: world.tick + rng.int(...TRAFFIC_DELAY_TICKS), event });
+      if (event.type === "scene_created") this.scheduleFirstCalls(event.sceneId, world, this.streamFor(event.sceneId, rng), graph);
+      // Asked directly, a neighbour tells what a family member would: close by, and mostly right.
+      if (event.type === "outbound_answered") for (const sceneId of event.sceneIds) this.pending.push({ deliverTick: world.tick, sceneId, caller: "family", outbound: true });
+      if (event.type === "road_closed") this.pendingTraffic.push({ deliverTick: world.tick + this.streamFor(`edge${event.edge}`, rng).int(...TRAFFIC_DELAY_TICKS), event });
       if (event.type === "area_surveyed") {
         const report = this.readArea(event, world, graph, rng);
         reports.push({ tick: event.tick, source: "drone", confidence: report.quality, event: report });
@@ -147,15 +212,19 @@ export class CallObserver implements Observer {
       const stillWaiting = world.victims.some((v) => v.sceneId === scene.id && v.status === "waiting");
       const last = this.lastCall.get(scene.id);
       if (stillWaiting && last !== undefined && world.tick - last >= RECALL_AFTER_TICKS) {
-        this.pending.push({ deliverTick: world.tick, sceneId: scene.id, caller: this.pickCaller(scene.kind, rng) });
+        this.pending.push({ deliverTick: world.tick, sceneId: scene.id, caller: this.pickCaller(scene.kind, this.streamFor(scene.id, rng)) });
       }
     }
 
     const due = this.pending.filter((p) => p.deliverTick <= world.tick);
     this.pending = this.pending.filter((p) => p.deliverTick > world.tick);
     for (const p of due) {
-      const call = this.makeCall(p, world, graph, rng);
+      const call = this.makeCall(p, world, graph, this.streamFor(p.sceneId, rng));
       if (!call) continue;
+      if (p.outbound) {
+        call.source = "outbound";
+        call.text = `Llamada saliente del 112 · ${call.text}`;
+      }
       this.lastCall.set(p.sceneId, world.tick);
       this.sceneOfCall.set(call.id, p.sceneId);
       const event: ObservedEvent = { type: "call_received", tick: world.tick, call };
@@ -226,6 +295,35 @@ export class CallObserver implements Observer {
     };
   }
 
+  /** The detail was said, the field stayed empty: the words keep what the form lost. */
+  private bury(call: Call, rng: Rng): void {
+    const p = this.options.buried ?? 0;
+    if (p <= 0 || this.options.perfect) return;
+    const buried: NonNullable<Call["buried"]> = {};
+    const extra: string[] = [];
+    if (call.trapped === "yes" && rng.chance(p)) {
+      buried.trapped = "yes";
+      call.trapped = "unknown";
+      extra.push(rng.pick(SAID.trapped));
+    }
+    if ((call.breathing === "none" || call.breathing === "difficult") && rng.chance(p)) {
+      buried.breathing = call.breathing;
+      extra.push(rng.pick(SAID[call.breathing]));
+      call.breathing = "unknown";
+      // Whoever did not note the breathing did not note that they do not answer either.
+      if (call.conscious === "no") call.conscious = "unknown";
+    }
+    if ((call.ageGroup === "elderly" || call.ageGroup === "child") && rng.chance(p)) {
+      buried.ageGroup = call.ageGroup;
+      extra.push(rng.pick(SAID[call.ageGroup]));
+      call.ageGroup = "unknown";
+    }
+    if (extra.length === 0) return;
+    call.buried = buried;
+    // The form-driven sentence is rebuilt from what is left in the fields, then the caller's own words follow.
+    call.text = `${callText(call).replace(/»$/, "")} ${extra.join(" ")}»`;
+  }
+
   private pickCaller(kind: SceneKind, rng: Rng): CallerKind {
     if (this.options.callers) return rng.pick(this.options.callers);
     const options = WHO_CALLS[kind];
@@ -235,9 +333,16 @@ export class CallObserver implements Observer {
   }
 
   /** Busy street scenes get several witnesses; what happens indoors gets one call. */
-  private scheduleFirstCalls(sceneId: string, world: Readonly<World>, rng: Rng): void {
+  private scheduleFirstCalls(sceneId: string, world: Readonly<World>, rng: Rng, graph: Graph): void {
     const scene = world.scenes.find((s) => s.id === sceneId)!;
+    // No power, no phone: most of what happens inside a blackout never reaches 112.
+    const dark = world.outages.some((o) => world.tick < o.untilTick && graph.distanceM(o.node, scene.node) <= o.radiusM);
+    if (dark && !this.options.perfect && rng.chance(P_DARK_NO_CALL)) return;
     // Nobody is going to call about this one. The only way it ever gets known is someone going to look.
+    if (this.options.perfect) {
+      this.pending.push({ deliverTick: world.tick, sceneId, caller: "bystander" });
+      return;
+    }
     if (scene.silent) return;
     const outdoors = scene.kind !== "flooded_home" && scene.kind !== "collapse" && scene.kind !== "fall";
     let calls = outdoors ? 1 + rng.int(0, 2) : rng.chance(0.2) ? 2 : 1;
@@ -266,7 +371,7 @@ export class CallObserver implements Observer {
       // People mostly describe whoever looks worst.
       subject = rng.chance(0.7) ? [...victims].sort(bySeverity)[0] : rng.pick(victims);
     }
-    const profile = CALLERS[caller];
+    const profile = this.options.perfect ? PERFECT_CALLER : CALLERS[caller];
 
     const answer = (truth: boolean): Answer => {
       if (!rng.chance(profile.knows)) return "unknown";
@@ -283,7 +388,7 @@ export class CallObserver implements Observer {
     if (rng.chance(profile.knows)) ageGroup = subject.age < 16 ? "child" : subject.age > 65 ? "elderly" : "adult";
 
     let count: number | null = victims.length;
-    if (caller === "bystander" && !rng.chance(0.6)) count = Math.max(1, count + rng.pick([-1, 1]));
+    if (caller === "bystander" && !this.options.perfect && !rng.chance(0.6)) count = Math.max(1, count + rng.pick([-1, 1]));
     if (caller === "driver") count = rng.chance(0.6) ? null : Math.max(1, count + rng.pick([-1, 0, 1]));
 
     const mechanism = caller === "driver" && !rng.chance(0.6) ? null : scene.kind;
@@ -307,6 +412,7 @@ export class CallObserver implements Observer {
       text: "",
     };
     call.text = callText(call);
+    this.bury(call, rng);
     return call;
   }
 }

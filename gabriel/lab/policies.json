@@ -1,0 +1,492 @@
+{
+  "greedy": {
+    "label": "Despachador por reglas (greedy)",
+    "doctrine": null
+  },
+  "informed": {
+    "label": "Greedy con información perfecta",
+    "doctrine": null
+  },
+  "agent:da39a3ee5e": {
+    "label": "G0 · sin doctrina",
+    "doctrine": {
+      "rules": []
+    }
+  },
+  "agent:a1ed109a7d": {
+    "label": "G1 · extricacion_con_ambulancia",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Atrapado: manda quien libere",
+          "body": "Si la llamada o la dotación indica víctima atrapada (vehículo, derrumbe, FALTAN medios), manda a la vez capacidad de excarcelación (bomberos o rescate) y transporte. Nunca ambulancia sola a un atrapado.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:addf09347f": {
+    "label": "G1 · agua_solo_acuatico_o_helicoptero",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Víctima en agua: acuático o helicóptero",
+          "body": "Si la víctima está dentro del agua (arrastrada, vehículo sumergido, planta baja inundada), manda rescate acuático o helicóptero en el mismo turno. La ambulancia solo espera en punto seco de entrega.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:55312771a5": {
+    "label": "G1 · barrido_drones_zonas_mudas",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Barre con drones las zonas mudas",
+          "body": "Manda drones de forma continua a zonas inundadas sin llamadas recientes, con prioridad a las que el agua acaba de alcanzar. Trata todo hallazgo como incidente real y despacha sin esperar confirmación telefónica.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:b1e2f86351": {
+    "label": "G1 · eta_menor_que_supervivencia",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D1",
+          "kind": "driver",
+          "title": "Manda solo si llegas a tiempo",
+          "body": "Cuando no cabe todo, gana el caso cuyo ETA es menor que el margen de vida estimado. Ahogamiento y parada cardiaca mueren en pocos ticks: si el ETA no cabe, busca recurso más rápido o cede la unidad a otro salvable.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:577baf3b44": {
+    "label": "G1 · actuar_antes_del_corte",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Aísla el agua: entra ya o vuela",
+          "body": "Ante aviso de aislamiento por agua, resuelve ese foco en el turno siguiente o asigna medio aéreo o acuático. No mandes vehículo terrestre a zona que el agua va a cortar.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:b816b01f4c": {
+    "label": "G1 · llamada_vaga_confirma_barato",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "A1",
+          "kind": "antipattern",
+          "title": "Llamada vaga: confirma con dron",
+          "body": "No comprometas transporte escaso en llamadas vagas o sin víctima descrita: manda primero un dron y despacha al confirmar. Excepción: señales de P0 (no respira, dentro del agua, atrapado), que van de inmediato.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:30e3679596": {
+    "label": "G1 · Combinación de 3",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Víctima en agua: acuático o helicóptero",
+          "body": "Si la víctima está dentro del agua (arrastrada, vehículo sumergido, planta baja inundada), manda rescate acuático o helicóptero en el mismo turno. La ambulancia solo espera en punto seco de entrega.",
+          "since": 1
+        },
+        {
+          "id": "A1",
+          "kind": "antipattern",
+          "title": "Llamada vaga: confirma con dron",
+          "body": "No comprometas transporte escaso en llamadas vagas o sin víctima descrita: manda primero un dron y despacha al confirmar. Excepción: señales de P0 (no respira, dentro del agua, atrapado), que van de inmediato.",
+          "since": 1
+        },
+        {
+          "id": "H2",
+          "kind": "heuristic",
+          "title": "Aísla el agua: entra ya o vuela",
+          "body": "Ante aviso de aislamiento por agua, resuelve ese foco en el turno siguiente o asigna medio aéreo o acuático. No mandes vehículo terrestre a zona que el agua va a cortar.",
+          "since": 1
+        }
+      ]
+    }
+  },
+  "agent:d3ae68c3df": {
+    "label": "Agente con la doctrina escrita a mano",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D1",
+          "kind": "driver",
+          "title": "Vida en riesgo inmediato primero",
+          "body": "\"No respira\" o \"no responde\" es P0 aunque lo diga un solo testigo. Mejor sobretriaje que perder una parada o un ahogamiento.",
+          "since": 0
+        },
+        {
+          "id": "D2",
+          "kind": "driver",
+          "title": "Lo que el agua va a aislar va antes",
+          "body": "A igual prioridad, atiende primero el incidente que el agua va a dejar sin acceso: después ya no se podrá.",
+          "since": 0
+        },
+        {
+          "id": "D3",
+          "kind": "driver",
+          "title": "Decide por tiempo real, no por cercanía",
+          "body": "Elige la unidad por su ETA del parte, no por lo cerca que parezca.",
+          "since": 0
+        },
+        {
+          "id": "D4",
+          "kind": "driver",
+          "title": "Lo escaso, solo donde nadie más llega",
+          "body": "Helicóptero y rescate acuático se reservan para lo que una ambulancia no puede resolver.",
+          "since": 0
+        },
+        {
+          "id": "D6",
+          "kind": "driver",
+          "title": "Si te falta información, ve a buscarla",
+          "body": "Decidir a ciegas es una elección, no una fatalidad: un dron es barato y no le quita una unidad a nadie. Pero mirar no salva a nadie por sí solo: sirve para que la siguiente orden sea la buena, no para retrasarla.",
+          "since": 0
+        },
+        {
+          "id": "D5",
+          "kind": "driver",
+          "title": "Proteger la flota y no olvidar a nadie",
+          "body": "Una unidad perdida son muchas víctimas futuras. Y nadie espera para siempre: un P3 con más de 40 minutos abierto sube de prioridad.",
+          "since": 0
+        },
+        {
+          "id": "H1",
+          "kind": "heuristic",
+          "title": "Llamada vaga: una unidad a confirmar",
+          "body": "Con una sola llamada imprecisa (conductor que pasaba, ±400 m, sin señales) manda una unidad a confirmar; los refuerzos, tras el triaje en el lugar.",
+          "since": 0
+        },
+        {
+          "id": "H2",
+          "kind": "heuristic",
+          "title": "Varias llamadas con varios heridos: dos unidades de entrada",
+          "body": "Si varias llamadas coinciden y hablan de 2 o más heridos, manda dos unidades que trasladen desde el principio.",
+          "since": 0
+        },
+        {
+          "id": "H3",
+          "kind": "heuristic",
+          "title": "Una rellamada sin unidad asignada sube la prioridad",
+          "body": "Si vuelven a llamar por un incidente al que nadie va, trátalo un nivel por encima de lo que marca el parte.",
+          "since": 0
+        },
+        {
+          "id": "H4",
+          "kind": "heuristic",
+          "title": "La dotación en el lugar manda sobre las llamadas",
+          "body": "Cuando una dotación confirma víctimas y triaje, replanifica el incidente entero con ese dato: unidades, hospital y prioridad.",
+          "since": 0
+        },
+        {
+          "id": "H5",
+          "kind": "heuristic",
+          "title": "Atrapado: bomberos a la vez que la ambulancia",
+          "body": "Si se reporta alguien atrapado, manda bomberos (o rescate) al mismo tiempo que la ambulancia, no después.",
+          "since": 0
+        },
+        {
+          "id": "H6",
+          "kind": "heuristic",
+          "title": "Sin ruta por carretera: solo rescate o helicóptero",
+          "body": "A un incidente marcado sin ruta por carretera no se le vuelve a mandar ambulancia ni bomberos.",
+          "since": 0
+        },
+        {
+          "id": "H7",
+          "kind": "heuristic",
+          "title": "Helicóptero: solo lo grave y lejano, y a helipuerto",
+          "body": "Úsalo para P0/P1 con ETA terrestre de más de 12 ticks o en sitios aislados, y siempre con un hospital con helipuerto como destino.",
+          "since": 0
+        },
+        {
+          "id": "H8",
+          "kind": "heuristic",
+          "title": "Leves confirmados: una sola dotación",
+          "body": "Para heridos leves confirmados basta una dotación, y los bomberos valen. No gastes ambulancias.",
+          "since": 0
+        },
+        {
+          "id": "H9",
+          "kind": "heuristic",
+          "title": "No desvíes a quien está a punto de llegar",
+          "body": "No desvíes una unidad a menos de 3 ticks de su destino salvo para un P0.",
+          "since": 0
+        },
+        {
+          "id": "H14",
+          "kind": "heuristic",
+          "title": "Antes de gastar media flota a ciegas, manda el dron",
+          "body": "Con ubicación de ±300 m o más y número de heridos desconocido, manda primero un dron y ajusta con lo que traiga: evita mandar dos ambulancias a un cruce vacío.",
+          "since": 0
+        },
+        {
+          "id": "H15",
+          "kind": "heuristic",
+          "title": "El silencio de un barrio es un aviso, no una buena noticia",
+          "body": "Una zona que llamaba y ha dejado de llamar, o a la que llega el agua sin que nadie llame, es el sitio más probable donde hay gente que nadie ha contado: sin cobertura, sin batería o sin nadie consciente. Mándale un dron.",
+          "since": 0
+        },
+        {
+          "id": "H16",
+          "kind": "heuristic",
+          "title": "Un dron informa, no confirma",
+          "body": "Lo que ve es aproximado y lo de dentro de las casas casi no lo ve. Que no vea a nadie NO cierra un incidente: solo una dotación en el lugar confirma. Lo que sí puedes creerle es el agua y las calles cortadas.",
+          "since": 0
+        },
+        {
+          "id": "H10",
+          "kind": "heuristic",
+          "title": "No entres donde el agua cierra la salida",
+          "body": "No mandes unidades de carretera a un sitio que el agua aísla en menos de su ETA + 8 ticks, y saca con reposition las que estén paradas en zonas en riesgo.",
+          "since": 0
+        },
+        {
+          "id": "H11",
+          "kind": "heuristic",
+          "title": "El agua real va por delante de lo que sabes",
+          "body": "Un parte oficial viejo significa un frente más avanzado (edad del parte por velocidad). Los ETA hacia zonas con avistamientos recientes son optimistas.",
+          "since": 0
+        },
+        {
+          "id": "H12",
+          "kind": "heuristic",
+          "title": "Reparte entre hospitales",
+          "body": "No mandes a un hospital al que le quedan 2 camas o menos si hay otro a 3 ticks más como mucho.",
+          "since": 0
+        },
+        {
+          "id": "H13",
+          "kind": "heuristic",
+          "title": "Espera a la mejor unidad si compensa",
+          "body": "Si la unidad que antes llegaría está a punto de quedar libre, espérala cuando ahorra más de 4 ticks y el incidente no es P0.",
+          "since": 0
+        },
+        {
+          "id": "A1",
+          "kind": "antipattern",
+          "title": "Ambulancia sola a un atrapado",
+          "body": "Llega, no puede cargarlo y se pierde el viaje.",
+          "since": 0
+        },
+        {
+          "id": "A2",
+          "kind": "antipattern",
+          "title": "Dos unidades al mismo leve",
+          "body": "La segunda llega y no tiene nada que hacer.",
+          "since": 0
+        },
+        {
+          "id": "A3",
+          "kind": "antipattern",
+          "title": "Saturar La Fe por ser la más cercana al agua",
+          "body": "Se queda sin camas y empieza a rechazar ambulancias con el herido dentro.",
+          "since": 0
+        },
+        {
+          "id": "A4",
+          "kind": "antipattern",
+          "title": "Unidades aparcadas al sur del nuevo cauce",
+          "body": "Cuando el agua cubre los puentes quedan fuera de juego.",
+          "since": 0
+        },
+        {
+          "id": "A5",
+          "kind": "antipattern",
+          "title": "Dar por vacía una zona porque el dron no vio nada",
+          "body": "Una pasada de calidad baja no ve a la gente dentro de las casas; se descarta el barrio y se muere ahí.",
+          "since": 0
+        },
+        {
+          "id": "A6",
+          "kind": "antipattern",
+          "title": "Drones parados mientras hay huecos en el parte",
+          "body": "No pueden rescatar a nadie: si no están mirando, no sirven para nada.",
+          "since": 0
+        },
+        {
+          "id": "P1",
+          "kind": "heuristic",
+          "title": "Una unidad que confirme antes de mandar más",
+          "body": "Con pocos datos (una llamada vaga) puede bastar una unidad que confirme antes de mandar más.",
+          "since": 0
+        },
+        {
+          "id": "P2",
+          "kind": "heuristic",
+          "title": "Cuando todo no cabe, P0 y P1 antes",
+          "body": "P0 y P1 van antes aunque lleven menos tiempo abiertos. No dejes un P3 esperando para siempre.",
+          "since": 0
+        },
+        {
+          "id": "P3",
+          "kind": "heuristic",
+          "title": "No reasignes por reasignar",
+          "body": "Desvía una ambulancia solo si con ello se salva alguien más.",
+          "since": 0
+        },
+        {
+          "id": "P4",
+          "kind": "heuristic",
+          "title": "Esperar a la que está a punto de quedar libre",
+          "body": "Si la ambulancia que antes llegaría está a punto de quedar libre, puede compensar esperarla.",
+          "since": 0
+        },
+        {
+          "id": "P5",
+          "kind": "heuristic",
+          "title": "Reparte entre hospitales",
+          "body": "No satures un hospital si otro está casi igual de cerca.",
+          "since": 0
+        }
+      ]
+    }
+  },
+  "agent:a6ab80631b": {
+    "label": "G2 · Tempo y una unidad por escena",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D2",
+          "kind": "driver",
+          "title": "Nunca dejes un P0 esperando",
+          "body": "Si hay unidad adecuada libre, despacha en el mismo turno en que entra una llamada P0. No acumules llamadas para decidir mejor después: cada turno de espera con unidades libres cuesta vidas en ahogamiento y parada.",
+          "since": 2
+        },
+        {
+          "id": "A2",
+          "kind": "antipattern",
+          "title": "No apiles unidades en una escena",
+          "body": "Manda una sola unidad por víctima. No añadas segunda ni tercera al mismo foco salvo que la dotación diga FALTAN n. Saturar un foco deja barrios enteros sin nadie y no acelera el rescate.",
+          "since": 2
+        },
+        {
+          "id": "H3",
+          "kind": "heuristic",
+          "title": "Atrapado: primero quien libera",
+          "body": "Ante víctima atrapada manda solo el medio que excarcela (bomberos o rescate). Reserva el transporte para cuando avisen de liberación inminente. Nunca ambulancia sola a un atrapado, y nunca las dos a la vez.",
+          "since": 2
+        },
+        {
+          "id": "A3",
+          "kind": "antipattern",
+          "title": "No mandes a quien no llega",
+          "body": "Si el ETA supera el margen de vida de la víctima (ahogamiento, parada e hipotermia mueren en pocos ticks), no gastes la unidad: busca un medio más rápido o dásela a otra víctima a la que sí llegues.",
+          "since": 2
+        },
+        {
+          "id": "H4",
+          "kind": "heuristic",
+          "title": "Cancela y reasigna viajes muertos",
+          "body": "En cuanto sepas que la víctima ya murió, que no hay nadie en la escena o que el agua cortó la ruta, libera la unidad y reasígnala en ese mismo turno. No dejes unidades viajando hacia nada.",
+          "since": 2
+        }
+      ]
+    }
+  },
+  "agent:1d6d64405e": {
+    "label": "G2 · Ir a buscar lo que nadie llama",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "H3",
+          "kind": "heuristic",
+          "title": "Una escena de agua trae vecinos",
+          "body": "Al confirmar una víctima en zona inundada asume víctimas no llamadas alrededor: manda un dron o la unidad libre más cercana a barrer las manzanas contiguas sin esperar a que suene el teléfono.",
+          "since": 2
+        },
+        {
+          "id": "H4",
+          "kind": "heuristic",
+          "title": "Llamada vaga: confirma con dron",
+          "body": "No comprometas transporte escaso en llamadas vagas o sin víctima descrita: manda primero un dron y despacha al confirmar. Señales de P0 (no respira, dentro del agua, atrapado) van de inmediato, sin confirmar.",
+          "since": 2
+        },
+        {
+          "id": "H5",
+          "kind": "heuristic",
+          "title": "Adelanta unidades a zonas mudas",
+          "body": "No devuelvas unidades a base tras entregar: estaciónalas en el borde de zonas inundadas sin llamadas recientes. La mitad de los muertos nunca generó llamada; estar cerca es lo que convierte el aviso tardío en rescate.",
+          "since": 2
+        },
+        {
+          "id": "H6",
+          "kind": "heuristic",
+          "title": "Actúa antes del corte",
+          "body": "Ante aviso de aislamiento por agua, resuelve ese foco en el turno siguiente o asigna medio aéreo o acuático. No mandes vehículo terrestre a una zona que el agua va a cortar.",
+          "since": 2
+        },
+        {
+          "id": "A2",
+          "kind": "antipattern",
+          "title": "Zona callada no es zona segura",
+          "body": "No interpretes la ausencia de llamadas como ausencia de víctimas, sobre todo donde el agua acaba de llegar. Lee LO QUE NO SABES cada turno y asigna al menos un medio barato a la zona más oscura.",
+          "since": 2
+        }
+      ]
+    }
+  },
+  "agent:a80c32bac3": {
+    "label": "G2 · Triaje por reloj y por medio",
+    "doctrine": {
+      "rules": [
+        {
+          "id": "D2",
+          "kind": "driver",
+          "title": "Gana quien aún se puede salvar",
+          "body": "Ordena por margen de vida menos ETA. Ahogamiento, parada e hipotermia mueren en pocos ticks; hemorragia y respiratorio aguantan más. Atiende primero a quien alcanzas a tiempo, aunque haya llamado después.",
+          "since": 2
+        },
+        {
+          "id": "A2",
+          "kind": "antipattern",
+          "title": "La ambulancia no entra en agua",
+          "body": "Si la víctima está dentro del agua, solo cuentan rescate acuático o helicóptero; la ambulancia espera en punto seco de entrega. Si ningún medio acuático o aéreo llega a tiempo, no bloquees ninguno de los dos.",
+          "since": 2
+        },
+        {
+          "id": "H3",
+          "kind": "heuristic",
+          "title": "Helicóptero solo para lo inalcanzable",
+          "body": "Reserva el medio aéreo para víctimas en agua, aisladas o con la ruta cortada. No lo gastes en escenas secas que una ambulancia alcanza por carretera, por muy bueno que sea su ETA.",
+          "since": 2
+        },
+        {
+          "id": "D3",
+          "kind": "driver",
+          "title": "Cuenta víctimas, no incidentes",
+          "body": "Con medios escasos prioriza focos con varias víctimas confirmadas o probables (edificio inundado, vehículo con ocupantes, FALTAN n) frente a avisos de una sola víctima estable. Igual coste de unidad, más vidas.",
+          "since": 2
+        },
+        {
+          "id": "H4",
+          "kind": "heuristic",
+          "title": "Entrega en el hospital más cercano",
+          "body": "Si el hospital de referencia está casi lleno o lejos, lleva a la víctima al más cercano con camas libres. El tiempo a bordo mata y devuelve antes la unidad al ciclo.",
+          "since": 2
+        }
+      ]
+    }
+  }
+}

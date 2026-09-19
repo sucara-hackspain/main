@@ -1,0 +1,553 @@
+{
+ "Un familiar: «Se ha caído una persona en Carrer de Sant Vicent Màrtir. Está consciente, respira bien. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Ha habido un accidente de tráfico en Carrer de Noguera. Está consciente, respira bien. Dice que hay 2 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha desplomado una persona en Plaça de Regino Mas. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un conductor que pasaba: «Ha habido un accidente de tráfico en Carrer de Sant Vicent Màrtir, no sabe a qué altura. No sabe si está consciente, no sabe si respira. No sabe cuántos heridos hay. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer d'Atzeneta, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura. Se ahoga al hablar, le cuesta mucho.»": {
+  "trapped": "yes",
+  "breathing": "difficult"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer dels Poetes Anònims. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer d'Arnau de Vilanova, más o menos. No sabe si está consciente, respira bien. Está atrapado, no puede salir. Es un señor muy mayor, va con andador.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Ha habido un accidente de tráfico en Autovia del Túria. Está consciente, no sabe si respira. Dice que hay 2 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de Salas Quiroga, más o menos. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es un niño pequeño.»": {
+  "breathing": "difficult",
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer d'Arnau de Vilanova, más o menos. No responde, no sabe si respira. Está en el coche y no consigue bajar la ventanilla.»": {},
+ "Un familiar: «Se ha desplomado una persona en Carrer de Gaudencia Torres. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un conductor que pasaba: «Hay alguien tirado en el suelo en Camí Vell de València, no sabe a qué altura. Está consciente, no sabe si respira. Dice que hay 3 heridos. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer d'Eduard Boscà, más o menos. No responde, respira bien. Sangra mucho. Dice que hay 2 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de Jumella, más o menos. Está consciente, respira bien. Dice que hay 2 heridos. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Autovía del Este / Autovia de l'Est. Es una persona mayor. Está consciente, no sabe si respira. Está atrapado, no puede salir. Se ahoga al hablar, le cuesta mucho.»": {
+  "trapped": "yes",
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Ha habido un accidente de tráfico en Carrer d'Arnau de Vilanova. Es una persona mayor. Está consciente, respira bien. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer de l'Alqueria de l'Estrella. Está consciente, respira bien. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer de Santiago Rusiñol. Es una persona mayor. Está consciente, no sabe si respira. Hace un ruido raro al coger aire.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de Fra Juníper Serra, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 5 heridos. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer del Pare Presentat. No sabe si está consciente, no sabe si respira. Le hablan y nada, y no le notan el aire. Es su abuela, tiene noventa años.»": {
+  "breathing": "none",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha caído una persona en una calle que no sabe nombrar. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de Marines, más o menos. Está consciente, respira bien. Sangra mucho. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrer del Músic Cabanilles, más o menos. Está consciente, no sabe si respira. Está atrapado, no puede salir. Dice que hay 3 heridos. Está morado y no se le mueve el pecho.»": {
+  "trapped": "yes",
+  "breathing": "none"
+ },
+ "Un familiar: «Se ha caído una persona en una calle que no sabe nombrar. Está consciente, respira bien. Sangra mucho. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Avinguda del General Avilés, más o menos. No sabe si está consciente, respira bien. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en una calle que no sabe nombrar. Está consciente, respira bien. Dice que hay 3 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer del Gorgos. No responde, respira bien. Sangra mucho. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer de la Reina Violant. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer del Poeta Quintana. Está consciente, respira con dificultad. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer del Camp de Túria, más o menos. No responde, no sabe si respira. Dice que hay 3 heridos. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de Pérez Bayer, más o menos. Está consciente, respira con dificultad. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Plaça de Ferran Ferrando. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Autovía del Este / Autovia de l'Est. Está consciente, respira con dificultad. Es su abuela, tiene noventa años.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer del Pare Ferris, más o menos. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de la Retrama, más o menos. Está consciente, respira bien. Dice que hay 2 heridos. Es la cría de los vecinos, tendrá seis años.»": {
+  "ageGroup": "child"
+ },
+ "Un familiar: «Se ha caído una persona en Avinguda de l'Enginyer Manuel Soto. Está consciente, respira bien. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha caído una persona en Carrer de Favanella, más o menos. No sabe si está consciente, respira bien. Dice que hay 2 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Camí Vell de València, más o menos. Está consciente, respira bien. Dice que hay 2 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de Mauro Guillén, más o menos. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer de la Ciutat de Mislata. No sabe si está consciente, no sabe si respira. Está morado y no se le mueve el pecho.»": {
+  "breathing": "none"
+ },
+ "Un familiar: «Se ha desplomado una persona en Pont del Regne de València. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult"
+ },
+ "Un familiar: «Se ha derrumbado parte de un edificio en Carrer de Na Montforta. Está consciente, respira bien. Sangra mucho. Dice que hay 4 heridos. Tiene una viga encima de las piernas. Es un señor muy mayor, va con andador.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Se ha caído una persona en Carrer de Muñoz Seca. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrer de Lucrècia Bori, más o menos. Está consciente, respira bien. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer d'Armando Palacio Valdés, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Está morado y no se le mueve el pecho. Es su abuela, tiene noventa años.»": {
+  "breathing": "none",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de Juan Ramón Jiménez, más o menos. Está consciente, respira bien. Dice que hay 5 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha caído una persona en Avinguda de l'Enginyer Manuel Soto, más o menos. No responde, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un conductor que pasaba: «Ha habido un accidente de tráfico en Carrer de Benieu, no sabe a qué altura. No responde, no sabe si respira. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar. Está consciente, respira bien. Dice que hay 3 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de Joaquín Benlloch, más o menos. Está consciente, respira bien. Dice que hay 4 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer del Pintor Maella. Está consciente, no sabe si respira. Sangra mucho. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Carrera del Riu. Está consciente, no sabe si respira. Dice que hay 3 heridos. Hace un ruido raro al coger aire. Es su abuela, tiene noventa años.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Avinguda de Menéndez Pidal. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es su abuela, tiene noventa años.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de Santiago de Lés, más o menos. No responde, respira bien. Sangra mucho. Dice que hay 4 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un conductor que pasaba: «Hay alguien tirado en el suelo en Carrer de José María Mortes Lerma, no sabe a qué altura. Está consciente, no sabe si respira. No sabe cuántos heridos hay. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Avinguda del Sud, más o menos. No sabe si está consciente, respira bien. Dice que hay 3 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer d'En Vicent Gallart (Arciprest), más o menos. Está consciente, respira bien. Sangra mucho. Dice que hay 3 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Pont del Regne de València, más o menos. No sabe si está consciente, no sabe si respira. Sangra mucho. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Carrer de l'Arquebisbe Olaechea. No sabe si está consciente, no sabe si respira. Dice que hay 10 heridos. Está morado y no se le mueve el pecho.»": {
+  "breathing": "none"
+ },
+ "El propio herido: «Se ha caído una persona en Carrer de Muñoz Seca. No responde, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha derrumbado parte de un edificio en Carrer del Músic Cabanilles, más o menos. No sabe si está consciente, respira bien. Sangra mucho. Dice que hay 3 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha desplomado una persona en Pont de les Flors. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Ha habido un accidente de tráfico en Avinguda de Catalunya. Está consciente, respira bien. Dice que hay 2 heridos. Es la cría de los vecinos, tendrá seis años.»": {
+  "ageGroup": "child"
+ },
+ "Un familiar: «El agua ha arrastrado a una persona en Carrera de Malilla. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Le hablan y nada, y no le notan el aire.»": {
+  "breathing": "none"
+ },
+ "Un familiar: «Se ha desplomado una persona en Ronda Nord. Es una persona mayor. No sabe si está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «El agua ha arrastrado a una persona en Carrera de Malilla. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura. Le hablan y nada, y no le notan el aire.»": {
+  "trapped": "yes",
+  "breathing": "none"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrer de Fra Juníper Serra, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 3 heridos. Hace un ruido raro al coger aire.»": {
+  "breathing": "difficult"
+ },
+ "Un testigo a pie: «El agua ha arrastrado a una persona en Carrer de Pila Javaloyas Gaudiza, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 3 heridos. Está morado y no se le mueve el pecho. Es la cría de los vecinos, tendrá seis años.»": {
+  "breathing": "none",
+  "ageGroup": "child"
+ },
+ "Un familiar: «Se ha desplomado una persona en una calle que no sabe nombrar. No sabe si está consciente, no sabe si respira. Está morado y no se le mueve el pecho.»": {
+  "breathing": "none"
+ },
+ "Un conductor que pasaba: «Ha habido un accidente de tráfico en Carrer del Pintor Genaro Lahuerta, no sabe a qué altura. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "El propio herido: «Se ha caído una persona en Avinguda de l'Enginyer Manuel Soto. Está consciente, no sabe si respira. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Avinguda de La Llum, más o menos. No sabe si está consciente, respira bien. Dice que hay 4 heridos. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes"
+ },
+ "El propio herido: «Ha habido un accidente de tráfico en Camí Vell de València. Está consciente, respira bien. Dice que hay 2 heridos. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer de la Motonau. Está consciente, respira bien. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «El agua ha arrastrado a una persona en Carrer de Bernabé García. Es una persona mayor. Está consciente, no sabe si respira. Sangra mucho. Dice que hay 2 heridos. Hace un ruido raro al coger aire.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer del Submarí, más o menos. Es una persona mayor. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Se ha caído una persona en Carrer de les Filipines. Está consciente, respira bien. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha derrumbado parte de un edificio en Carrer de Joan Baptista Comes, más o menos. Está consciente, respira bien. Sangra mucho. Dice que la puerta no abre y el agua le llega ya por la cintura. Es la cría de los vecinos, tendrá seis años.»": {
+  "trapped": "yes",
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer del Doctor Pérez Feliu, más o menos. Está consciente, respira bien. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer del Pare Ferris, más o menos. No sabe si está consciente, respira bien. Dice que hay 3 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en Carrera de Malilla. Está consciente, respira bien. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Circumval·lació de València. Es una persona mayor. No sabe si está consciente, no sabe si respira. Dice que hay 3 heridos. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en Carrer Joan de Perpinyà. Está consciente, respira bien. Dice que hay 5 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Avinguda d'Enric Valor, más o menos. No sabe si está consciente, respira bien. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se está inundando una planta baja con gente dentro en Avinguda de La Llum, más o menos. No sabe si está consciente, no sabe si respira. Sangra mucho. Dice que hay 4 heridos. Se ahoga al hablar, le cuesta mucho. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrer de Manuel Arnau, más o menos. Está consciente, no sabe si respira. Dice que hay 2 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Avinguda de Catalunya, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Es la cría de los vecinos, tendrá seis años.»": {
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Ronda Nord, más o menos. Es una persona mayor. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Carrera de Malilla. Está consciente, respira bien. Dice que hay 2 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «El agua ha arrastrado a una persona en Plaça de l'Escultor Frechina. No responde, respira bien. Sangra mucho. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en Camí del Molí de les Fonts. Está consciente, no sabe si respira. Dice que hay 2 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un conductor que pasaba: «El agua ha atrapado un coche con gente dentro en Carrer de Sant Vicent Màrtir, no sabe a qué altura. No sabe si está consciente, no sabe si respira. No sabe cuántos heridos hay. Le hablan y nada, y no le notan el aire.»": {
+  "breathing": "none"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en Avinguda de Fernando Abril Martorell. Está consciente, respira bien. Dice que hay 3 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrer del Parc de Natzaret, más o menos. No sabe si está consciente, no sabe si respira. Le hablan y nada, y no le notan el aire.»": {
+  "breathing": "none"
+ },
+ "Un conductor que pasaba: «Hay alguien tirado en el suelo en una calle que no sabe nombrar, no sabe a qué altura. No sabe si está consciente, no sabe si respira. No sabe cuántos heridos hay. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Carrera de Malilla. Está consciente, no sabe si respira. Dice que hay 3 heridos. Se ahoga al hablar, le cuesta mucho. Es su abuela, tiene noventa años.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un conductor que pasaba: «El agua ha atrapado un coche con gente dentro en Carrer de Pila Javaloyas Gaudiza, no sabe a qué altura. No sabe si está consciente, respira con dificultad. No sabe cuántos heridos hay. Está en el coche y no consigue bajar la ventanilla.»": {
+  "breathing": "difficult",
+  "trapped": "yes"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en Carretera de la Anguila. Está consciente, respira bien. Dice que hay 2 heridos. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer de Mauro Guillén. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es su abuela, tiene noventa años.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer de les Filipines. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «El agua ha arrastrado a una persona en Camí del Canal. No sabe si está consciente, no sabe si respira. Sangra mucho. Dice que hay 2 heridos. Se ahoga al hablar, le cuesta mucho. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de la Séquia de Quart, más o menos. No sabe si está consciente, no sabe si respira. Le hablan y nada, y no le notan el aire. Es su abuela, tiene noventa años.»": {
+  "breathing": "none",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha derrumbado parte de un edificio en Carrer de Folch de Cardona, más o menos. Está consciente, no sabe si respira. Sangra mucho. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en una calle que no sabe nombrar. Está consciente, no sabe si respira. Dice que hay 3 heridos. Tiene una viga encima de las piernas. Es un señor muy mayor, va con andador.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar, más o menos. Está consciente, respira bien. Sangra mucho. Dice que hay 3 heridos. Es la cría de los vecinos, tendrá seis años.»": {
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrera de Malilla, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 3 heridos. Hace un ruido raro al coger aire.»": {
+  "breathing": "difficult"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Camí del Pou d'Aparisi. Está consciente, respira bien. Dice que hay 12 heridos. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se está inundando una planta baja con gente dentro en Plaça de l'Escultor Frechina, más o menos. Es una persona mayor. Está consciente, no respira. Dice que hay 3 heridos. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes",
+  "breathing": "none",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Gran Via del Marqués del Túria. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en Carrer de José María Mortes Lerma. Es una persona mayor. Está consciente, respira bien. Dice que hay 2 heridos. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha derrumbado parte de un edificio en Plaça de l'Alqueria Nova, más o menos. Es un niño. Está consciente, respira bien. Sangra mucho. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes",
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer d'En Vicent Gallart (Arciprest), más o menos. No sabe si está consciente, respira bien. Dice que hay 3 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar, más o menos. No sabe si está consciente, no sabe si respira. Está atrapado, no puede salir. Dice que hay 3 heridos. Se ahoga al hablar, le cuesta mucho. Es su abuela, tiene noventa años.»": {
+  "trapped": "yes",
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de Cartagena, más o menos. Está consciente, respira con dificultad. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un conductor que pasaba: «El agua ha atrapado un coche con gente dentro en Carrer de Jacint Labaila, no sabe a qué altura. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en Carrer del Doctor Marañón. Está consciente, respira bien. Dice que hay 3 heridos. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en Carrera de Malilla. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se está inundando una planta baja con gente dentro en Plaça de l'Escultor Frechina, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 4 heridos. Está morado y no se le mueve el pecho.»": {
+  "breathing": "none"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de Molina de Segura, más o menos. Está consciente, no sabe si respira. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer de Calamocha. Está consciente, respira bien. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha derrumbado parte de un edificio en una calle que no sabe nombrar. No sabe si está consciente, respira con dificultad. Dice que hay 3 heridos. Tiene una viga encima de las piernas.»": {
+  "breathing": "difficult",
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer de Benifairó de les Valls. Está consciente, respira con dificultad. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en una calle que no sabe nombrar, más o menos. Está consciente, respira bien. Dice que hay 3 heridos. Es la cría de los vecinos, tendrá seis años.»": {
+  "ageGroup": "child"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Carrera de Malilla. Está consciente, no sabe si respira. Dice que hay 3 heridos. Hace un ruido raro al coger aire. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «El agua ha arrastrado a una persona en Carrer del Castell de Pop. Está consciente, respira con dificultad. Sangra mucho. Dice que hay 2 heridos. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Ha habido un accidente de tráfico en Carrer del Brasil. Está consciente, respira bien. Dice que hay 3 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "El propio herido: «Se ha caído una persona en Carrer d'Eugènia Viñes. Está consciente, respira bien. Tiene una viga encima de las piernas. Es su abuela, tiene noventa años.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar. Está consciente, respira bien. Dice que hay 2 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Avinguda de Fernando Abril Martorell, más o menos. Está consciente, no sabe si respira. Está atrapado, no puede salir. Dice que hay 3 heridos. Es la cría de los vecinos, tendrá seis años.»": {
+  "trapped": "yes",
+  "ageGroup": "child"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en Carretera de la Anguila. Está consciente, respira bien. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrera de Malilla, más o menos. Está consciente, no sabe si respira. Sangra mucho. Dice que hay 2 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer de Colom, más o menos. Es una persona mayor. No sabe si está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Carrer del Comte de Salvatierra, más o menos. No sabe si está consciente, no sabe si respira. Está atrapado, no puede salir. Se ahoga al hablar, le cuesta mucho.»": {
+  "trapped": "yes",
+  "breathing": "difficult"
+ },
+ "Un testigo a pie: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar, más o menos. No sabe si está consciente, no respira. Dice que hay 3 heridos. Es un señor muy mayor, va con andador.»": {
+  "breathing": "none",
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en Carrera de Malilla. Está consciente, respira bien. Dice que hay 2 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Carrer de José María Mortes Lerma, más o menos. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Está morado y no se le mueve el pecho.»": {
+  "breathing": "none"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Plaça de l'Escultor Frechina. Está consciente, respira bien. Dice que hay 3 heridos. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Plaça de Ferran Ferrando. Está consciente, respira bien. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer de Francisco de Bellvís. Está consciente, respira bien. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se ha derrumbado parte de un edificio en una calle que no sabe nombrar, más o menos. No responde, respira con dificultad. Dice que hay 3 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "breathing": "difficult",
+  "trapped": "yes"
+ },
+ "Un testigo a pie: «Se ha desplomado una persona en Avinguda de les Corts Valencianes, más o menos. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es su abuela, tiene noventa años.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un conductor que pasaba: «Ha habido un accidente de tráfico en Carrer Barranquet, no sabe a qué altura. No sabe si está consciente, no sabe si respira. Dice que hay 2 heridos. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar. No sabe si está consciente, respira bien. Está atrapado, no puede salir. Dice que hay 3 heridos. Es un señor muy mayor, va con andador.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha arrastrado a una persona en Carrer del Parc de Natzaret, más o menos. Es una persona mayor. Está consciente, no sabe si respira. Dice que hay 3 heridos. Tiene una viga encima de las piernas. Se ahoga al hablar, le cuesta mucho.»": {
+  "trapped": "yes",
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer d'Eugènia Viñes. Está consciente, respira bien. Está atrapado, no puede salir. Es un señor muy mayor, va con andador.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de Fra Juníper Serra, más o menos. No sabe si está consciente, respira bien. Es la cría de los vecinos, tendrá seis años.»": {
+  "ageGroup": "child"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar. Está consciente, respira bien. Dice que hay 2 heridos. Es su abuela, tiene noventa años.»": {
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Avinguda del Sud, más o menos. Está consciente, respira bien. Dice que hay 3 heridos. Está en el coche y no consigue bajar la ventanilla. Es un señor muy mayor, va con andador.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Carrer de Colom. Está consciente, no sabe si respira. Se ahoga al hablar, le cuesta mucho. Es su abuela, tiene noventa años.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «Se está inundando una planta baja con gente dentro en una calle que no sabe nombrar, más o menos. Está consciente, no sabe si respira. Dice que hay 2 heridos. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un conductor que pasaba: «Ha habido un accidente de tráfico en una calle que no sabe nombrar, no sabe a qué altura. Está consciente, respira bien. Está en el coche y no consigue bajar la ventanilla.»": {
+  "trapped": "yes"
+ },
+ "Un familiar: «Se ha caído una persona en Carrer de Pablo Meléndez. Está consciente, respira bien. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes"
+ },
+ "El propio herido: «Se está inundando una planta baja con gente dentro en Carrera de Malilla. Está consciente, respira bien. Dice que hay 2 heridos. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "El propio herido: «El agua ha atrapado un coche con gente dentro en Carrer de José María Mortes Lerma. Está consciente, respira bien. Está atrapado, no puede salir. Dice que hay 2 heridos. Es un señor muy mayor, va con andador.»": {
+  "trapped": "yes",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se ha desplomado una persona en Plaça de Ferran Ferrando. Está consciente, no sabe si respira. Es un señor muy mayor, va con andador.»": {
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Camí del Molí de les Fonts. No responde, respira con dificultad. Dice que hay 2 heridos. Es un señor muy mayor, va con andador.»": {
+  "breathing": "difficult",
+  "ageGroup": "elderly"
+ },
+ "Un familiar: «Se está inundando una planta baja con gente dentro en Carrera del Riu. Es una persona mayor. No sabe si está consciente, no sabe si respira. Dice que hay 3 heridos. Está morado y no se le mueve el pecho.»": {
+  "breathing": "none",
+  "ageGroup": "elderly"
+ },
+ "Un testigo a pie: «El agua ha arrastrado a una persona en Carrer Major de Natzaret, más o menos. Está consciente, no sabe si respira. Dice que hay 2 heridos. Dice que la puerta no abre y el agua le llega ya por la cintura.»": {
+  "trapped": "yes"
+ },
+ "El propio herido: «Ha habido un accidente de tráfico en Carrer de Fra Juníper Serra. Está consciente, respira bien. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «El agua ha atrapado un coche con gente dentro en Plaça de la Colònia Espanyola de Mèxic, más o menos. No sabe si está consciente, no sabe si respira. Sangra mucho. Dice que hay 2 heridos. Le hablan y nada, y no le notan el aire.»": {
+  "breathing": "none"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de l'Arquitecte Alfaro, más o menos. Está consciente, no sabe si respira. Dice que hay 3 heridos. Es un niño pequeño.»": {
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Camí Vell de València, más o menos. No responde, no sabe si respira. Dice que hay 3 heridos. Es la cría de los vecinos, tendrá seis años.»": {
+  "ageGroup": "child"
+ },
+ "Un testigo a pie: «Ha habido un accidente de tráfico en Carrer de l'Arxiduc Carles, más o menos. Es un niño. Está consciente, respira bien. Tiene una viga encima de las piernas.»": {
+  "trapped": "yes",
+  "ageGroup": "child"
+ }
+}

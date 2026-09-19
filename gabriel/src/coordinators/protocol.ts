@@ -3,7 +3,7 @@
 //
 // Kept here (not inside a provider) so both back ends share one prompt, and so the prompt stays in
 // git even when it also lives in a HappyRobot workflow: `pnpm hr:sync` pushes this file up there.
-import { resolve, scoutTargetNode, type Action, type DecideInput } from "../engine";
+import { resolve, scoutTargetNode, stagingPoints, type Action, type DecideInput, type Hold, type HoldFor } from "../engine";
 
 export const SYSTEM_PROMPT = `Eres el coordinador de emergencias de una ciudad en plena crisis: mandas ambulancias, bomberos, rescate acuático, un helicóptero y drones de reconocimiento. Cada vez que algo cambia recibes un parte de situación y decides qué órdenes dar. Objetivo único: salvar el máximo de vidas.
 
@@ -13,8 +13,8 @@ QUÉ SABES Y QUÉ NO
 - La verdad llega cuando una dotación está en el lugar: confirma ubicación, cuántas víctimas hay, qué tienen y su triaje (red/yellow/green/black). Eso manda sobre cualquier llamada.
 - LA INFORMACIÓN SE PUEDE IR A BUSCAR. No estás obligado a decidir con lo que te llega: puedes mandar un dron (o el helicóptero si no hace falta para trasladar) a mirar un sitio. El parte trae una sección LO QUE NO SABES con los sitios donde ahora mismo decides a ciegas y a cuántos ticks tienes cada unidad de reconocimiento.
 - Un reconocimiento NO confirma nada. Vuelve con lo que le ha parecido ver: puede no distinguir qué ha pasado, contar mal, decir "no puede contarlos", y no ve casi nada de lo que pasa dentro de una casa. Que un dron no vea a nadie NO demuestra que no haya nadie, sobre todo si la pasada fue de calidad baja. Lo que sí ve muy bien es el agua y las calles cortadas.
-- EL SILENCIO ES INFORMACIÓN. Si una zona lleva muchos ticks sin una sola llamada mientras alrededor sí llaman, o si el agua está llegando a un barrio del que no ha llamado nadie, eso no significa que allí esté todo bien: puede que no haya nadie, o puede que ya no quede quien pueda llamar (sin cobertura, sin batería, sin nadie consciente). Es exactamente el sitio al que mandar un dron.
-- La prioridad P0-P3 del parte se deduce por protocolo de las señales conocidas. Un "no respira" no confirmado sigue siendo P0: mejor sobretriaje que perder una parada.
+- EL SILENCIO ES INFORMACIÓN. Si una zona lleva muchos ticks sin una sola llamada mientras alrededor sí llaman, o si el agua está llegando a un barrio del que no ha llamado nadie, eso no significa que allí esté todo bien: puede que no haya nadie, o puede que ya no quede quien pueda llamar (sin cobertura, sin batería, sin nadie consciente).
+- La prioridad P0-P3 del parte se deduce por protocolo de las señales conocidas. Un "no respira" no confirmado cuenta como P0.
 
 REGLAS DEL MUNDO
 - Cinco tipos de unidad. Ambulancia: lleva un herido por carretera. Bomberos: liberan a los atrapados y atienden leves; NO trasladan. Rescate acuático: lento, pero cruza las calles inundadas; libera y traslada: es lo único por tierra que llega a un incidente SIN RUTA POR CARRETERA. Helicóptero: solo hay uno, rapidísimo, ignora calles y agua, lleva un herido y solo puede entregarlo en un hospital con HELIPUERTO; además puede hacer reconocimiento si no hace falta para trasladar. Dron: vuela, NO rescata, NO traslada, NO libera a nadie; su único trabajo es ir a mirar y contarte lo que cree ver. Gastar un dron no le quita una unidad a nadie.
@@ -28,22 +28,24 @@ REGLAS DEL MUNDO
 ÓRDENES
 - dispatch {unitId, incidentId, hospitalId}: unidad SIN herido a bordo va al incidente y, si traslada, sigue sola al hospital indicado (para bomberos no pongas hospitalId). Puedes desviar una que iba a otro incidente; ese otro se queda sin ella.
 - transport {unitId, hospitalId}: ambulancia CON herido a bordo va a ese hospital.
-- reposition {unitId, hospitalId}: ambulancia vacía va a esperar junto a ese hospital (también sirve para anular una salida).
+- reposition {unitId, target}: unidad vacía va a esperar a un sitio: un hospital (H2), un PUNTO DE ESPERA del parte (E1N) o un SITIO CON GENTE DENTRO (ST3), donde ayuda a ponerlos a salvo. También sirve para anular una salida. Una unidad que ya está cerca de donde va a hacer falta llega a tiempo; una que sale del otro lado de la ciudad, no.
+- warn {unitId:"112", target}: el 112 llama a un SITIO CON GENTE DENTRO del parte (ST3) para que empiecen a ponerse a salvo antes de que llegue el agua. No gasta ninguna unidad. Si no les da tiempo solos, manda además una dotación a esperar en el sitio con reposition {unitId, target:"ST3"}.
+- hold {unitId, onlyFor, ticks}: RESERVA una unidad libre durante esos ticks. onlyFor: "agua" (solo para víctimas en el agua o sin ruta por carretera), "P0" (solo para vida en riesgo inmediato) o "nada" (no se toca hasta que tú la sueltes). Mientras dure, nadie la gasta en otra cosa, tampoco tú por despiste. No reserves lo que hace falta ahora mismo.
+- release {unitId}: levanta la reserva.
 - scout {unitId, target}: manda un dron o el helicóptero a mirar. "target" es un id de la sección LO QUE NO SABES: un incidente (C7) o una zona (Z142). No vale ningún otro id.
 
-CÓMO DECIDIR
+CÓMO LEER EL PARTE
 - Usa solo los ETA del parte; ya esquivan las calles cortadas.
-- "FALTAN n" indica cuántas unidades más necesita un incidente. Con pocos datos (una llamada vaga) puede bastar una unidad que confirme antes de mandar más.
-- Antes de gastar dos ambulancias en un incidente con ubicación de ±400 m y número de heridos desconocido, plantéate mandar el dron: llega antes, no le quita el sitio a nadie y te evita mandar a la mitad de la flota a un cruce donde no hay nadie.
-- No dejes drones parados si hay algo en LO QUE NO SABES. Tampoco los mandes dos veces al mismo sitio mientras no cambie nada allí, ni pares una evacuación urgente para ir a mirar: mirar nunca salva a nadie por sí solo, solo hace que la siguiente orden sea la buena.
-- Cuando todo no cabe, P0 y P1 van antes aunque lleven menos tiempo abiertos. No dejes un P3 esperando para siempre.
-- No reasignes por reasignar: desvía una ambulancia solo si con ello se salva alguien más.
-- Si la ambulancia que antes llegaría está a punto de quedar libre, puede compensar esperarla. No puedes darle órdenes hasta que esté libre.
-- Reparte entre hospitales: no satures uno si otro está casi igual de cerca.
+- "FALTAN n" indica cuántas unidades más necesita un incidente según lo que se sabe de él.
+- No puedes dar órdenes a una unidad hasta que esté libre, salvo desviar una que va de camino sin herido a bordo.
 - Si no hay nada que mejorar, devuelve actions vacío.
 
+TU CUADERNO
+- Cada decisión tuya empieza en frío: no recuerdas la anterior. Tu única memoria es el cuaderno. En "plan" escribe (60 palabras como mucho) qué intentas conseguir en los próximos ~10 ticks y por qué tienes cada unidad donde la tienes; en "watch", qué vigilas y qué harás si pasa ("si el agua llega a E1N, saco A2"). El siguiente parte empieza con lo que escribiste y con lo que pasó desde entonces. Mantén el plan mientras funcione; cámbialo cuando los hechos lo contradigan y di por qué.
+- Si el parte dice que en esta sesión no hay cuaderno, no uses hold, release ni puntos de espera, y deja "plan" y "watch" vacíos.
+
 DOCTRINA
-- Cada parte empieza con tu DOCTRINA Y MEMORIA: principios, heurísticas y errores aprendidos en sesiones anteriores, cada uno con un id. Tenla en cuenta al decidir; si en este caso concreto no aplica o ves algo mejor, decide tú.
+- Cómo decidir no está escrito aquí: se aprende. El parte puede empezar con tu DOCTRINA Y MEMORIA: principios, heurísticas y errores aprendidos en sesiones anteriores, cada uno con un id. Tenla en cuenta al decidir; si en este caso concreto no aplica o ves algo mejor, decide tú. Si no trae doctrina, decide con tu propio criterio.
 - En cada orden, pon en "applies" los ids que has seguido (por ejemplo ["H5","D2"]). Si no has seguido ninguno, déjalo vacío. No inventes ids.
 
 Responde solo con la salida estructurada, en español. "situation": una frase con lo que más importa ahora. Cada acción lleva "reason" de 15 palabras como mucho.`;
@@ -58,23 +60,29 @@ export const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          type: { type: "string", enum: ["dispatch", "transport", "reposition", "scout"] },
+          type: { type: "string", enum: ["dispatch", "transport", "reposition", "scout", "warn", "hold", "release"] },
           unitId: { type: "string" },
           incidentId: { type: "string" },
           hospitalId: { type: "string" },
-          target: { type: "string", description: "Solo para scout: id de incidente (C7) o de zona (Z142) de LO QUE NO SABES." },
+          target: { type: "string", description: "scout: id de incidente (C7) o de zona (Z142) de LO QUE NO SABES. reposition: hospital (H2) o punto de espera (E1N)." },
+          onlyFor: { type: "string", enum: ["agua", "P0", "nada"], description: "Solo para hold." },
+          ticks: { type: "number", description: "Solo para hold: cuánto dura la reserva." },
           reason: { type: "string" },
           applies: { type: "array", items: { type: "string" }, description: "Ids de la doctrina seguidos en esta orden (D1, H5, A3...)." },
         },
         required: ["type", "unitId", "reason"],
       },
     },
+    plan: { type: "string" },
+    watch: { type: "string" },
   },
   required: ["situation", "actions"],
 };
 
 export interface LlmAction {
-  type: "dispatch" | "transport" | "reposition" | "scout";
+  type: "dispatch" | "transport" | "reposition" | "scout" | "warn" | "hold" | "release";
+  onlyFor?: string;
+  ticks?: number;
   unitId: string;
   incidentId?: string;
   hospitalId?: string;
@@ -88,6 +96,8 @@ export interface LlmAction {
 export interface LlmOutput {
   situation: string;
   actions: LlmAction[];
+  plan: string;
+  watch: string;
 }
 
 /** What the agent reads each time: the doctrine from memory, then the situation. */
@@ -107,7 +117,7 @@ export interface LlmTrace {
   error?: string;
 }
 
-export function toAction(raw: LlmAction, { belief, graph }: DecideInput): Action | null {
+export function toAction(raw: LlmAction, { belief, graph, tick }: DecideInput): Action | null {
   if (raw.type === "scout") {
     const target = raw.target ?? raw.incidentId;
     const node = target ? scoutTargetNode(belief, graph, target) : null;
@@ -121,11 +131,39 @@ export function toAction(raw: LlmAction, { belief, graph }: DecideInput): Action
   if (raw.type === "transport" && raw.hospitalId) {
     return { type: "transport", unitId: raw.unitId, hospitalId: raw.hospitalId };
   }
+  if (raw.type === "warn") {
+    const site = belief.sites.find((x) => x.id === (raw.target ?? raw.incidentId));
+    if (site) return { type: "warn", unitId: "112", siteId: site.id };
+  }
   if (raw.type === "reposition") {
-    const hospital = belief.hospitals.find((h) => h.id === raw.hospitalId);
-    if (hospital) return { type: "reposition", unitId: raw.unitId, node: hospital.node };
+    const where = raw.target ?? raw.hospitalId;
+    const node = belief.hospitals.find((h) => h.id === where)?.node ?? belief.sites.find((site) => site.id === where)?.node ?? stagingPoints(belief, graph, tick).find((p) => p.id === where)?.node;
+    if (node !== undefined) return { type: "reposition", unitId: raw.unitId, node };
   }
   return null;
+}
+
+const HOLD_FOR = new Set<string>(["agua", "P0", "nada"]);
+const MAX_HOLD_TICKS = 40;
+
+/** Standing orders are the coordinator's own business: the engine never hears of them, the dispatch layer enforces them. */
+export function toStanding(output: LlmOutput, { belief, tick }: DecideInput): { holds: Hold[]; releases: string[]; notes: string[] } {
+  const holds: Hold[] = [];
+  const releases: string[] = [];
+  const notes: string[] = [];
+  for (const raw of output.actions ?? []) {
+    if (!belief.units.some((u) => u.id === raw.unitId)) continue;
+    if (raw.type === "release") {
+      releases.push(raw.unitId);
+      notes.push(`release ${raw.unitId}: ${raw.reason}`);
+    }
+    if (raw.type === "hold" && HOLD_FOR.has(raw.onlyFor ?? "")) {
+      const ticks = Math.max(1, Math.min(MAX_HOLD_TICKS, Math.round(raw.ticks ?? 10)));
+      holds.push({ unitId: raw.unitId, onlyFor: raw.onlyFor as HoldFor, untilTick: tick + ticks, reason: raw.reason });
+      notes.push(`hold ${raw.unitId} solo para ${raw.onlyFor} ${ticks} ticks: ${raw.reason}`);
+    }
+  }
+  return { holds, releases, notes };
 }
 
 /**
@@ -160,10 +198,13 @@ export const HR_SCHEMA = {
     actions: {
       type: "string",
       description:
-        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition"|"scout","unitId":"...","incidentId":"...","hospitalId":"...","target":"...","reason":"...","applies":["H5","D2"]}. `target` solo para scout (id de incidente C7 o de zona Z142). `applies` = ids de la doctrina seguidos en esa orden. Sin órdenes: "[]".',
+        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition"|"scout"|"warn"|"hold"|"release","unitId":"...","incidentId":"...","hospitalId":"...","target":"...","onlyFor":"agua"|"P0"|"nada","ticks":10,"reason":"...","applies":["H5","D2"]}. `target`: para scout, id de incidente (C7) o de zona (Z142); para reposition, hospital (H2), punto de espera (E1N) o sitio (ST3); para warn, sitio (ST3) y unitId "112". `onlyFor` y `ticks` solo para hold. `applies` = ids de la doctrina seguidos en esa orden. Sin órdenes: "[]".',
     },
+    plan: { type: "string", description: "Tu cuaderno: qué intentas conseguir en los próximos ~10 ticks y por qué tienes cada unidad donde la tienes. 60 palabras como mucho. Vacío si en esta sesión no hay cuaderno." },
+    watch: { type: "string", description: "Tu cuaderno: qué vigilas y qué harás si pasa. 40 palabras como mucho." },
   },
-  required: ["situation", "actions"],
+  // Every property is required: the platform's structured output refuses a schema with optional fields.
+  required: ["situation", "actions", "plan", "watch"],
 } as const;
 
 /** Pull `{situation, actions}` out of whatever the platform wrapped the node output in. */
@@ -184,8 +225,8 @@ export function readOutput(raw: unknown): LlmOutput {
   if (typeof body === "string") body = JSON.parse(body);
   if (!body || typeof body !== "object") throw new Error(`unreadable node output: ${JSON.stringify(raw).slice(0, 200)}`);
 
-  const { situation, actions } = body as { situation?: unknown; actions?: unknown };
+  const { situation, actions, plan, watch } = body as { situation?: unknown; actions?: unknown; plan?: unknown; watch?: unknown };
   const parsed = typeof actions === "string" ? JSON.parse(actions || "[]") : actions;
   if (!Array.isArray(parsed)) throw new Error(`node output has no actions array: ${JSON.stringify(body).slice(0, 200)}`);
-  return { situation: typeof situation === "string" ? situation : "", actions: parsed as LlmAction[] };
+  return { situation: typeof situation === "string" ? situation : "", actions: parsed as LlmAction[], plan: typeof plan === "string" ? plan : "", watch: typeof watch === "string" ? watch : "" };
 }

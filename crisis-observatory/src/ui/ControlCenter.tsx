@@ -4,6 +4,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Route,
+  Megaphone,
+  Scale,
   Layers,
   Map as MapIcon,
   Pause,
@@ -33,6 +36,13 @@ import {
   relatedEntities,
   type SituationFilter,
 } from "./situation/model";
+import DecisionPanel, { DecisionStrip } from "./decisions/DecisionPanel";
+import { decisionCards } from "./decisions/model";
+import SignalsView from "./signals/SignalsView";
+import PressView from "./press/PressView";
+import PlanView from "./plan/PlanView";
+import "./press/press.css";
+import { channelView } from "./signals/model";
 import { auditItems } from "./audit/model";
 import DecisionBanner from "./interventions/DecisionBanner";
 import DecisionRoom, { PendingDecisionBar } from "./interventions/DecisionRoom";
@@ -45,6 +55,9 @@ import TicketsView, { TicketDetail } from "./tickets/TicketsView";
 import { buildTickets, type Ticket, type TicketState } from "./tickets/model";
 
 const RunMap = lazy(() => import("./map/RunMap"));
+const ASK_FOR_APPROVAL = false;
+const NO_PENDING: ReturnType<typeof useInterventions>["pending"] = [];
+
 // Read once: a run that mounts while another shows a pending count would take the count as its title.
 const pageTitle = document.title;
 // ?iteracion=1 keeps the first iteration, a banner above the map, to compare with the second:
@@ -104,7 +117,9 @@ function RunSession({
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
     // Incidents first: the operator starts from what is happening, then goes to the territory.
-    [view, setView] = useState<"map" | "tickets">("tickets"),
+    [view, setView] = useState<"map" | "tickets" | "decisions" | "signals" | "press" | "plan">("tickets"),
+    [leadFocus, setLeadFocus] = useState<string | null>(null),
+    [orderFocus, setOrderFocus] = useState<string | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
@@ -125,7 +140,10 @@ function RunSession({
   const current = ticks[Math.min(index, ticks.length - 1)],
     seconds = meta?.config.tickSeconds ?? 30;
   const interventions = useInterventions({ ticks, current, graph, meta });
-  const { pending, router } = interventions;
+  const { router } = interventions;
+  // Approvals are switched off for now: the coordinator acts on its own and nothing takes over the screen,
+  // pauses the replay or rings. Set ASK_FOR_APPROVAL back to true to have the operator asked again.
+  const pending = ASK_FOR_APPROVAL ? interventions.pending : NO_PENDING;
   const sound = useAlertSound();
   const { chime } = sound;
   // A new request brings the operator back to the room. If it opens while time moves on its own
@@ -180,6 +198,20 @@ function RunSession({
   const visible = useMemo(() => ticks.slice(0, index + 1), [ticks, index]);
   const all = useMemo(() => auditItems(visible), [visible]);
   const tickets = useMemo(() => buildTickets(visible, seconds), [visible, seconds]);
+  // Decisions are read with hindsight: what came of each order is looked up in the ticks that followed.
+  const cards = useMemo(() => (graph && meta ? decisionCards(ticks, graph, meta) : []), [ticks, graph, meta]);
+  const channel = useMemo(() => {
+    if (!graph) return null;
+    const rad = Math.PI / 180;
+    const distanceM = (a: number, b: number) => {
+      const [lon1, lat1] = graph.nodes[a], [lon2, lat2] = graph.nodes[b];
+      const x = (lon2 - lon1) * rad * Math.cos(((lat1 + lat2) / 2) * rad), y = (lat2 - lat1) * rad;
+      return Math.sqrt(x * x + y * y) * 6371000;
+    };
+    return channelView(visible, distanceM);
+  }, [visible, graph]);
+  const notes = useMemo(() => visible.flatMap((r) => (r.press ? [r.press] : [])), [visible]);
+  const card = useMemo(() => [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0] ?? null, [cards, current]);
   const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
   const selection =
     entity && selectionExists(entity, current, meta) ? entity : null;
@@ -319,6 +351,30 @@ function RunSession({
               <MapIcon size={14} />
               Territorio
             </button>
+            <button
+              aria-pressed={view === "decisions"}
+              className={view === "decisions" ? "is-active" : ""}
+              onClick={() => {
+                setView("decisions");
+                const nearest = [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0];
+                if (nearest) seekTick(nearest.tick);
+              }}
+            >
+              <Scale size={14} />
+              Decisiones
+            </button>
+            <button aria-pressed={view === "plan"} className={view === "plan" ? "is-active" : ""} onClick={() => setView("plan")}>
+              <Route size={14} />
+              Plan
+            </button>
+            <button aria-pressed={view === "press"} className={view === "press" ? "is-active" : ""} onClick={() => setView("press")}>
+              <Megaphone size={14} />
+              Prensa{notes.length ? ` · ${notes.length}` : ""}
+            </button>
+            <button aria-pressed={view === "signals"} className={view === "signals" ? "is-active" : ""} onClick={() => setView("signals")}>
+              <Radio size={14} />
+              Señales{channel ? ` · ${channel.leads.length}` : ""}
+            </button>
           </div>
           {current && (
             <InterventionInbox
@@ -394,11 +450,26 @@ function RunSession({
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
+          ) : view === "plan" ? (
+            <PlanView cards={cards} tick={current.tick} lastTick={ticks.at(-1)?.tick ?? 0} seconds={seconds} onDecision={(c) => { setView("decisions"); seekTick(c.tick); }} />
+          ) : view === "press" ? (
+            <PressView notes={notes} seconds={seconds} every={10} />
+          ) : view === "signals" ? (
+            <SignalsView view={channel} seconds={seconds} focus={leadFocus} onFocus={setLeadFocus} />
           ) : (
             graph &&
             meta && (
               <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
+                {view === "decisions" && <DecisionStrip cards={cards} active={card} onGo={(c) => seekTick(c.tick)} />}
                 <RunMap
+                  signals={channel ? { heat: channel.heat, leads: channel.leads.map((l) => ({ id: l.id, node: l.node, credibility: l.credibility, tone: l.outcome.tone })), focus: leadFocus } : null}
+                  explain={view === "decisions" && card ? {
+                    orders: card.orders.map((o) => ({ key: o.key, kind: o.kind, from: o.from, to: o.to, own: card.compared && !o.shared })),
+                    rules: card.rulesOnly.map((o) => ({ from: o.from, to: o.to })),
+                    held: card.holds.map((h) => h.unitId),
+                    waterAhead: card.waterAhead,
+                    focus: orderFocus,
+                  } : null}
                   graph={graph}
                   meta={meta}
                   record={current}
@@ -525,7 +596,7 @@ function RunSession({
         </div>
       </section>
       <div className="app-sidebar-slot" inert={blocked}>
-        {view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
+        {view === "decisions" ? <DecisionPanel cards={cards} card={card} seconds={seconds} focus={orderFocus} onFocus={setOrderFocus} onGo={(c) => seekTick(c.tick)} /> : view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
           onLocate={locateTicket} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} /> : <SituationSidebar
           id={id}
           runs={runs}

@@ -81,6 +81,21 @@ pnpm hr:sync --dream                    # push the dream's prompt + schema to it
 
 The starting doctrine is `src/memory/seed.ts`; delete `memory/memory.db` to go back to it. The viewer's **Memoria** tab draws the graph: rules hang from the concepts they are about, sessions and their evidence from the rules they backed or undermined. Click anything to see what it says, where it came from and how it changed.
 
+## An agent on the other side too: the master
+
+`--master happyrobot` hands the night to an agent in a HappyRobot workflow (`src/masters/`). Every 10 ticks it is shown the night so far - stats, what just happened (the coordinator's orders included), a dozen places it may use (dry, at the water's edge, inside the water; how far the nearest free unit is; how many turns until the water cuts them off), streets it may cut, the fleet - and answers with one sentence of narration plus what happens next: up to three scenes (place, kind, how many hurt, how bad, trapped, silent), one new flood from a list of sources, one street cut, one breakdown. It picks by index and by name, never a node or an edge, and whatever the map does not have is dropped and logged. What it decides is spread over the ticks of the turn; the water, once out, advances on its own. Turns are traced to `runs/<id>/master.jsonl`, and the narration reaches the viewers as a `master_narration` event the coordinator never hears.
+
+```
+pnpm run-sim --coordinator happyrobot --master happyrobot   # agent against agent
+pnpm hr:sync --master                                       # push the master's prompt + schema (forks the locked version)
+```
+
+`--calls happyrobot` has the `sim-112` workflow word each 112 call. The facts stay the engine's (who calls, what they could tell, how sure of the place): the agent only gets the call as the operator filed it, and if its answer is not about that call the engine's wording is kept. It needs `sim-112` behind a webhook trigger; as a workflow-called trigger it never receives the payload.
+
+## The real 112 line
+
+`--phone` opens the session to the outside: whoever phones the HappyRobot 112 number talks to its voice agent, which files the call as the engine's own `Call` record once they hang up (`Build Call Object` in the `112` workflow). The session polls that workflow's runs every few seconds (`src/phone/happyrobot.ts`; polling because a laptop has no address to post to) and every call finished since it started goes in through `Simulation.phone()`: the street the caller said is looked up on the map (`Graph.findStreet`, forgiving about accents, "calle/carrer" and Spanish or Valencian spellings), what they described becomes a real emergency there - the worst victim as bad as their answers to the protocol - and their call reaches the coordinator on the next tick like any other, numbered with the rest and marked `source: "phone"`. Nobody else calls about it, but if nobody comes they are rung back like everyone else. Use a real-time pace, e.g. `pnpm run-sim --coordinator happyrobot --phone --tick-ms 1000`; calls taken are kept in `runs/<id>/phone.jsonl`.
+
 ## One tick (30 simulated seconds)
 
 1. **Master** acts: spawn scene, close/open road, puncture ambulance (`MasterAction`).

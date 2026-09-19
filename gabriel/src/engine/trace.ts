@@ -3,10 +3,13 @@ import { unitLonLat, summarize, type Summary } from "./engine";
 import type { Graph } from "./graph";
 import { FLOOD_FRINGE_M } from "./engine";
 import { incidentLine } from "./incidents";
+import { PRESS_EVERY_TICKS, pressNote, type PressNote } from "./press";
+import type { LeadDesk, ReadMessage } from "./reading";
 import { infoGaps } from "./recon";
+import { waterArrivalTicks } from "./sites";
 import { believedWater, cutOffForecast, projectedRadius } from "./water";
 import type { TickResult } from "./sim";
-import type { Action, Belief, Call, Incident, InjuryKind, LonLat, Mission, ObservedEvent, SceneKind, SimConfig, Triage, UnitKind, VictimStatus, World } from "./types";
+import type { Action, Belief, Call, Incident, InjuryKind, LonLat, Mission, ObservedEvent, SceneKind, SimConfig, SiteKind, Triage, UnitKind, VictimStatus, World } from "./types";
 import { triage } from "./victims";
 
 // On-disk format of a run (runs/<id>/): meta.json + ticks.jsonl (one TickRecord per line) + llm.jsonl.
@@ -55,8 +58,38 @@ export interface IncidentFrame extends Incident {
 }
 
 /** Everything the UI needs to draw one tick: what is true, and what the coordinator believes. */
+export interface SiteFrame {
+  id: string;
+  kind: SiteKind;
+  name: string;
+  node: number;
+  people: number;
+  safe: number;
+  warnedTick: number | null;
+  floodedTick: number | null;
+  /** Ticks until the water is expected there, as dispatch reckons it. null = nothing points that way yet. */
+  arrivalTicks: number | null;
+  /** How many the water caught inside, once it has arrived. */
+  caught: number | null;
+}
+
 export interface Frame {
   units: UnitFrame[];
+  /** Places with people inside who are fine until the water arrives. Absent in runs older than the sites. */
+  sites?: SiteFrame[];
+  gauges?: { name: string; node: number; level: number; overflowTick: number }[];
+  outages?: { id: string; node: number; radiusM: number; untilTick: number }[];
+  /** Rounds of outbound calls: in progress (found = null) and answered. */
+  outbound?: { zone: string; node: number; tick: number; found: number | null }[];
+  /** The citizen channel as its reader left it: running totals, this tick's messages, and every lead so far. */
+  channel?: {
+    reader: string;
+    received: number;
+    read: number;
+    relevant: number;
+    fresh: ReadMessage[];
+    leads: { id: string; tick: number; node: number; street: string | null; summary: string; credibility: number; urgency: string; messages: string[]; registry: string | null; real: boolean }[];
+  };
   scenes: SceneFrame[];
   incidents: IncidentFrame[];
   /** Truth: where the water really is. */
@@ -85,6 +118,8 @@ export interface TickRecord {
   calls: Call[];
   actions: Action[];
   decision?: Omit<Decision, "actions">;
+  /** The public statement put out this tick, if it was time for one. */
+  press?: PressNote;
 }
 
 const RECENT_TICKS = 20;
@@ -127,7 +162,18 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
       })),
     incidents: belief.incidents
       .filter((i) => i.status === "open" || recent(i.updatedTick))
-      .map((i) => ({ ...structuredClone(i), line: incidentLine(i), cutOffIn: i.status === "open" ? cutOffIn(i.node) : null })),
+      // On a night with hundreds of incidents the case files are most of the record: a frame carries in full only the
+      // ones that changed just now; the rest keep their headline and the viewers take the file from when it last moved.
+      .map((i) => ({ ...(belief.incidents.length > 150 && unchanged(belief, i) ? { ...i, timeline: [], history: [], foci: [], callIds: [...i.callIds], victims: [...i.victims] } : structuredClone(i)), line: incidentLine(i), cutOffIn: i.status === "open" ? cutOffIn(i.node) : null })),
+    sites: world.sites.map(({ people, ...site }) => ({
+      ...site,
+      people: people.length,
+      arrivalTicks: site.floodedTick === null ? waterArrivalTicks(belief, graph, site.node) : null,
+      caught: site.floodedTick === null ? null : people.length - site.safe,
+    })),
+    gauges: world.gauges.map(({ name, node, level, overflowTick }) => ({ name, node, level, overflowTick })),
+    outages: world.outages.filter((o) => world.tick < o.untilTick).map(({ id, node, radiusM, untilTick }) => ({ id, node, radiusM, untilTick })),
+    outbound: belief.outboundRounds.filter((r) => world.tick - r.tick <= 12),
     floods: world.floods.map((f) => ({ id: f.id, name: f.name, node: f.node, radiusM: Math.round(f.radiusM), fringeM: Math.round(f.radiusM + FLOOD_FRINGE_M) })),
     knownWater: {
       zones: belief.floods.map((z) => ({ id: z.id, name: z.name, node: z.node, radiusM: projectedRadius(z, world.tick), ageTicks: world.tick - z.asOfTick })),
@@ -144,15 +190,38 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
   };
 }
 
-export function makeTickRecord(result: TickResult, world: World, belief: Belief, graph: Graph): TickRecord {
+/** What an incident looked like the last time a frame carried it in full, per session. */
+const lastShape = new WeakMap<Belief, Map<string, string>>();
+function unchanged(belief: Belief, i: Incident): boolean {
+  const shapes = lastShape.get(belief) ?? new Map<string, string>();
+  lastShape.set(belief, shapes);
+  const shape = `${i.status}|${i.priority}|${i.node}|${i.located}|${i.unreachable}|${i.callIds.length}|${i.victims.map((v) => v.status).join("")}`;
+  const same = shapes.get(i.id) === shape;
+  shapes.set(i.id, shape);
+  return same;
+}
+
+export function makeTickRecord(result: TickResult, world: World, belief: Belief, graph: Graph, desk: LeadDesk | null = null): TickRecord {
   const calls = result.reports.flatMap((r) => (r.event.type === "call_received" ? [r.event.call] : []));
   const record: TickRecord = {
     tick: result.tick,
-    frame: makeFrame(world, belief, graph),
+    frame: {
+      ...makeFrame(world, belief, graph),
+      channel: desk
+        ? {
+            reader: desk.reader.name,
+            ...desk.stats,
+            // On a loud night hundreds come in per tick: the record keeps every one that mattered and a sample of the rest.
+            fresh: [...desk.lastTick.filter((m) => m.relevant || m.leadId), ...desk.lastTick.filter((m) => !m.relevant && !m.leadId).slice(0, 40)],
+            leads: desk.leads.map((l) => ({ id: l.id, tick: l.tick, node: l.node, street: l.street, summary: l.summary, credibility: l.credibility, urgency: l.urgency, messages: l.messages, registry: l.registry?.who ?? null, real: l.about !== null })),
+          }
+        : undefined,
+    },
     events: [...calls.map((call) => ({ type: "call_received" as const, tick: result.tick, call })), ...result.events],
     calls,
     actions: result.actions,
   };
+  if (result.tick > 0 && result.tick % PRESS_EVERY_TICKS === 0) record.press = pressNote(belief, graph, world.config, desk ? { received: desk.stats.received, leads: desk.leads.length } : null);
   if (result.decision) {
     const { actions: _actions, ...why } = result.decision;
     record.decision = why;

@@ -1,0 +1,464 @@
+[
+  {
+    "id": "A1@15",
+    "night": "A1",
+    "tick": 15,
+    "decisions": 3,
+    "why": "2 avisos esperando unidad (1 graves) y 1 libres"
+  },
+  {
+    "id": "A1@22",
+    "night": "A1",
+    "tick": 22,
+    "decisions": 3,
+    "why": "5 avisos esperando unidad (2 graves) y 1 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A1@35",
+    "night": "A1",
+    "tick": 35,
+    "decisions": 3,
+    "why": "5 avisos esperando unidad (1 graves) y 3 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A2@11",
+    "night": "A2",
+    "tick": 11,
+    "decisions": 3,
+    "why": "3 avisos esperando unidad (2 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "A2@18",
+    "night": "A2",
+    "tick": 18,
+    "decisions": 3,
+    "why": "4 avisos esperando unidad (1 graves) y 2 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A2@25",
+    "night": "A2",
+    "tick": 25,
+    "decisions": 3,
+    "why": "6 avisos esperando unidad (3 graves) y 1 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A2@32",
+    "night": "A2",
+    "tick": 32,
+    "decisions": 3,
+    "why": "7 avisos esperando unidad (2 graves) y 3 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A2@39",
+    "night": "A2",
+    "tick": 39,
+    "decisions": 3,
+    "why": "11 avisos esperando unidad (1 graves) y 1 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A3@10",
+    "night": "A3",
+    "tick": 10,
+    "decisions": 3,
+    "why": "3 avisos esperando unidad (2 graves) y 1 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "A3@22",
+    "night": "A3",
+    "tick": 22,
+    "decisions": 3,
+    "why": "7 avisos esperando unidad (3 graves) y 3 libres; 2 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "A3@31",
+    "night": "A3",
+    "tick": 31,
+    "decisions": 3,
+    "why": "9 avisos esperando unidad (2 graves) y 2 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A3@38",
+    "night": "A3",
+    "tick": 38,
+    "decisions": 3,
+    "why": "6 avisos esperando unidad (0 graves) y 2 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A4@18",
+    "night": "A4",
+    "tick": 18,
+    "decisions": 3,
+    "why": "3 avisos esperando unidad (1 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 3 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "A4@27",
+    "night": "A4",
+    "tick": 27,
+    "decisions": 3,
+    "why": "5 avisos esperando unidad (2 graves) y 2 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "A4@34",
+    "night": "A4",
+    "tick": 34,
+    "decisions": 3,
+    "why": "2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "B1@21",
+    "night": "B1",
+    "tick": 21,
+    "decisions": 3,
+    "why": "6 avisos esperando unidad (4 graves) y 2 libres; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "B1@28",
+    "night": "B1",
+    "tick": 28,
+    "decisions": 3,
+    "why": "7 avisos esperando unidad (5 graves) y 2 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "B1@36",
+    "night": "B1",
+    "tick": 36,
+    "decisions": 3,
+    "why": "6 avisos esperando unidad (3 graves) y 1 libres"
+  },
+  {
+    "id": "B2@13",
+    "night": "B2",
+    "tick": 13,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua; 3 zonas a ciegas y 2 drones libres"
+  },
+  {
+    "id": "B2@25",
+    "night": "B2",
+    "tick": 25,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "B2@38",
+    "night": "B2",
+    "tick": 38,
+    "decisions": 3,
+    "why": "5 avisos esperando unidad (2 graves) y 4 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "B3@13",
+    "night": "B3",
+    "tick": 13,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "B3@36",
+    "night": "B3",
+    "tick": 36,
+    "decisions": 3,
+    "why": "4 avisos esperando unidad (3 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "B4@16",
+    "night": "B4",
+    "tick": 16,
+    "decisions": 3,
+    "why": "4 avisos esperando unidad (2 graves) y 1 libres"
+  },
+  {
+    "id": "B4@23",
+    "night": "B4",
+    "tick": 23,
+    "decisions": 3,
+    "why": "7 avisos esperando unidad (1 graves) y 2 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "B4@32",
+    "night": "B4",
+    "tick": 32,
+    "decisions": 3,
+    "why": "4 avisos esperando unidad (1 graves) y 2 libres; 2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "B4@39",
+    "night": "B4",
+    "tick": 39,
+    "decisions": 3,
+    "why": "2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "C1@14",
+    "night": "C1",
+    "tick": 14,
+    "decisions": 3,
+    "why": "2 avisos esperando unidad (2 graves) y 1 libres"
+  },
+  {
+    "id": "C1@26",
+    "night": "C1",
+    "tick": 26,
+    "decisions": 3,
+    "why": "5 avisos esperando unidad (1 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "C1@33",
+    "night": "C1",
+    "tick": 33,
+    "decisions": 3,
+    "why": "3 avisos esperando unidad (0 graves) y 1 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "C2@32",
+    "night": "C2",
+    "tick": 32,
+    "decisions": 3,
+    "why": "5 avisos esperando unidad (3 graves) y 2 libres; 3 a punto de quedar aislados por el agua; 3 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "C2@39",
+    "night": "C2",
+    "tick": 39,
+    "decisions": 3,
+    "why": "7 avisos esperando unidad (4 graves) y 3 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "C3@11",
+    "night": "C3",
+    "tick": 11,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "C3@23",
+    "night": "C3",
+    "tick": 23,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "C3@30",
+    "night": "C3",
+    "tick": 30,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "C3@38",
+    "night": "C3",
+    "tick": 38,
+    "decisions": 3,
+    "why": "9 avisos esperando unidad (3 graves) y 2 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "D1@17",
+    "night": "D1",
+    "tick": 17,
+    "decisions": 3,
+    "why": "3 avisos esperando unidad (0 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "D1@27",
+    "night": "D1",
+    "tick": 27,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua; 2 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "D1@34",
+    "night": "D1",
+    "tick": 34,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "D2@33",
+    "night": "D2",
+    "tick": 33,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "D3@12",
+    "night": "D3",
+    "tick": 12,
+    "decisions": 3,
+    "why": "2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres"
+  },
+  {
+    "id": "D3@19",
+    "night": "D3",
+    "tick": 19,
+    "decisions": 3,
+    "why": "2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "D3@26",
+    "night": "D3",
+    "tick": 26,
+    "decisions": 3,
+    "why": "6 avisos esperando unidad (3 graves) y 2 libres; 1 a punto de quedar aislados por el agua; 3 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "D3@33",
+    "night": "D3",
+    "tick": 33,
+    "decisions": 3,
+    "why": "6 avisos esperando unidad (1 graves) y 2 libres; 3 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "E1@17",
+    "night": "E1",
+    "tick": 17,
+    "decisions": 3,
+    "why": "5 avisos esperando unidad (3 graves) y 1 libres; 3 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "E1@26",
+    "night": "E1",
+    "tick": 26,
+    "decisions": 3,
+    "why": "6 avisos esperando unidad (1 graves) y 1 libres; 1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "E1@36",
+    "night": "E1",
+    "tick": 36,
+    "decisions": 3,
+    "why": "8 avisos esperando unidad (3 graves) y 1 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "E2@20",
+    "night": "E2",
+    "tick": 20,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "E2@28",
+    "night": "E2",
+    "tick": 28,
+    "decisions": 3,
+    "why": "7 avisos esperando unidad (5 graves) y 3 libres; 2 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "E2@37",
+    "night": "E2",
+    "tick": 37,
+    "decisions": 3,
+    "why": "8 avisos esperando unidad (5 graves) y 4 libres; 1 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres"
+  },
+  {
+    "id": "F1@12",
+    "night": "F1",
+    "tick": 12,
+    "decisions": 3,
+    "why": "13 avisos esperando unidad (9 graves) y 3 libres; 2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F1@19",
+    "night": "F1",
+    "tick": 19,
+    "decisions": 3,
+    "why": "19 avisos esperando unidad (13 graves) y 4 libres; 6 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F1@28",
+    "night": "F1",
+    "tick": 28,
+    "decisions": 3,
+    "why": "26 avisos esperando unidad (19 graves) y 8 libres; 12 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F1@35",
+    "night": "F1",
+    "tick": 35,
+    "decisions": 3,
+    "why": "30 avisos esperando unidad (20 graves) y 9 libres; 10 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F2@12",
+    "night": "F2",
+    "tick": 12,
+    "decisions": 3,
+    "why": "10 avisos esperando unidad (5 graves) y 4 libres; 3 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres"
+  },
+  {
+    "id": "F2@19",
+    "night": "F2",
+    "tick": 19,
+    "decisions": 3,
+    "why": "17 avisos esperando unidad (6 graves) y 3 libres; 4 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F2@26",
+    "night": "F2",
+    "tick": 26,
+    "decisions": 3,
+    "why": "24 avisos esperando unidad (9 graves) y 3 libres; 5 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F2@35",
+    "night": "F2",
+    "tick": 35,
+    "decisions": 3,
+    "why": "39 avisos esperando unidad (16 graves) y 1 libres; 8 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres"
+  },
+  {
+    "id": "F3@13",
+    "night": "F3",
+    "tick": 13,
+    "decisions": 3,
+    "why": "11 avisos esperando unidad (4 graves) y 5 libres; 2 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F3@23",
+    "night": "F3",
+    "tick": 23,
+    "decisions": 3,
+    "why": "22 avisos esperando unidad (10 graves) y 3 libres; 4 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F3@30",
+    "night": "F3",
+    "tick": 30,
+    "decisions": 3,
+    "why": "27 avisos esperando unidad (15 graves) y 6 libres; 8 a punto de quedar aislados por el agua; 4 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F3@37",
+    "night": "F3",
+    "tick": 37,
+    "decisions": 3,
+    "why": "35 avisos esperando unidad (17 graves) y 7 libres; 10 a punto de quedar aislados por el agua; 4 zonas a ciegas y 2 drones libres"
+  },
+  {
+    "id": "F4@7",
+    "night": "F4",
+    "tick": 7,
+    "decisions": 3,
+    "why": "1 a punto de quedar aislados por el agua"
+  },
+  {
+    "id": "F4@15",
+    "night": "F4",
+    "tick": 15,
+    "decisions": 3,
+    "why": "12 avisos esperando unidad (4 graves) y 6 libres; 2 a punto de quedar aislados por el agua; 1 zonas a ciegas y 1 drones libres"
+  },
+  {
+    "id": "F4@25",
+    "night": "F4",
+    "tick": 25,
+    "decisions": 3,
+    "why": "23 avisos esperando unidad (11 graves) y 4 libres; 3 a punto de quedar aislados por el agua; 4 zonas a ciegas y 3 drones libres"
+  },
+  {
+    "id": "F4@35",
+    "night": "F4",
+    "tick": 35,
+    "decisions": 3,
+    "why": "41 avisos esperando unidad (22 graves) y 2 libres; 10 a punto de quedar aislados por el agua; 4 zonas a ciegas y 3 drones libres"
+  }
+]

@@ -65,6 +65,12 @@ const WRONG_WAY_FACTOR = 3;
 export const WADING_FACTOR = 4;
 
 /** Routable street network. Edge weights are free-flow travel seconds. */
+/** The map is in Valencian; callers often say the street in Spanish. */
+const STREET_IN_VALENCIAN: Record<string, string> = { reino: "regne", san: "sant", puerto: "port", nuevo: "nou", nueva: "nova", iglesia: "esglesia", pintor: "pintor", doctor: "doctor", cardenal: "cardenal", arzobispo: "arquebisbe", obispo: "bisbe", maestro: "mestre", cruz: "creu", fuente: "font", huerta: "horta", antiguo: "antic", viejo: "vell", camino: "cami" };
+
+/** Words that are part of how a street is said, not of which street it is. */
+const STREET_NOISE = new Set(["calle", "carrer", "avenida", "avinguda", "av", "avda", "plaza", "placa", "camino", "cami", "paseo", "passeig", "de", "del", "la", "el", "les", "los", "las", "en", "numero"]);
+
 export class Graph {
   readonly data: GraphData;
   private readonly out: Arc[][];
@@ -151,6 +157,43 @@ export class Graph {
       }
     }
     return { dist, prev };
+  }
+
+  /**
+   * Where a street someone named is: a node about halfway along it, or null if the map has no such street.
+   * Forgiving the way an operator is: accents, "calle/carrer/avinguda", articles and word order do not matter.
+   */
+  findStreet(spoken: string): number | null {
+    const words = (text: string) =>
+      text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[’']/g, " ").split(/[^a-z0-9]+/)
+        .filter((w) => w.length > 1 && !/^\d+$/.test(w) && !STREET_NOISE.has(w))
+        .map((w) => STREET_IN_VALENCIAN[w] ?? w);
+    const wanted = words(spoken);
+    if (wanted.length === 0) return null;
+    let best: { name: string; score: number } | null = null;
+    const byName = new Map<string, number[]>();
+    this.data.edges.forEach((edge, id) => {
+      if (!edge.name) return;
+      const list = byName.get(edge.name);
+      if (list) list.push(id);
+      else byName.set(edge.name, [id]);
+    });
+    for (const name of byName.keys()) {
+      const have = words(name);
+      // "Vicente" is "Vicent", "Peris y Valero" is "Peris i Valero": the same word with a Spanish or a Valencian ending.
+      const same = (a: string, b: string) => a === b || (Math.min(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a)));
+      const hits = wanted.filter((w) => have.some((h) => same(w, h))).length;
+      if (hits === 0) continue;
+      // Either everything the caller said is in the name ("Sueca" for "Carrer de Sueca"), or the whole name is in
+      // what they said ("Jaume Roig 2, puerta A, junto al garaje"). The more words in common, the better the match.
+      const named = have.every((h) => wanted.some((w) => same(w, h)));
+      if (hits < wanted.length && !named) continue;
+      const score = hits - (have.length - hits) * 0.05;
+      if (!best || score > best.score) best = { name, score };
+    }
+    if (!best) return null;
+    const edges = byName.get(best.name)!;
+    return this.data.edges[edges[Math.floor(edges.length / 2)]].a;
   }
 
   /** Name of a street touching this node, if any is named. */

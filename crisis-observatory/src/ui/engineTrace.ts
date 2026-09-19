@@ -9,7 +9,7 @@ import type {
   Priority,
   Triage,
   UnitKind,
-} from "../engine/types";
+} from "../../../gabriel/src/engine/types";
 import type {
   Frame,
   IncidentFrame,
@@ -17,11 +17,11 @@ import type {
   SceneFrame,
   TickRecord,
   UnitFrame,
-} from "../engine/trace";
-import { UNIT_KINDS } from "../engine/engine";
-import { INJURIES, SCENES } from "../engine/victims";
+} from "../../../gabriel/src/engine/trace";
+import { UNIT_KINDS } from "../../../gabriel/src/engine/engine";
+import { INJURIES, SCENES } from "../../../gabriel/src/engine/victims";
 
-// The run format ../backend writes (units, scenes, incidents), as the UI reads it.
+// The run format the engine in ../gabriel writes (units, scenes, incidents, water), as the UI reads it.
 
 export type {
   Action,

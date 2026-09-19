@@ -15,6 +15,9 @@ import { pickDreamers } from "./memory/dreamers";
 import { evaluate } from "./memory/evaluate";
 import { MemoryStore } from "./memory/store";
 import { HappyRobotCoordinator } from "./coordinators/happyrobot";
+import { happyRobotCallWriter, HappyRobotMaster } from "./masters/happyrobot";
+import { HappyRobotPhoneLine } from "./phone/happyrobot";
+import { startPhoneWebhook } from "./phone/webhook";
 import {
   clock,
   describe,
@@ -26,6 +29,7 @@ import {
   Simulation,
   type Coordinator,
   type GraphData,
+  type PhoneCall,
   type RunMeta,
   type TickRecord,
 } from "./engine";
@@ -38,6 +42,16 @@ const { values } = parseArgs({
     ticks: { type: "string", default: "120" },
     ambulances: { type: "string", default: "5" },
     coordinator: { type: "string", default: "claude" },
+    /** Who decides what happens to the city: the scripted night of the scenario, or the agent in the HappyRobot `master` workflow. */
+    master: { type: "string", default: "scripted" },
+    /** Who words the 112 calls: the engine's templates, or the HappyRobot `sim-112` workflow (facts stay the engine's). */
+    calls: { type: "string", default: "engine" },
+    /** Listen to the real 112 line (the HappyRobot voice workflow): whoever phones it puts a call into this session. */
+    phone: { type: "boolean", default: false },
+    /** Port for the 112 workflow's POST node to reach (through a tunnel). 0 = only poll the platform. */
+    "phone-port": { type: "string", default: "8112" },
+    /** Also take calls that ended up to this many minutes before the session started. */
+    "phone-since": { type: "string", default: "0" },
     /** Decide without the doctrine (to measure what the memory is worth). */
     "no-memory": { type: "boolean", default: false },
     /** Skip the end-of-session dream; `--dream` forces it for a greedy run. */
@@ -52,7 +66,7 @@ const seed = Number(values.seed);
 const ticks = Number(values.ticks);
 const tickMs = Number(values["tick-ms"]);
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-const id = `${stamp}-${values.scenario}-${values.coordinator}-s${seed}`;
+const id = `${stamp}-${values.scenario}-${values.coordinator}${values.master === "happyrobot" ? "-hrmaster" : ""}-s${seed}`;
 const dir = `runs/${id}`;
 mkdirSync(dir, { recursive: true });
 
@@ -74,11 +88,28 @@ const coordinator: Coordinator =
       ? new HappyRobotCoordinator({ onTrace, memory })
       : new ClaudeCliCoordinator({ model: values.model, onTrace, memory });
 
+const agenticMaster = values.master === "happyrobot"
+  ? new HappyRobotMaster({
+      gameId: id,
+      onTrace: (trace) => {
+        appendFileSync(`${dir}/master.jsonl`, JSON.stringify(trace) + "\n");
+        log(`MASTER turno ${trace.turn} (${(trace.ms / 1000).toFixed(1)} s) ${trace.error ? `SIN RESPUESTA [${trace.error}]` : `${trace.actions.length} acciones`}${trace.dropped.length ? ` · descartado: ${trace.dropped.join(", ")}` : ""}`);
+      },
+    })
+  : null;
+const callWriter = values.calls === "happyrobot"
+  ? happyRobotCallWriter({
+      context: () => agenticMaster?.narration ?? "",
+      onTrace: (trace) => appendFileSync(`${dir}/calls.jsonl`, JSON.stringify(trace) + "\n"),
+    })
+  : undefined;
+
 const graph = new Graph(JSON.parse(readFileSync(`data/${values.map}.json`, "utf8")) as GraphData);
 const sim = new Simulation({
   graph,
   seed,
-  master: values.scenario === "random" ? new RandomMaster() : new DanaMaster(),
+  master: agenticMaster ?? (values.scenario === "random" ? new RandomMaster() : new DanaMaster()),
+  callWriter,
   coordinator,
   config: { ambulances: Number(values.ambulances) },
 });
@@ -101,13 +132,30 @@ saveMeta();
 writeFileSync(`${dir}/ticks.jsonl`, "");
 log(`run ${id}: ${meta.coordinator}${meta.model ? ` (${meta.model})` : ""}, seed ${seed}, ${ticks} ticks`);
 
+// A real call can arrive twice: posted by the workflow the moment it ends, and seen again when polling its runs.
+const heard = new Set<string>();
+const takeCall = (call: PhoneCall, via: string) => {
+  const key = `${call.street}|${call.text}`;
+  if (heard.has(key)) return;
+  heard.add(key);
+  log(`TELÉFONO 112: entra una llamada real (${via}) · ${call.street ?? "sin calle"} · ${call.text}`);
+  appendFileSync(`${dir}/phone.jsonl`, JSON.stringify({ at: new Date().toISOString(), via, call }) + "\n");
+  sim.phone(call);
+};
+const phoneError = (error: string) => log(`TELÉFONO 112: ${error}`);
+const phoneLine = values.phone ? new HappyRobotPhoneLine({ sinceMinutes: Number(values["phone-since"]), onCall: (call, runId) => takeCall(call, `sondeo ${runId}`), onError: phoneError }) : null;
+const phonePort = Number(values["phone-port"]);
+const phoneHook = values.phone && phonePort > 0 ? startPhoneWebhook({ port: phonePort, onCall: (call) => takeCall(call, "webhook"), onPing: () => [0, 2000, 5000].forEach((ms) => setTimeout(() => void phoneLine?.poll(), ms)), onError: phoneError }) : null;
+phoneLine?.start();
+if (phoneLine) log(`TELÉFONO 112: línea abierta${phoneHook ? `, webhook en http://localhost:${phonePort}/phone` : ""}`);
+
 let llmCalls = 0;
 let llmCost = 0;
 const records: TickRecord[] = [];
 try {
   for (let i = 0; i < ticks; i++) {
     const result = await sim.step();
-    const record = makeTickRecord(result, sim.world, sim.belief, graph);
+    const record = makeTickRecord(result, sim.world, sim.belief, graph, sim.desk);
     appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
     records.push(record);
     result.decision?.applies?.forEach((ids, i) => {
@@ -131,6 +179,8 @@ try {
   log(`FAILED: ${err instanceof Error ? err.stack : err}`);
 }
 
+phoneLine?.stop();
+phoneHook?.close();
 meta.summary = sim.summary();
 saveMeta();
 const s = meta.summary;

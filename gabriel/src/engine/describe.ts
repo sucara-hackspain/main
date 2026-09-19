@@ -17,6 +17,10 @@ export function describeAction(a: Action): string {
       return `${a.unitId} → reubicar en nodo ${a.node}`;
     case "scout":
       return `${a.unitId} → reconocer nodo ${a.node}${a.incidentId ? ` (${a.incidentId})` : ""}`;
+    case "warn":
+      return `112 → llamar a ${a.siteId} para que se pongan a salvo`;
+    case "call_zone":
+      return `112 → ronda de llamadas a las casas de ${a.zone}`;
   }
 }
 
@@ -25,6 +29,22 @@ export function describe(e: ObservedEvent): string {
   switch (e.type) {
     case "call_received":
       return `112 ${e.call.id} — ${e.call.text}`;
+    case "master_narration":
+      return `[MASTER] ${e.text}`;
+    case "site_placed":
+      return `[REAL] ${e.siteId}: ${e.people} personas dentro en nodo ${e.node}`;
+    case "site_warned":
+      return `112 → ${e.siteId}: avisados, empiezan a ponerse a salvo`;
+    case "site_flooded":
+      return `${e.siteId}: el agua ha entrado. ${e.safe} a salvo${e.caught ? `, ${e.caught} ATRAPADOS DENTRO` : ", nadie dentro"}`;
+    case "blackout_started":
+      return `Apagón ${e.outageId}: ${e.radiusM} m sin luz hasta el tick ${e.untilTick}. Quien esté dentro apenas podrá llamar`;
+    case "outbound_placed":
+      return `112 → ronda de llamadas a las casas de ${e.zone}`;
+    case "outbound_answered":
+      return `Ronda de llamadas a ${e.zone} (~${e.homes} casas): ${e.sceneIds.length ? `${e.sceneIds.length} vecino(s) saben de alguien que necesita ayuda` : "nadie sabe de nadie en apuros"}`;
+    case "gauge_reading":
+      return `Aforo ${e.name}: ${Math.round(e.level * 100)} % del cauce${e.level >= 1 ? ", DESBORDADO" : `, desborda hacia el tick ${e.overflowTick}`}`;
     case "scene_created":
       return `[REAL] ${e.sceneId}: ${SCENES[e.kind].label} en nodo ${e.node}, ${e.victims} víctima(s)`;
     case "scene_assessed":

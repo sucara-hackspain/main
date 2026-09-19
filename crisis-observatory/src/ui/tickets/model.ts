@@ -199,6 +199,15 @@ export function buildTickets(records: TickRecord[], seconds: number): Ticket[] {
     // Runs that carry the engine's case file are shown from it; the reconstruction above is for older runs.
     if (ticket.incident.timeline?.length) {
       ticket.steps = caseSteps(ticket.incident, seconds);
+      // What the caller said and the form lost: shown on the call itself, with whether anybody heard it in the end.
+      for (const step of ticket.steps) {
+        const call = step.kind === "call" ? ticket.calls.find((c) => step.id.endsWith(`:call:${c.id}`)) : undefined;
+        if (!call?.buried) continue;
+        const label = { trapped: "está atrapado", breathing: call.buried.breathing === "none" ? "no respira" : "respira con dificultad", ageGroup: call.buried.ageGroup === "child" ? "es un niño" : "es una persona mayor" } as const;
+        const lost = (Object.keys(call.buried) as (keyof typeof label)[]).map((k) => label[k]);
+        const heard = (Object.keys(call.buried) as (keyof NonNullable<typeof call.buried>)[]).every((k) => call[k] === call.buried![k]);
+        step.facts = [...(step.facts ?? []), `Lo dijo el llamante y el formulario no lo recogió: ${lost.join(", ")}`, heard ? "El agente escuchó la llamada entera y lo recuperó" : "Nadie lo recuperó: el despacho decidió sin ese dato"];
+      }
       if (ticket.incident.status !== "closed" && ticket.state === "triage" && ticket.incident.timeline.some((e) => e.action?.type === "dispatch" && e.accepted)) ticket.state = "progress";
     }
     ticket.steps.sort((a, b) => a.tick - b.tick);
