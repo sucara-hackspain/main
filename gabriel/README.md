@@ -13,14 +13,45 @@ pnpm test
 pnpm fetch-graph madrid 40.38,-3.75,40.48,-3.63   # another city: south,west,north,east
 ```
 
+## Truth vs. what the coordinator knows
+
+The world holds **scenes** (a crash, a collapse, a fire) with **victims** that have a real injury, real signs and a real time to live (`victims.ts`). The coordinator never sees any of that. It gets:
+
+1. **112 calls** (`observer.ts`): answers to the operator's protocol questions - where (roughly), what happened, conscious?, breathing?, bleeding?, how many. Quality depends on who calls: a relative is precise, a driver passing by barely knows anything and can be wrong. No diagnosis, no time to live.
+2. **Incidents** (`incidents.ts`): calls about the same place/time/kind are attached to one incident. Priority P0-P3 is *deduced* from the signs by protocol. Every field remembers which call or radio message it came from.
+3. **Crew radio**: the ambulance drives to the reported spot, looks for the real scene nearby, triages everyone (red/yellow/green/black) and reports. That overrides the calls. It loads the worst victim; minor ones are treated on the spot.
+
+Orders go to an incident, not to a victim. If nobody comes, someone calls again.
+
+### The DANA and what is known about the water
+
+`DanaMaster` plays a flood night: ordinary emergencies first, then water comes out at two points and spreads. Each flood has an impassable core (streets closed, never reopened) and a shallow fringe where cars stall and ground floors fill but ambulances still get through. Scenes happen in the fringe, in the rest of the city, and inside the core - those call 112 like everyone else, but no ambulance can reach them (`unreachable` incidents: they need a boat).
+
+Nobody tells the coordinator where the water is (`water.ts`):
+
+- **Sightings**: flood calls ("wet") and crews that run into a flooded street, radio it in and turn back ("blocked"). Routes only avoid closures that are *known*; the rest are found on the ground.
+- **Official maps** every 24 ticks, showing the water as it was 10 ticks earlier. The coordinator extrapolates the front from the difference between maps.
+- **Cut-off forecast**: a neighbourhood is lost when its last bridge goes under, however far the water is, so the forecast projects the believed water forward and checks road connectivity to a dry hospital.
+
+### Units
+
+| Kind | Does | Limits |
+| --- | --- | --- |
+| Ambulance (A) | Carries one victim to hospital by road | Stops at the water |
+| Firefighters (B) | Free trapped victims, treat minor ones | Carry nobody; stop at the water |
+| Water rescue (R) | Drives through flooded streets (4x slower), frees and carries | Few and slow |
+| Helicopter (HEL) | Flies straight at 180 km/h, ignores streets and water | One; one victim; only hospitals with a helipad |
+
+A trapped victim (car, rubble) cannot be loaded by anyone until firefighters or a rescue crew free them: callers are asked "can they get out?", so the coordinator may know before anyone arrives.
+
+Emergency vehicles may drive against one-way streets (3x slower): otherwise a flooded exit traps them on a one-way carriageway for good.
+
 ## One tick (30 simulated seconds)
 
-1. **Master** acts: spawn patient, close/open road, puncture ambulance (`MasterAction`).
-2. **World advances**: ambulances drive, patients lose time to live, pickups/deliveries/deaths happen.
-3. **Observer** turns the new events into `Report`s and folds them into the coordinator's `Belief`.
-4. **Coordinator** is woken only if there are new reports, and answers with `Action`s: `dispatch`, `transport`, `reposition`.
-
-The coordinator never reads `World`, only `Belief`. Today reports are truthful; noise, delays and false calls go in `Observer`.
+1. **Master** acts: spawn scene, close/open road, puncture ambulance (`MasterAction`).
+2. **World advances**: ambulances drive, victims deteriorate (each injury at its own pace), crews assess, load, treat, deliver.
+3. **Observer** turns what happened into `Report`s (calls, radio, hospital, traffic) and they are folded into the coordinator's `Belief`.
+4. **Coordinator** is woken only if there are new reports, and answers with `Action`s: `dispatch` (to an incident), `transport`, `reposition`.
 
 ## Where things are
 
@@ -30,14 +61,17 @@ The coordinator never reads `World`, only `Belief`. Today reports are truthful; 
 | `src/engine/graph.ts` | Street graph + Dijkstra. Closing a road = closing an edge id. |
 | `src/engine/engine.ts` | Rules: apply actions, move ambulances, score. |
 | `src/engine/master.ts` | `Master` interface + seeded `RandomMaster`. |
-| `src/engine/observer.ts` | World events -> reports -> belief. |
+| `src/engine/victims.ts` | Clinical model: injuries, how fast each kills, triage, victim generation. |
+| `src/engine/observer.ts` | Who calls 112, what they know and how wrong they are; which world events get reported at all. |
+| `src/engine/water.ts` | The coordinator's picture of the flood: sightings, stale official maps, extrapolation, cut-off forecast. |
+| `src/engine/incidents.ts` | Coordinator side: attach calls to incidents, deduce priority, merge, close. Reads reports only. |
 | `src/engine/coordinator.ts` | `Coordinator` interface + `GreedyCoordinator` baseline. |
 | `src/engine/sim.ts` | The loop. `inject()` / `order()` let a human play master or override the coordinator. |
 | `src/engine/briefing.ts` | Situation report for an LLM, with every ETA precomputed. Skips the call when nothing is decidable. |
 | `src/engine/trace.ts` | On-disk run format: `meta.json`, `ticks.jsonl`, `llm.jsonl` (full prompts), `run.log`. |
 | `src/coordinators/claude-cli.ts` | LLM coordinator on headless Claude Code. Falls back to greedy on timeout/error. |
 | `src/run.ts` | Traced runner. |
-| `ui/` | React + MapLibre viewer. Reads `runs/` through a Vite middleware. |
+| `ui/` | React + MapLibre viewer: map (truth vs. belief), incident board, knowledge graph. Reads `runs/` through a Vite middleware. |
 | `scripts/fetch-graph.ts` | OpenStreetMap (Overpass) -> `data/<name>.json`. |
 
 To plug another brain in, implement `Coordinator.decide()` (it can be async). Same for `Master.act()`.
