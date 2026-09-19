@@ -37,7 +37,7 @@ La API funciona dentro del servidor de desarrollo. Para servir el build estátic
 
 El resumen global y el balance acumulado, bajo los indicadores, usan exclusivamente el snapshot seleccionado. La interfaz señala cuándo se revisa el pasado. La espera de un incidente se cuenta desde que se abrió. Una selección que todavía no existe al retroceder se elimina.
 
-`src/ui/situation/model.ts` calcula disponibilidad, demanda y relaciones sin escribir en el servicio de datos. La selección compartida `{ kind, id }` permite abrir incidentes, unidades, hospitales y escenas reales desde el mapa o el sidebar. Los filtros resaltan coincidencias en el mapa y conservan los indicadores globales. El detalle de la selección se abre en un modal sobre el mapa, junto a lo seleccionado: muestra los recursos vinculados y permite saltar a ellos.
+`src/ui/situation/model.ts` calcula disponibilidad, demanda y relaciones sin escribir en el servicio de datos. La selección compartida `{ kind, id }` permite abrir incidentes, unidades, hospitales y escenas reales desde el mapa o el sidebar. Los filtros resaltan coincidencias en el mapa y conservan los indicadores globales. El detalle de la selección se abre en un modal sobre el mapa, junto a lo seleccionado: muestra los recursos vinculados y permite saltar a ellos. Al seleccionar una incidencia, el mapa la pone en primer plano con esas mismas relaciones: encuadra la incidencia, sus unidades y su hospital, y atenúa el resto.
 
 Las justificaciones se muestran tal como aparecen en los registros. La UI no recibe tokens en streaming ni información sobre razonamiento en curso. Los registros se validan como un único contrato; si este cambia, se actualizan la aplicación y sus pruebas conjuntamente.
 

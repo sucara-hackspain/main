@@ -488,11 +488,12 @@
 .incident-legend i.water {
   border-top: 2px dashed var(--info-foreground);
 }
+/* A filter, not opacity: MapLibre writes the markers' opacity inline and would undo it. */
 .incident-dim {
-  opacity: 0.38;
+  filter: opacity(0.38);
 }
 .control-center .incident-dim:hover {
-  opacity: 1;
+  filter: none;
 }
 .run-incident.incident-focus {
   z-index: 5;

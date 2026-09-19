@@ -103,7 +103,8 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"map" | "tickets">("map"),
+    // Incidents first: the operator starts from what is happening, then goes to the territory.
+    [view, setView] = useState<"map" | "tickets">("tickets"),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
@@ -300,14 +301,6 @@ function RunSession({
         <div className="app-toolbar">
           <div className="app-tabs">
             <button
-              aria-pressed={view === "map"}
-              className={view === "map" ? "is-active" : ""}
-              onClick={() => setView("map")}
-            >
-              <MapIcon size={14} />
-              Territorio
-            </button>
-            <button
               aria-pressed={view === "tickets"}
               className={view === "tickets" ? "is-active" : ""}
               onClick={() => {
@@ -317,6 +310,14 @@ function RunSession({
             >
               <ClipboardList size={14} />
               Incidencias
+            </button>
+            <button
+              aria-pressed={view === "map"}
+              className={view === "map" ? "is-active" : ""}
+              onClick={() => setView("map")}
+            >
+              <MapIcon size={14} />
+              Territorio
             </button>
           </div>
           {current && (

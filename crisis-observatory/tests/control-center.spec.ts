@@ -24,6 +24,7 @@ test("engine run drives units, incidents, hospital capacity, GPS, playback and h
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await open(page);
+  await page.getByRole("button", { name: "Territorio", exact: true }).click();
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => document.fonts.check("12px 'Geist Variable'"))).toBe(true);
   await expect(page.locator(".run-hospital")).toHaveCount(
@@ -59,18 +60,50 @@ test("navigation keeps territory and tickets available on desktop and mobile", a
   page,
 }) => {
   await open(page);
+  // Incidents come first, and the page opens on them.
+  await expect(page.getByRole("button", { name: "Incidencias", exact: true })).toHaveAttribute("aria-pressed", "true");
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
-    await expect(page.locator(".app-tabs button")).toHaveText(["Territorio", "Incidencias"]);
-    await page.getByRole("button", { name: "Incidencias", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Incidencias", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("complementary", { name: "Detalle de incidencia" })).toBeVisible();
+    await expect(page.locator(".app-tabs button")).toHaveText(["Incidencias", "Territorio"]);
     await page.getByRole("button", { name: "Territorio", exact: true }).click();
     await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("complementary", { name: "Estado de la situación" })).toBeVisible();
     await expect(page.locator(".operational-map")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await page.getByRole("button", { name: "Incidencias", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Incidencias", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("complementary", { name: "Detalle de incidencia" })).toBeVisible();
   }
+});
+test("focusing an incident from its ticket puts it in the spotlight: its crews stay lit, the rest fades", async ({
+  page,
+}) => {
+  // An instant with an open incident that has crews on it, and other units that have nothing to do with it.
+  const index = records.findIndex((r) =>
+    r.frame.incidents.some((i) => i.status === "open" && r.frame.units.some((u) => u.incidentId === i.id)),
+  );
+  const { frame } = records[index];
+  const incident = frame.incidents.find((i) => i.status === "open" && frame.units.some((u) => u.incidentId === i.id))!;
+  const crews = frame.units.filter((u) => u.incidentId === incident.id).map((u) => u.id);
+  const other = frame.units.find((u) => !u.incidentId)!;
+  await open(page);
+  await page.getByLabel("Navegar por el historial", { exact: true }).fill(String(index));
+  await page.getByRole("button", { name: `Abrir incidencia ${incident.id}:`, exact: false }).click();
+  await page
+    .getByRole("complementary", { name: "Detalle de incidencia" })
+    .getByRole("button", { name: "Enfocar en el mapa" })
+    .click();
+  await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
+  const pin = (ref: string) => page.locator(`.operational-map [data-entity="${ref}"]`);
+  await expect(pin(`incident:${incident.id}`)).toHaveAttribute("aria-pressed", "true");
+  await expect(pin(`incident:${incident.id}`)).not.toHaveClass(/is-muted/);
+  for (const id of crews) await expect(pin(`unit:${id}`)).not.toHaveClass(/is-muted/);
+  await expect(pin(`unit:${other.id}`)).toHaveClass(/is-muted/);
+  // Its detail docks in a corner of the map, clear of the assets around it.
+  const detail = page.locator(".entity-popover.docked").getByRole("dialog", { name: "Detalle de la selección" });
+  await expect(detail).toContainText(incident.id);
+  await detail.getByRole("button", { name: "Cerrar detalle" }).click();
+  await expect(page.locator(".operational-map [data-entity].is-muted")).toHaveCount(0);
 });
 test("new records follow on demand, paused history stays fixed and connection errors recover", async ({
   page,
@@ -214,6 +247,7 @@ test("operational sidebar explores the map, keeps global context and respects th
   await page.route("**/api/runs", (r) => r.fulfill({ json: [operationalMeta] }));
   await page.route("**/api/runs/operational-sidebar?*", (r) => r.fulfill({ json: { meta: operationalMeta, ticks: snapshots.slice(Number(new URL(r.request().url()).searchParams.get("from"))) } }));
   await page.goto("/");
+  await page.getByRole("button", { name: "Territorio", exact: true }).click();
   const sidebar = page.getByRole("complementary", { name: "Estado de la situación" });
   const row = (ref: string) => sidebar.locator(`.situation-row[data-entity="${ref}"]`);
   const pin = (ref: string) => page.locator(`.operational-map [data-entity="${ref}"]`);
