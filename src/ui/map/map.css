@@ -111,3 +111,10 @@
     display: none;
   }
 }
+
+/* Selection and filtering share the operational sidebar's entity references. */
+.operational-map [data-entity].is-muted { opacity:.2; }
+.operational-map [data-entity].selected { z-index:6; outline:2px solid var(--info); outline-offset:3px; }
+.operational-map [data-entity].related:not(.selected) { box-shadow:0 0 0 3px color-mix(in srgb,var(--info) 20%,transparent); }
+.operational-filter-label { color:var(--info-foreground); }
+.route-restriction { font:700 18px/1 var(--font-sans); }

@@ -1,10 +1,28 @@
 import type { GraphData } from "../../gabriel/src/engine/types";
 import type {
-  AmbulanceFrame,
+  AmbulanceFrame as EngineAmbulanceFrame,
   RunMeta,
-  TickRecord,
+  TickRecord as EngineTickRecord,
 } from "../../gabriel/src/engine/trace";
-export type { GraphData, RunMeta, TickRecord, AmbulanceFrame };
+export type { GraphData, RunMeta };
+
+// Operational fields supplied by the data service. Optional so older recordings
+// remain readable; their absence must never be treated as proof of availability.
+export type AmbulanceFrame = EngineAmbulanceFrame & {
+  busyUntil?: number;
+  brokenUntil?: number | null;
+  /** Travel only; loading, unloading and repair are separate. */
+  etaTicks?: number | null;
+};
+export type TickRecord = Omit<EngineTickRecord, "frame"> & {
+  frame: Omit<EngineTickRecord["frame"], "ambulances" | "patients"> & {
+    ambulances: AmbulanceFrame[];
+    patients: (EngineTickRecord["frame"]["patients"][number] & {
+      spawnTick?: number;
+      pickupTick?: number | null;
+    })[];
+  };
+};
 export const elapsed = (tick: number, seconds: number) => {
   const n = Math.floor(tick * seconds);
   return [Math.floor(n / 3600), Math.floor(n / 60) % 60, n % 60]
@@ -24,7 +42,7 @@ export function unitStatus(a: AmbulanceFrame) {
   if (a.mission === "to_hospital") return "Hacia hospital";
   if (a.patientId) return "Paciente a bordo";
   if (a.mission === "reposition") return "Reubicándose";
-  return "Sin misión"; // Frame does not include busyUntil: idle is not proof of availability.
+  return "Sin misión"; // An idle mission alone is not proof of availability.
 }
 export function assertRunRecords(records: TickRecord[]) {
   for (const r of records) {
