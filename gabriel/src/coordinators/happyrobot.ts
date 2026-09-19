@@ -1,6 +1,6 @@
 import { HappyRobotClient } from "@happyrobot-ai/sdk";
-import { triggerAndWaitForNodeOutput } from "@happyrobot-ai/sdk/helpers";
 import { buildBriefing, GreedyCoordinator, type Coordinator, type DecideInput, type Decision } from "../engine";
+import { runAndReadNode } from "./hr-wait";
 import { composePrompt, readOutput, toActions, type LlmTrace } from "./protocol";
 
 export interface HappyRobotOptions {
@@ -11,7 +11,7 @@ export interface HappyRobotOptions {
   nodeId?: string;
   cluster?: "us" | "eu";
   timeoutMs?: number;
-  /** The helper polls; the default of 2 s would add minutes over a run. */
+  /** How often to ask whether the decision is ready, after the first few seconds in which it never is. */
   pollIntervalMs?: number;
   onTrace?: (trace: LlmTrace) => void;
   /** The agent's doctrine, rendered fresh for each decision and placed before the briefing. */
@@ -48,8 +48,8 @@ export class HappyRobotCoordinator implements Coordinator {
     this.client = new HappyRobotClient({ apiKey, cluster: options.cluster ?? (process.env.HAPPYROBOT_CLUSTER as "us" | "eu") ?? "eu" });
     this.workflowId = workflowId;
     this.nodeId = nodeId;
-    this.timeoutMs = options.timeoutMs ?? 90_000;
-    this.pollIntervalMs = options.pollIntervalMs ?? 500;
+    this.timeoutMs = options.timeoutMs ?? 120_000;
+    this.pollIntervalMs = options.pollIntervalMs ?? 1500;
     this.onTrace = options.onTrace;
     this.memory = options.memory;
     this.model = `happyrobot:${workflowId}`;
@@ -62,7 +62,7 @@ export class HappyRobotCoordinator implements Coordinator {
     const prompt = composePrompt(briefing.text, this.memory);
     const started = Date.now();
     try {
-      const result = await triggerAndWaitForNodeOutput(this.client, {
+      const result = await runAndReadNode(this.client, {
         workflowId: this.workflowId,
         nodePersistentId: this.nodeId,
         payload: { data: prompt },
@@ -70,7 +70,6 @@ export class HappyRobotCoordinator implements Coordinator {
         pollIntervalMs: this.pollIntervalMs,
       });
       const ms = Date.now() - started;
-      if (!result.ok) throw new Error(`run ${result.runId} ended as "${result.status}" without node output`);
 
       const output = readOutput(result.nodeOutput);
       this.onTrace?.({ tick: input.tick, model: this.model, prompt, response: result.nodeOutput, ms, costUsd: 0 });

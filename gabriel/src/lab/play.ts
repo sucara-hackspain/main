@@ -1,0 +1,137 @@
+// One game: a scenario, a coordinator, and the count of who did not make it.
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { HappyRobotCoordinator } from "../coordinators/happyrobot";
+import { CallObserver, GreedyCoordinator, makeTickRecord, Simulation, type Coordinator, type Graph, type RunMeta, type TickRecord } from "../engine";
+import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
+import { renderDoctrine, type Doctrine } from "./doctrine";
+import { ScriptedMaster, type Scenario } from "./scenario";
+
+export type Policy =
+  | { kind: "greedy" }
+  /** Greedy told the truth about every emergency the moment it happens: what perfect information is worth. */
+  | { kind: "informed" }
+  | { kind: "agent"; doctrine: Doctrine };
+
+export interface Game {
+  scenario: string;
+  rep: number;
+  victims: number;
+  dead: number;
+  saved: number;
+  open: number;
+  inWater: number;
+  counts: Partial<Record<FindingKind, number>>;
+  llm: { calls: number; fallbacks: number; meanMs: number | null };
+  ruleUse: { ruleId: string; times: number }[];
+  /** A game where the rule-based stand-in decided too often says nothing about the agent. */
+  valid: boolean;
+  seconds: number;
+  findings: Finding[];
+}
+
+const MAX_FALLBACK_SHARE = 0.2;
+
+export interface PlayOptions {
+  rep?: number;
+  /** Also leave the game where the viewers can open it (runs/<id>). */
+  traceId?: string;
+  onTick?: (tick: number, dead: number) => void;
+}
+
+export async function play(scenario: Scenario, policy: Policy, graph: Graph, options: PlayOptions = {}): Promise<Game> {
+  const started = Date.now();
+  const dir = options.traceId ? `runs/${options.traceId}` : null;
+  if (dir) mkdirSync(dir, { recursive: true });
+
+  let coordinator: Coordinator;
+  if (policy.kind === "agent") {
+    const doctrine = renderDoctrine(policy.doctrine);
+    coordinator = new HappyRobotCoordinator({
+      memory: doctrine ? () => doctrine : undefined,
+      onTrace: dir ? (trace) => appendFileSync(`${dir}/llm.jsonl`, JSON.stringify(trace) + "\n") : undefined,
+    });
+  } else {
+    coordinator = new GreedyCoordinator();
+  }
+
+  const sim = new Simulation({
+    graph,
+    seed: scenario.seed,
+    master: new ScriptedMaster(scenario),
+    coordinator,
+    config: scenario.config,
+    observer: policy.kind === "informed" ? new CallObserver({ perfect: true }) : undefined,
+  });
+
+  const meta: RunMeta | null = dir
+    ? {
+        id: options.traceId!,
+        map: "valencia",
+        seed: scenario.seed,
+        ticks: scenario.ticks,
+        coordinator: coordinator.name,
+        model: null,
+        config: sim.world.config,
+        hospitals: sim.world.hospitals.map(({ id, name, node, capacity, helipad }) => ({ id, name, node, capacity, helipad })),
+        startedAt: new Date().toISOString(),
+        status: "running",
+        summary: null,
+      }
+    : null;
+  if (dir) {
+    writeFileSync(`${dir}/meta.json`, JSON.stringify(meta, null, 2));
+    writeFileSync(`${dir}/ticks.jsonl`, "");
+  }
+
+  const records: TickRecord[] = [];
+  const applications: { ruleId: string; incidentId: string | null }[] = [];
+  const known = new Set(policy.kind === "agent" ? policy.doctrine.rules.map((r) => r.id) : []);
+  for (let i = 0; i < scenario.ticks; i++) {
+    const result = await sim.step();
+    const record = makeTickRecord(result, sim.world, sim.belief, graph);
+    records.push(record);
+    options.onTick?.(result.tick, sim.world.victims.filter((v) => v.status === "dead").length);
+    if (dir) appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
+    result.decision?.applies?.forEach((ids, n) => {
+      const action = result.decision!.actions[n];
+      for (const ruleId of new Set(ids)) if (known.has(ruleId)) applications.push({ ruleId, incidentId: action.type === "dispatch" ? action.incidentId : null });
+    });
+  }
+
+  const evaluation = evaluate({ session: options.traceId ?? `${scenario.id}-r${options.rep ?? 0}`, coordinator: coordinator.name, seed: scenario.seed, sim, records, applications });
+  const s = evaluation.summary;
+  if (dir && meta) {
+    writeFileSync(`${dir}/meta.json`, JSON.stringify({ ...meta, status: "finished", summary: s }, null, 2));
+    writeFileSync(`${dir}/evaluation.json`, JSON.stringify(evaluation, null, 2));
+  }
+  const { llm, fallback, meanMs } = evaluation.decisions;
+  return {
+    scenario: scenario.id,
+    rep: options.rep ?? 0,
+    victims: s.victims,
+    dead: s.dead,
+    saved: s.saved,
+    open: s.waiting + s.inAmbulance,
+    inWater: s.inWater,
+    counts: evaluation.counts,
+    llm: { calls: llm + fallback, fallbacks: fallback, meanMs },
+    ruleUse: evaluation.ruleUse,
+    valid: policy.kind !== "agent" || llm + fallback === 0 || fallback / (llm + fallback) <= MAX_FALLBACK_SHARE,
+    seconds: (Date.now() - started) / 1000,
+    findings: evaluation.findings,
+  };
+}
+
+/** Runs jobs a few at a time: the engine costs milliseconds, the wait is all on the platform. */
+export async function pool<T, R>(items: T[], size: number, work: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await work(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, worker));
+  return results;
+}

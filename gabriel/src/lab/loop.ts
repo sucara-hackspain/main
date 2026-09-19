@@ -1,0 +1,320 @@
+// pnpm lab — the training loop. Each generation: study how the champion doctrine fared on the training nights, let the
+// researcher propose single changes to it, play each change on the same nights, and keep a change only if it saves lives
+// in training AND does no harm on nights the researcher has never seen.
+//
+//   pnpm lab                          one generation, then stop (look at lab/report.html before going on)
+//   pnpm lab --generations 8          keeps going from wherever the ledger ends
+//   pnpm lab --baselines-only         just the references
+//   pnpm lab --test                   the final exam: champion and references on the test nights. Once.
+import { readFileSync } from "node:fs";
+import { parseArgs } from "node:util";
+import { Graph, type GraphData } from "../engine";
+import { HAND_WRITTEN } from "./baselines";
+import { applyEdit, describeEdit, EMPTY, type Doctrine } from "./doctrine";
+import { play, type Game, type Policy } from "./play";
+import { writeReport } from "./report";
+import { buildResearchInput, ClaudeResearcher, type PastTrial } from "./researcher";
+import { loadScenarios, type Scenario } from "./scenario";
+import { deathsOn, deathsOver, policyKey, readGames, readLedger, readPolicies, saveGame, saveLedger, savePolicy, saveStatus, type Comparison, type GameRow, type RunningGame, type Status, type Trial } from "./store";
+
+const { values } = parseArgs({
+  options: {
+    generations: { type: "string", default: "1" },
+    hypotheses: { type: "string", default: "4" },
+    reps: { type: "string", default: "2" },
+    parallel: { type: "string", default: "12" },
+    model: { type: "string", default: "claude-opus-5" },
+    /** A change must save at least this many lives per night in training to be worth a validation. */
+    "min-gain": { type: "string", default: "0.5" },
+    /** ...and may cost at most this many on the validation nights. */
+    "max-harm": { type: "string", default: "0" },
+    /** Stop after this many generations in a row with nothing accepted. */
+    patience: { type: "string", default: "4" },
+    "baselines-only": { type: "boolean", default: false },
+    "no-hand-written": { type: "boolean", default: false },
+    test: { type: "boolean", default: false },
+  },
+});
+
+const REPS = Number(values.reps);
+const PARALLEL = Number(values.parallel);
+const MIN_GAIN = Number(values["min-gain"]);
+const MAX_HARM = Number(values["max-harm"]);
+
+const graph = new Graph(JSON.parse(readFileSync("data/valencia.json", "utf8")) as GraphData);
+const scenarios = loadScenarios();
+const bySplit = (split: Scenario["split"]) => scenarios.filter((s) => s.split === split);
+const TRAIN = bySplit("train");
+const VALIDATION = bySplit("validation");
+const TEST = bySplit("test");
+const ids = (list: Scenario[]) => list.map((s) => s.id);
+
+// ---------- playing games, a few at a time, never the same one twice ----------
+
+let games: GameRow[] = readGames();
+const status: Status = { running: true, phase: "arrancando", generation: 0, done: 0, total: 0, meanGameSeconds: null, parallel: PARALLEL, games: [], log: [], updatedAt: "" };
+const durations: number[] = [];
+
+const say = (line: string) => {
+  const stamped = `${new Date().toTimeString().slice(0, 8)}  ${line}`;
+  console.log(stamped);
+  status.log = [...status.log, stamped].slice(-40);
+  publish();
+};
+
+let lastPublished = 0;
+function publish(force = true): void {
+  if (!force && Date.now() - lastPublished < 3000) return;
+  lastPublished = Date.now();
+  status.updatedAt = new Date().toISOString();
+  saveStatus(status);
+  writeReport();
+}
+
+let free = PARALLEL;
+const queue: (() => void)[] = [];
+const slot = async () => {
+  if (free > 0) return void free--;
+  await new Promise<void>((resolve) => queue.push(resolve));
+};
+const release = () => {
+  const next = queue.shift();
+  if (next) next();
+  else free++;
+};
+
+async function playOnce(scenario: Scenario, policy: Policy, key: string, label: string, rep: number): Promise<void> {
+  await slot();
+  const running: RunningGame = { label, scenario: scenario.id, rep, tick: 0, ticks: scenario.ticks, dead: 0, startedAt: new Date().toISOString() };
+  status.games.push(running);
+  try {
+    let game: Game | null = null;
+    // A game the platform mostly failed to answer is played again once: it says nothing about the doctrine.
+    for (let attempt = 0; attempt < 2 && !game?.valid; attempt++) {
+      game = await play(scenario, policy, graph, {
+        rep,
+        onTick: (tick, dead) => {
+          running.tick = tick + 1;
+          running.dead = dead;
+          publish(false);
+        },
+      });
+      if (!game.valid) say(`${label} · ${scenario.id} r${rep}: ${game.llm.fallbacks} de ${game.llm.calls} decisiones sin respuesta de la plataforma${attempt === 0 ? ", se repite" : ", se queda como no válida"}`);
+    }
+    const row = { policy: key, at: new Date().toISOString(), game: game! };
+    saveGame(row);
+    games.push(row);
+    if (policy.kind === "agent") durations.push(game!.seconds);
+    status.meanGameSeconds = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
+    say(`${label} · ${scenario.id} r${rep}: ${game!.dead} muertos de ${game!.victims}${policy.kind === "agent" ? ` (${game!.llm.calls} decisiones, ${Math.round(game!.seconds)} s)` : ""}`);
+  } finally {
+    status.games = status.games.filter((g) => g !== running);
+    status.done++;
+    release();
+    publish();
+  }
+}
+
+interface Batch {
+  policy: Policy;
+  label: string;
+  on: Scenario[];
+  reps?: number;
+}
+
+/** Plays whatever is still missing from these batches, all batches sharing the same slots. */
+async function ensure(batches: Batch[]): Promise<void> {
+  const jobs: Promise<void>[] = [];
+  for (const batch of batches) {
+    const key = policyKey(batch.policy);
+    savePolicy(key, { label: batch.label, doctrine: batch.policy.kind === "agent" ? batch.policy.doctrine : null });
+    const reps = batch.policy.kind === "agent" ? (batch.reps ?? REPS) : 1;
+    for (const scenario of batch.on) {
+      const have = games.filter((g) => g.policy === key && g.game.scenario === scenario.id).length;
+      for (let rep = have; rep < reps; rep++) jobs.push(playOnce(scenario, batch.policy, key, batch.label, rep));
+    }
+  }
+  status.total += jobs.length;
+  await Promise.all(jobs);
+}
+
+const compare = (candidate: string, champion: string, on: Scenario[]): Comparison => {
+  const c = deathsOver(games, candidate, ids(on));
+  const k = deathsOver(games, champion, ids(on));
+  return { scenarios: ids(on), candidate: c, champion: k, delta: c - k };
+};
+
+const fmt = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
+
+// ---------- the run ----------
+
+const agent = (doctrine: Doctrine): Policy => ({ kind: "agent", doctrine });
+
+async function baselines(on: Scenario[]): Promise<void> {
+  const known = new Set(readLedger().flatMap((e) => (e.type === "baseline" ? [e.name] : [])));
+  const list: [string, Policy][] = [
+    ["Despachador por reglas (greedy)", { kind: "greedy" }],
+    ["Greedy con información perfecta", { kind: "informed" }],
+    ...(values["no-hand-written"] ? [] : ([["Agente con la doctrina escrita a mano", agent(HAND_WRITTEN)]] as [string, Policy][])),
+  ];
+  // One game per night is enough for a reference line; the champion gets the repetitions.
+  await ensure(list.map(([label, policy]) => ({ policy, label, on, reps: 1 })));
+  for (const [name, policy] of list) if (!known.has(name)) saveLedger({ type: "baseline", at: new Date().toISOString(), name, policy: policyKey(policy) });
+}
+
+function currentChampion(): { doctrine: Doctrine; generation: number; taken: Set<string> } {
+  const policies = readPolicies();
+  let doctrine = EMPTY;
+  let generation = 0;
+  const taken = new Set<string>();
+  for (const entry of readLedger()) {
+    if (entry.type !== "generation") continue;
+    generation = entry.n;
+    doctrine = policies[entry.championAfter]?.doctrine ?? doctrine;
+    for (const trial of entry.trials) for (const rule of policies[trial.policy]?.doctrine?.rules ?? []) taken.add(rule.id);
+  }
+  return { doctrine, generation, taken };
+}
+
+function pastTrials(): PastTrial[] {
+  return readLedger().flatMap((entry) =>
+    entry.type === "generation"
+      ? entry.trials.map((t) => ({ generation: entry.n, name: t.name, edit: t.editText, trainDelta: t.train?.delta ?? 0, validationDelta: t.validation?.delta ?? null, verdict: t.reason }))
+      : [],
+  );
+}
+
+async function generation(n: number, champion: Doctrine, taken: Set<string>): Promise<Doctrine> {
+  const startedAt = new Date().toISOString();
+  status.generation = n;
+  const championPolicy = agent(champion);
+  const championKey = policyKey(championPolicy);
+  const championLabel = n === 1 && champion.rules.length === 0 ? "G0 · sin doctrina" : `G${n - 1} · campeona`;
+
+  status.phase = `G${n}: la campeona juega entrenamiento y validación`;
+  say(`── Generación ${n} ── campeona con ${champion.rules.length} reglas`);
+  await ensure([{ policy: championPolicy, label: championLabel, on: [...TRAIN, ...VALIDATION] }]);
+  say(`campeona: ${deathsOver(games, championKey, ids(TRAIN)).toFixed(2)} muertos/noche en entrenamiento, ${deathsOver(games, championKey, ids(VALIDATION)).toFixed(2)} en validación`);
+
+  status.phase = `G${n}: el investigador estudia las partidas de entrenamiento`;
+  publish();
+  const trainGames = games.filter((g) => g.policy === championKey && TRAIN.some((s) => s.id === g.game.scenario));
+  const ruleUse = new Map<string, number>();
+  for (const g of trainGames) for (const u of g.game.ruleUse) ruleUse.set(u.ruleId, (ruleUse.get(u.ruleId) ?? 0) + u.times);
+  const researcher = new ClaudeResearcher(values.model);
+  const input = buildResearchInput({
+    generation: n,
+    doctrine: champion,
+    trainDeaths: TRAIN.map((s) => ({ scenario: s.id, family: s.family, victims: s.stats.victims, dead: deathsOn(games, championKey, s.id) })),
+    findings: trainGames.flatMap((g) => g.game.findings.map((finding) => ({ scenario: g.game.scenario, finding }))),
+    ruleUse: [...ruleUse].map(([ruleId, times]) => ({ ruleId, times })).sort((a, b) => b.times - a.times),
+    past: pastTrials(),
+    wanted: Number(values.hypotheses),
+  });
+  const thinking = Date.now();
+  const research = await researcher.propose(input);
+  say(`investigador (${Math.round((Date.now() - thinking) / 1000)} s): ${research.analysis}`);
+
+  // One night of each kind per generation, alternating, so no single night gets all the attention.
+  const families = [...new Set(TRAIN.map((s) => s.family))];
+  const minibatch = families.map((family) => {
+    const nights = TRAIN.filter((s) => s.family === family);
+    return nights[n % nights.length];
+  });
+
+  const trials: (Trial & { doctrine: Doctrine | null })[] = research.hypotheses.slice(0, Number(values.hypotheses)).map((h) => {
+    const doctrine = applyEdit(champion, h.edit, n, taken);
+    const policy = doctrine ? policyKey(agent(doctrine)) : "";
+    return { name: h.name, rationale: h.rationale, expected: h.expected, edit: h.edit, editText: describeEdit(h.edit), policy, doctrine, train: null, validation: null, verdict: "invalid", reason: doctrine ? "" : "cambio imposible sobre la doctrina actual" };
+  });
+  for (const t of trials) say(`hipótesis «${t.name}»: ${t.editText}`);
+
+  status.phase = `G${n}: ${trials.length} hipótesis juegan ${minibatch.length} noches de entrenamiento`;
+  const playable = trials.filter((t) => t.doctrine);
+  await ensure(playable.map((t) => ({ policy: agent(t.doctrine!), label: `G${n} · ${t.name}`, on: minibatch })));
+  for (const t of playable) {
+    t.train = compare(t.policy, championKey, minibatch);
+    t.verdict = t.train.delta <= -MIN_GAIN ? "outdone" : "no_gain";
+    t.reason = t.verdict === "no_gain" ? `no mejora en entrenamiento (Δ${fmt(t.train.delta)}, hacía falta ≤ −${MIN_GAIN})` : `mejoraba en entrenamiento (Δ${fmt(t.train.delta)}), pero otra hipótesis se probó antes`;
+    say(`«${t.name}»: entrenamiento Δ${fmt(t.train.delta)} muertos/noche`);
+  }
+
+  // The best in training faces the nights nobody studied. If it fails there, the runner-up gets its chance.
+  let next = champion;
+  const contenders = playable.filter((t) => t.verdict === "outdone").sort((a, b) => a.train!.delta - b.train!.delta).slice(0, 2);
+  for (const t of contenders) {
+    status.phase = `G${n}: «${t.name}» se examina en validación`;
+    await ensure([{ policy: agent(t.doctrine!), label: `G${n} · ${t.name}`, on: VALIDATION }]);
+    t.validation = compare(t.policy, championKey, VALIDATION);
+    if (t.validation.delta <= MAX_HARM) {
+      t.verdict = "accepted";
+      t.reason = `aceptada: entrenamiento Δ${fmt(t.train!.delta)}, validación Δ${fmt(t.validation.delta)}`;
+      next = t.doctrine!;
+      say(`«${t.name}» ACEPTADA (validación Δ${fmt(t.validation.delta)})`);
+      break;
+    }
+    t.verdict = "overfit";
+    t.reason = `sobreajuste: gana en entrenamiento (Δ${fmt(t.train!.delta)}) y pierde en validación (Δ${fmt(t.validation.delta)})`;
+    say(`«${t.name}» rechazada por sobreajuste (validación Δ${fmt(t.validation.delta)})`);
+  }
+  if (next === champion) say("ninguna hipótesis aceptada: la campeona sigue");
+
+  // The new champion is measured on every night before anyone builds on it.
+  if (next !== champion) {
+    status.phase = `G${n}: la nueva campeona completa entrenamiento y validación`;
+    await ensure([{ policy: agent(next), label: `G${n} · campeona`, on: [...TRAIN, ...VALIDATION] }]);
+  }
+
+  saveLedger({
+    type: "generation",
+    n,
+    startedAt,
+    endedAt: new Date().toISOString(),
+    researcher: researcher.name,
+    analysis: research.analysis,
+    championBefore: championKey,
+    championAfter: policyKey(agent(next)),
+    minibatch: ids(minibatch),
+    trials: trials.map(({ doctrine: _doctrine, ...t }) => t),
+  });
+  for (const t of trials) for (const rule of t.doctrine?.rules ?? []) taken.add(rule.id);
+  return next;
+}
+
+try {
+  if (values.test) {
+    status.phase = "examen final: noches de test";
+    const { doctrine } = currentChampion();
+    await baselines(TEST);
+    await ensure([
+      { policy: agent(EMPTY), label: "G0 · sin doctrina", on: TEST },
+      { policy: agent(doctrine), label: "Campeona final", on: TEST },
+    ]);
+    saveLedger({ type: "test", at: new Date().toISOString(), policies: [policyKey(agent(EMPTY)), policyKey(agent(doctrine))] });
+    say(`TEST: sin doctrina ${deathsOver(games, policyKey(agent(EMPTY)), ids(TEST)).toFixed(2)} → campeona ${deathsOver(games, policyKey(agent(doctrine)), ids(TEST)).toFixed(2)} muertos/noche`);
+  } else {
+    status.phase = "referencias";
+    say(`laboratorio: ${TRAIN.length} noches de entrenamiento, ${VALIDATION.length} de validación, ${TEST.length} de test guardadas · ${PARALLEL} partidas a la vez`);
+    const references = baselines([...TRAIN, ...VALIDATION]).catch((err) => say(`referencias: ${err instanceof Error ? err.message : err}`));
+    if (values["baselines-only"]) await references;
+    else {
+      let { doctrine, generation: done, taken } = currentChampion();
+      let dry = 0;
+      for (let i = 0; i < Number(values.generations) && dry < Number(values.patience); i++) {
+        const next = await generation(++done, doctrine, taken);
+        dry = next === doctrine ? dry + 1 : 0;
+        doctrine = next;
+      }
+      await references;
+    }
+  }
+  status.phase = "parado";
+} catch (err) {
+  status.phase = `FALLO: ${err instanceof Error ? err.message : err}`;
+  console.error(err);
+  process.exitCode = 1;
+} finally {
+  status.running = false;
+  status.games = [];
+  publish();
+}

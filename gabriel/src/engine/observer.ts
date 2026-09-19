@@ -1,5 +1,5 @@
 import type { Graph } from "./graph";
-import type { Rng } from "./rng";
+import { Rng } from "./rng";
 import type { AerialSighting, Answer, Breathing, Call, CallerKind, ObservedEvent, Report, ReportSource, SceneKind, Victim, World, WorldEvent } from "./types";
 import { bySeverity } from "./victims";
 
@@ -95,7 +95,14 @@ const TRAFFIC_DELAY_TICKS: [number, number] = [8, 20];
 export interface CallObserverOptions {
   /** Force who calls (tests, scripted demos). */
   callers?: CallerKind[];
+  /**
+   * Every emergency is phoned in the moment it happens, by someone who knows exactly where it is and what is wrong.
+   * No real night is like this: it is the reference for how much of the damage comes from not knowing.
+   */
+  perfect?: boolean;
 }
+
+const PERFECT_CALLER: CallerProfile = { label: "Un testigo que lo ve todo", errorM: 0, knows: 1, wrong: 0 };
 
 interface PendingCall {
   deliverTick: number;
@@ -108,6 +115,12 @@ export class CallObserver implements Observer {
   private pendingTraffic: { deliverTick: number; event: WorldEvent }[] = [];
   private lastCall = new Map<string, number>();
   private nextCallNum = 1;
+  /**
+   * Each scene rolls its own dice for who calls and what they say. With one shared stream, a coordinator that flies
+   * more drones would shift every later call, and the same night could not be played twice.
+   */
+  private streamSeed: number | null = null;
+  private readonly streams = new Map<string, Rng>();
   /** Which real scene each call was about. Never shown to the coordinator: only hindsight (evaluation) may read it. */
   readonly sceneOfCall = new Map<string, string>();
 
@@ -121,12 +134,25 @@ export class CallObserver implements Observer {
     return filed;
   }
 
+  private streamFor(key: string, rng: Rng): Rng {
+    this.streamSeed ??= Math.floor(rng.next() * 4294967296);
+    let stream = this.streams.get(key);
+    if (!stream) {
+      let hash = this.streamSeed;
+      for (const char of key) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+      this.streams.set(key, (stream = new Rng(hash)));
+    }
+    return stream;
+  }
+
   observe(events: WorldEvent[], world: Readonly<World>, graph: Graph, rng: Rng): Omit<Report, "id">[] {
     const reports: Omit<Report, "id">[] = [];
+    // Drawn before anything else so it never depends on what happened first.
+    this.streamFor("", rng);
 
     for (const event of events) {
-      if (event.type === "scene_created") this.scheduleFirstCalls(event.sceneId, world, rng);
-      if (event.type === "road_closed") this.pendingTraffic.push({ deliverTick: world.tick + rng.int(...TRAFFIC_DELAY_TICKS), event });
+      if (event.type === "scene_created") this.scheduleFirstCalls(event.sceneId, world, this.streamFor(event.sceneId, rng));
+      if (event.type === "road_closed") this.pendingTraffic.push({ deliverTick: world.tick + this.streamFor(`edge${event.edge}`, rng).int(...TRAFFIC_DELAY_TICKS), event });
       if (event.type === "area_surveyed") {
         const report = this.readArea(event, world, graph, rng);
         reports.push({ tick: event.tick, source: "drone", confidence: report.quality, event: report });
@@ -156,14 +182,14 @@ export class CallObserver implements Observer {
       const stillWaiting = world.victims.some((v) => v.sceneId === scene.id && v.status === "waiting");
       const last = this.lastCall.get(scene.id);
       if (stillWaiting && last !== undefined && world.tick - last >= RECALL_AFTER_TICKS) {
-        this.pending.push({ deliverTick: world.tick, sceneId: scene.id, caller: this.pickCaller(scene.kind, rng) });
+        this.pending.push({ deliverTick: world.tick, sceneId: scene.id, caller: this.pickCaller(scene.kind, this.streamFor(scene.id, rng)) });
       }
     }
 
     const due = this.pending.filter((p) => p.deliverTick <= world.tick);
     this.pending = this.pending.filter((p) => p.deliverTick > world.tick);
     for (const p of due) {
-      const call = this.makeCall(p, world, graph, rng);
+      const call = this.makeCall(p, world, graph, this.streamFor(p.sceneId, rng));
       if (!call) continue;
       this.lastCall.set(p.sceneId, world.tick);
       this.sceneOfCall.set(call.id, p.sceneId);
@@ -247,6 +273,10 @@ export class CallObserver implements Observer {
   private scheduleFirstCalls(sceneId: string, world: Readonly<World>, rng: Rng): void {
     const scene = world.scenes.find((s) => s.id === sceneId)!;
     // Nobody is going to call about this one. The only way it ever gets known is someone going to look.
+    if (this.options.perfect) {
+      this.pending.push({ deliverTick: world.tick, sceneId, caller: "bystander" });
+      return;
+    }
     if (scene.silent) return;
     const outdoors = scene.kind !== "flooded_home" && scene.kind !== "collapse" && scene.kind !== "fall";
     let calls = outdoors ? 1 + rng.int(0, 2) : rng.chance(0.2) ? 2 : 1;
@@ -275,7 +305,7 @@ export class CallObserver implements Observer {
       // People mostly describe whoever looks worst.
       subject = rng.chance(0.7) ? [...victims].sort(bySeverity)[0] : rng.pick(victims);
     }
-    const profile = CALLERS[caller];
+    const profile = this.options.perfect ? PERFECT_CALLER : CALLERS[caller];
 
     const answer = (truth: boolean): Answer => {
       if (!rng.chance(profile.knows)) return "unknown";
@@ -292,7 +322,7 @@ export class CallObserver implements Observer {
     if (rng.chance(profile.knows)) ageGroup = subject.age < 16 ? "child" : subject.age > 65 ? "elderly" : "adult";
 
     let count: number | null = victims.length;
-    if (caller === "bystander" && !rng.chance(0.6)) count = Math.max(1, count + rng.pick([-1, 1]));
+    if (caller === "bystander" && !this.options.perfect && !rng.chance(0.6)) count = Math.max(1, count + rng.pick([-1, 1]));
     if (caller === "driver") count = rng.chance(0.6) ? null : Math.max(1, count + rng.pick([-1, 0, 1]));
 
     const mechanism = caller === "driver" && !rng.chance(0.6) ? null : scene.kind;
