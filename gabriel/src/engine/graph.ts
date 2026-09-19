@@ -61,6 +61,8 @@ class MinHeap {
 }
 
 const NO_CLOSURES: ReadonlySet<number> = new Set();
+const WRONG_WAY_FACTOR = 3;
+export const WADING_FACTOR = 4;
 
 /** Routable street network. Edge weights are free-flow travel seconds. */
 export class Graph {
@@ -73,7 +75,9 @@ export class Graph {
     data.edges.forEach((e, edge) => {
       const seconds = e.len / (e.kph / 3.6);
       this.out[e.a].push({ edge, to: e.b, forward: true, seconds });
-      if (!e.oneway) this.out[e.b].push({ edge, to: e.a, forward: false, seconds });
+      // Everything routed here is an emergency vehicle: it may go against a one-way street, slowly.
+      // Without this, a flooded exit turns a one-way carriageway into a trap with no way back.
+      this.out[e.b].push({ edge, to: e.a, forward: false, seconds: e.oneway ? seconds * WRONG_WAY_FACTOR : seconds });
     });
   }
 
@@ -97,7 +101,8 @@ export class Graph {
 
   stepSeconds(step: Step): number {
     const e = this.data.edges[step.edge];
-    return e.len / (e.kph / 3.6);
+    const seconds = e.len / (e.kph / 3.6);
+    return e.oneway && !step.forward ? seconds * WRONG_WAY_FACTOR : seconds;
   }
 
   edgeName(edge: number): string | null {
@@ -105,9 +110,9 @@ export class Graph {
   }
 
   /** Fastest route avoiding closed edges, or null if unreachable. */
-  route(from: number, to: number, closed: ReadonlySet<number> = NO_CLOSURES): Route | null {
+  route(from: number, to: number, closed: ReadonlySet<number> = NO_CLOSURES, slow: ReadonlySet<number> = NO_CLOSURES): Route | null {
     if (from === to) return { steps: [], seconds: 0 };
-    const { dist, prev } = this.dijkstra(from, closed, to);
+    const { dist, prev } = this.dijkstra(from, closed, to, slow);
     if (dist[to] === Infinity) return null;
     const steps: Step[] = [];
     for (let node = to; node !== from; ) {
@@ -120,11 +125,12 @@ export class Graph {
   }
 
   /** Travel seconds from one node to every node (Infinity if unreachable). */
-  timesFrom(from: number, closed: ReadonlySet<number> = NO_CLOSURES): Float64Array {
-    return this.dijkstra(from, closed, -1).dist;
+  timesFrom(from: number, closed: ReadonlySet<number> = NO_CLOSURES, slow: ReadonlySet<number> = NO_CLOSURES): Float64Array {
+    return this.dijkstra(from, closed, -1, slow).dist;
   }
 
-  private dijkstra(from: number, closed: ReadonlySet<number>, target: number) {
+  /** `slow` edges (flooded streets a rescue unit wades through) cost WADING_FACTOR times more. */
+  private dijkstra(from: number, closed: ReadonlySet<number>, target: number, slow: ReadonlySet<number>) {
     const dist = new Float64Array(this.nodeCount).fill(Infinity);
     const prev: (Arc | undefined)[] = new Array(this.nodeCount);
     const heap = new MinHeap();
@@ -136,7 +142,7 @@ export class Graph {
       if (node === target) break;
       for (const arc of this.out[node]) {
         if (closed.has(arc.edge)) continue;
-        const nd = d + arc.seconds;
+        const nd = d + (slow.has(arc.edge) ? arc.seconds * WADING_FACTOR : arc.seconds);
         if (nd < dist[arc.to]) {
           dist[arc.to] = nd;
           prev[arc.to] = arc;
@@ -145,6 +151,32 @@ export class Graph {
       }
     }
     return { dist, prev };
+  }
+
+  /** Name of a street touching this node, if any is named. */
+  streetAt(node: number): string | null {
+    for (const arc of this.out[node]) {
+      const name = this.data.edges[arc.edge].name;
+      if (name) return name;
+    }
+    return null;
+  }
+
+  /** Straight-line metres between two nodes. */
+  distanceM(a: number, b: number): number {
+    const [lon1, lat1] = this.data.nodes[a];
+    const [lon2, lat2] = this.data.nodes[b];
+    const rad = Math.PI / 180;
+    const x = (lon2 - lon1) * rad * Math.cos(((lat1 + lat2) / 2) * rad);
+    const y = (lat2 - lat1) * rad;
+    return Math.hypot(x, y) * 6371000;
+  }
+
+  /** Nodes within `meters` of a node, itself included. */
+  nodesWithin(node: number, meters: number): number[] {
+    const found: number[] = [];
+    for (let i = 0; i < this.nodeCount; i++) if (this.distanceM(node, i) <= meters) found.push(i);
+    return found;
   }
 
   nearestNode(lon: number, lat: number): number {
