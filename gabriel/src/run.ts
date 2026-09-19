@@ -2,12 +2,14 @@
 //
 //   pnpm run-sim                                   claude coordinator (haiku), seed 1, 120 ticks
 //   pnpm run-sim --coordinator greedy --tick-ms 300
+//   pnpm run-sim --coordinator happyrobot             thinks inside the HappyRobot workflow (needs .env)
 //   pnpm run-sim --model sonnet --seed 7 --ticks 240
 //
 // Writes runs/<id>/: meta.json, ticks.jsonl (state + events per tick), llm.jsonl (full prompts), run.log
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ClaudeCliCoordinator } from "./coordinators/claude-cli";
+import { HappyRobotCoordinator } from "./coordinators/happyrobot";
 import {
   clock,
   describe,
@@ -48,13 +50,13 @@ const log = (line: string) => {
   appendFileSync(`${dir}/run.log`, line + "\n");
 };
 
+const onTrace = (trace: unknown) => appendFileSync(`${dir}/llm.jsonl`, JSON.stringify(trace) + "\n");
 const coordinator: Coordinator =
   values.coordinator === "greedy"
     ? new GreedyCoordinator()
-    : new ClaudeCliCoordinator({
-        model: values.model,
-        onTrace: (trace) => appendFileSync(`${dir}/llm.jsonl`, JSON.stringify(trace) + "\n"),
-      });
+    : values.coordinator === "happyrobot"
+      ? new HappyRobotCoordinator({ onTrace })
+      : new ClaudeCliCoordinator({ model: values.model, onTrace });
 
 const graph = new Graph(JSON.parse(readFileSync(`data/${values.map}.json`, "utf8")) as GraphData);
 const sim = new Simulation({
