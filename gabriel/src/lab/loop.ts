@@ -20,9 +20,9 @@ import { deathsOn, deathsOver, policyKey, readGames, readLedger, readPolicies, s
 const { values } = parseArgs({
   options: {
     generations: { type: "string", default: "1" },
-    hypotheses: { type: "string", default: "4" },
+    hypotheses: { type: "string", default: "6" },
     reps: { type: "string", default: "2" },
-    parallel: { type: "string", default: "12" },
+    parallel: { type: "string", default: "28" },
     model: { type: "string", default: "claude-opus-5" },
     /** A change must save at least this many lives per night in training to be worth a validation. */
     "min-gain": { type: "string", default: "0.5" },
@@ -150,12 +150,12 @@ const fmt = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(2)}`;
 
 const agent = (doctrine: Doctrine): Policy => ({ kind: "agent", doctrine });
 
-async function baselines(on: Scenario[]): Promise<void> {
+async function baselines(on: Scenario[], withHandWritten = !values["no-hand-written"]): Promise<void> {
   const known = new Set(readLedger().flatMap((e) => (e.type === "baseline" ? [e.name] : [])));
   const list: [string, Policy][] = [
     ["Despachador por reglas (greedy)", { kind: "greedy" }],
     ["Greedy con información perfecta", { kind: "informed" }],
-    ...(values["no-hand-written"] ? [] : ([["Agente con la doctrina escrita a mano", agent(HAND_WRITTEN)]] as [string, Policy][])),
+    ...(withHandWritten ? ([["Agente con la doctrina escrita a mano", agent(HAND_WRITTEN)]] as [string, Policy][]) : []),
   ];
   // One game per night is enough for a reference line; the champion gets the repetitions.
   await ensure(list.map(([label, policy]) => ({ policy, label, on, reps: 1 })));
@@ -239,23 +239,50 @@ async function generation(n: number, champion: Doctrine, taken: Set<string>): Pr
     say(`«${t.name}»: entrenamiento Δ${fmt(t.train.delta)} muertos/noche`);
   }
 
-  // The best in training faces the nights nobody studied. If it fails there, the runner-up gets its chance.
+  // Everything that won in training goes in together: early on most sound rules help, and one rule per generation
+  // would take all night. The combination and the best single change face the nights nobody studied in the same
+  // wave; the combination is preferred, the single change is the fallback if the mix does harm.
   let next = champion;
-  const contenders = playable.filter((t) => t.verdict === "outdone").sort((a, b) => a.train!.delta - b.train!.delta).slice(0, 2);
-  for (const t of contenders) {
-    status.phase = `G${n}: «${t.name}» se examina en validación`;
-    await ensure([{ policy: agent(t.doctrine!), label: `G${n} · ${t.name}`, on: VALIDATION }]);
-    t.validation = compare(t.policy, championKey, VALIDATION);
-    if (t.validation.delta <= MAX_HARM) {
-      t.verdict = "accepted";
-      t.reason = `aceptada: entrenamiento Δ${fmt(t.train!.delta)}, validación Δ${fmt(t.validation.delta)}`;
-      next = t.doctrine!;
-      say(`«${t.name}» ACEPTADA (validación Δ${fmt(t.validation.delta)})`);
-      break;
+  const winners = playable.filter((t) => t.verdict === "outdone").sort((a, b) => a.train!.delta - b.train!.delta);
+  const contenders = winners.slice(0, 1);
+  if (winners.length > 1) {
+    let doctrine: Doctrine = champion;
+    const members: typeof winners = [];
+    for (const t of winners) {
+      const merged = applyEdit(doctrine, t.edit, n, taken);
+      if (!merged) continue;
+      doctrine = merged;
+      members.push(t);
     }
-    t.verdict = "overfit";
-    t.reason = `sobreajuste: gana en entrenamiento (Δ${fmt(t.train!.delta)}) y pierde en validación (Δ${fmt(t.validation.delta)})`;
-    say(`«${t.name}» rechazada por sobreajuste (validación Δ${fmt(t.validation.delta)})`);
+    const combo = { name: `Combinación de ${members.length}`, rationale: `Las ${members.length} hipótesis que ganaron en entrenamiento, juntas: ${members.map((t) => `«${t.name}»`).join(", ")}.`, expected: "", edit: members[0].edit, editText: members.map((t) => t.editText).join("\n"), policy: policyKey(agent(doctrine)), doctrine, train: null, validation: null, verdict: "invalid" as const, reason: "", members };
+    trials.push(combo);
+    contenders.unshift(combo);
+  }
+  if (contenders.length) {
+    status.phase = `G${n}: ${contenders.map((t) => `«${t.name}»`).join(" y ")} se examinan en validación`;
+    await ensure(contenders.map((t, i) => ({ policy: agent(t.doctrine!), label: `G${n} · ${t.name}`, on: i === 0 ? [...TRAIN, ...VALIDATION] : VALIDATION })));
+  }
+  for (const t of contenders) {
+    t.train ??= compare(t.policy, championKey, minibatch);
+    t.validation = compare(t.policy, championKey, VALIDATION);
+    const members = "members" in t ? (t.members as typeof winners) : [t];
+    if (next !== champion) {
+      // Already in, as part of the combination: its own validation is kept for the record.
+    } else if (t.train.delta > -MIN_GAIN) {
+      t.verdict = "no_gain";
+      t.reason = `junta no mejora en entrenamiento (Δ${fmt(t.train.delta)})`;
+    } else if (t.validation.delta <= MAX_HARM) {
+      next = t.doctrine!;
+      for (const m of [t, ...members]) {
+        m.verdict = "accepted";
+        m.reason = m === t ? `aceptada: entrenamiento Δ${fmt(t.train.delta)}, validación Δ${fmt(t.validation.delta)}` : `aceptada dentro de la combinación (sola: entrenamiento Δ${fmt(m.train!.delta)})`;
+      }
+      say(`«${t.name}» ACEPTADA (entrenamiento Δ${fmt(t.train.delta)}, validación Δ${fmt(t.validation.delta)})`);
+    } else {
+      t.verdict = "overfit";
+      t.reason = `sobreajuste: gana en entrenamiento (Δ${fmt(t.train.delta)}) y pierde en validación (Δ${fmt(t.validation.delta)})`;
+      say(`«${t.name}» rechazada por sobreajuste (validación Δ${fmt(t.validation.delta)})`);
+    }
   }
   if (next === champion) say("ninguna hipótesis aceptada: la campeona sigue");
 
@@ -275,7 +302,7 @@ async function generation(n: number, champion: Doctrine, taken: Set<string>): Pr
     championBefore: championKey,
     championAfter: policyKey(agent(next)),
     minibatch: ids(minibatch),
-    trials: trials.map(({ doctrine: _doctrine, ...t }) => t),
+    trials: trials.map(({ doctrine: _doctrine, ...t }) => ({ ...t, members: undefined })),
   });
   for (const t of trials) for (const rule of t.doctrine?.rules ?? []) taken.add(rule.id);
   return next;
@@ -295,9 +322,10 @@ try {
   } else {
     status.phase = "referencias";
     say(`laboratorio: ${TRAIN.length} noches de entrenamiento, ${VALIDATION.length} de validación, ${TEST.length} de test guardadas · ${PARALLEL} partidas a la vez`);
-    const references = baselines([...TRAIN, ...VALIDATION]).catch((err) => say(`referencias: ${err instanceof Error ? err.message : err}`));
-    if (values["baselines-only"]) await references;
-    else {
+    // The rule-based references take seconds. The hand-written doctrine costs as much as a champion, so it plays last:
+    // the learning curve should not wait for a reference line.
+    await baselines([...TRAIN, ...VALIDATION], false);
+    if (!values["baselines-only"]) {
       let { doctrine, generation: done, taken } = currentChampion();
       let dry = 0;
       for (let i = 0; i < Number(values.generations) && dry < Number(values.patience); i++) {
@@ -305,8 +333,9 @@ try {
         dry = next === doctrine ? dry + 1 : 0;
         doctrine = next;
       }
-      await references;
     }
+    status.phase = "referencia: el agente con la doctrina escrita a mano";
+    await baselines([...TRAIN, ...VALIDATION]);
   }
   status.phase = "parado";
 } catch (err) {

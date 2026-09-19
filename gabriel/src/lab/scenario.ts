@@ -64,13 +64,13 @@ export interface ScenarioSpec {
   config?: Partial<SimConfig>;
 }
 
-const EVENT_TICKS = 80;
-const TICKS = 120;
+const EVENT_TICKS = 40;
+const TICKS = 90;
 /** Per road unit per tick, whatever it is doing: a breakdown does not wait for the unit to be on a job. */
-const P_BREAKDOWN = 0.0015;
+const P_BREAKDOWN = 0.003;
 
 /** A short night that starts in the middle of the crisis: the water is already out and calls come in from tick 0. */
-const DENSE: Partial<DanaMasterConfig> = { pSceneStart: 0.3, pScenePeak: 0.5, peakTick: 40 };
+const DENSE: Partial<DanaMasterConfig> = { pSceneStart: 0.5, pScenePeak: 0.6, peakTick: 20 };
 
 /**
  * Writes the night by letting the scripted master loose on a city where nobody moves. With no unit on the road it
@@ -79,7 +79,7 @@ const DENSE: Partial<DanaMasterConfig> = { pSceneStart: 0.3, pScenePeak: 0.5, pe
 export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
   const config = { ...DEFAULT_CONFIG, ...spec.config };
   const world = createWorld(graph, config);
-  const floods = spec.floods.map((index) => ({ tick: 0, ...FLOOD_SOURCES[index], radiusM: 300, growthM: 8, maxRadiusM: 1300 }));
+  const floods = spec.floods.map((index) => ({ tick: 0, ...FLOOD_SOURCES[index], radiusM: 450, growthM: 10, maxRadiusM: 1300 }));
   const master = new DanaMaster({ ...DEFAULT_DANA, ...DENSE, ...spec.dana, floods });
   const root = new Rng(spec.seed);
   const masterRng = root.fork();

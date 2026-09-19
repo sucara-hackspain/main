@@ -16,6 +16,12 @@ export interface HappyRobotOptions {
   onTrace?: (trace: LlmTrace) => void;
   /** The agent's doctrine, rendered fresh for each decision and placed before the briefing. */
   memory?: () => string;
+  /**
+   * Ticks between decisions. A decision takes the platform some 10 s, so deciding on every tick makes a night last
+   * three times longer for orders that mostly repeat. What is heard in between is kept and handed over together;
+   * a new life-threatening incident does not wait.
+   */
+  everyTicks?: number;
 }
 
 /**
@@ -36,6 +42,9 @@ export class HappyRobotCoordinator implements Coordinator {
   private readonly onTrace?: (trace: LlmTrace) => void;
   private readonly memory?: () => string;
   private readonly fallback = new GreedyCoordinator();
+  private readonly everyTicks: number;
+  private unheard: DecideInput["reports"] = [];
+  private decidedAt = -Infinity;
 
   constructor(options: HappyRobotOptions = {}) {
     const apiKey = options.apiKey ?? process.env.HAPPYROBOT_API_KEY;
@@ -52,10 +61,18 @@ export class HappyRobotCoordinator implements Coordinator {
     this.pollIntervalMs = options.pollIntervalMs ?? 1500;
     this.onTrace = options.onTrace;
     this.memory = options.memory;
+    this.everyTicks = options.everyTicks ?? 3;
     this.model = `happyrobot:${workflowId}`;
   }
 
-  async decide(input: DecideInput): Promise<Decision> {
+  async decide(heard: DecideInput): Promise<Decision> {
+    this.unheard.push(...heard.reports);
+    const urgent = heard.belief.incidents.some((i) => i.status === "open" && i.priority === 0 && i.openedTick === heard.tick);
+    if (!urgent && heard.tick - this.decidedAt < this.everyTicks) return { actions: [], source: "rules", situation: "Entre decisiones: se acumulan las novedades." };
+    const input = { ...heard, reports: this.unheard };
+    this.unheard = [];
+    this.decidedAt = heard.tick;
+
     const briefing = buildBriefing(input);
     if (!briefing.actionable) return { actions: [], source: "rules", situation: "Sin decisiones pendientes." };
 

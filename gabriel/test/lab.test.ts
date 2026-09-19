@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { Graph, GreedyCoordinator, Simulation, type Action, type Coordinator, type GraphData } from "../src/engine";
+import { CallObserver, Graph, GreedyCoordinator, Simulation, type Action, type Coordinator, type GraphData } from "../src/engine";
 import { applyEdit, EMPTY, renderDoctrine } from "../src/lab/doctrine";
 import { readResearchOutput } from "../src/lab/researcher";
 import { generateScenario, ScriptedMaster, type ScenarioSpec } from "../src/lab/scenario";
@@ -39,13 +39,16 @@ describe("lab: a scenario is the same night whoever coordinates", () => {
     const firstCalls = (sim: Simulation) => {
       const seen = new Map<string, string>();
       for (const call of sim.belief.calls) {
-        const scene = (sim.observer as { sceneOfCall: Map<string, string> }).sceneOfCall.get(call.id)!;
+        const scene = (sim.observer as CallObserver).sceneOfCall.get(call.id)!;
         if (!seen.has(scene)) seen.set(scene, `${call.caller}@${call.node}`);
       }
       return [...seen].sort();
     };
-    const early = (sim: Simulation) => firstCalls(sim).filter(([scene]) => sim.world.scenes.find((s) => s.id === scene)!.tick < 10);
-    expect(early(a)).toEqual(early(b));
+    // A scene a crew dealt with before anyone phoned has no call at all: compare the ones both nights heard about.
+    const heardByBoth = new Set(firstCalls(b).map(([scene]) => scene));
+    const shared = firstCalls(a).filter(([scene]) => heardByBoth.has(scene));
+    expect(shared.length).toBeGreaterThan(5);
+    expect(firstCalls(b).filter(([scene]) => shared.some(([id]) => id === scene))).toEqual(shared);
   });
 });
 
