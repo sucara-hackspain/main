@@ -109,6 +109,44 @@
 .ticket-reason > svg { color:var(--muted-foreground); margin-top:2px; }
 .ticket-reason strong { display:block; font-size:10px; font-weight:500; margin-bottom:4px; }
 .ticket-reason p { font-size:10px; }
+.ticket-row-counts { display:inline-flex; align-items:center; gap:4px; margin-left:8px; font:9px var(--font-mono); }
+.ticket-row-counts svg:not(:first-child) { margin-left:6px; }
+.ticket-foci, .ticket-known { margin:0 22px 23px; }
+.ticket-foci h3, .ticket-known h3 { display:flex; align-items:center; gap:7px; margin:0 0 12px; font-size:12px; font-weight:550; }
+.ticket-foci h3 > span { color:var(--muted-foreground); font:10px var(--font-mono); }
+.ticket-section-note { margin:-4px 0 12px; font-size:10px; line-height:1.6; color:var(--muted-foreground); }
+.ticket-foci article { padding:11px 12px; border:1px solid var(--sidebar-border); border-left:3px solid var(--warning); border-radius:6px; background:var(--card); margin-bottom:8px; }
+.ticket-foci article[data-status="located"] { border-left-color:var(--info); }
+.ticket-foci article[data-status="cleared"] { border-left-color:var(--success); }
+.ticket-foci article[data-status="not_found"] { border-left-color:var(--border); opacity:.65; }
+.ticket-foci article header { display:flex; align-items:baseline; flex-wrap:wrap; gap:7px; }
+.ticket-foci article header code { font-size:9px; color:var(--muted-foreground); }
+.ticket-foci article header strong { font-size:11px; font-weight:550; }
+.ticket-foci article header span { margin-left:auto; font-size:9px; color:var(--muted-foreground); }
+.ticket-foci ul { list-style:none; padding:0; margin:9px 0 0; }
+.ticket-foci li { display:flex; align-items:center; gap:6px; padding:4px 0; font-size:10px; }
+.ticket-foci li i { width:6px; height:6px; border-radius:50%; background:var(--muted-foreground); flex-shrink:0; }
+.ticket-foci li[data-triage="red"] i { background:var(--destructive); }
+.ticket-foci li[data-triage="yellow"] i { background:var(--warning); }
+.ticket-foci li[data-triage="green"] i { background:var(--success); }
+.ticket-foci li code { font-size:9px; color:var(--muted-foreground); }
+.ticket-foci li span { margin-left:auto; color:var(--muted-foreground); font-size:9px; text-align:right; }
+.ticket-foci article p { margin:8px 0 0; font-size:10px; color:var(--muted-foreground); }
+.ticket-foci article small { display:block; margin-top:8px; font:9px var(--font-mono); color:var(--muted-foreground); }
+.ticket-known dl { display:flex; flex-direction:column; gap:9px; margin:0 0 12px; }
+.ticket-known dl > div { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+.ticket-known dt { color:var(--muted-foreground); font-size:11px; }
+.ticket-known dd { margin:0; font-size:11px; text-align:right; }
+.ticket-known dd small { margin-left:7px; font:9px var(--font-mono); color:var(--muted-foreground); }
+.ticket-step-filter { display:flex; flex-wrap:wrap; gap:4px; margin-top:14px; }
+.ticket-step-filter button { display:flex; align-items:center; gap:5px; padding:4px 7px; border:1px solid transparent; border-radius:5px; font-size:10px; color:var(--muted-foreground); }
+.ticket-step-filter button[aria-pressed="true"] { background:var(--card); border-color:var(--border); color:var(--foreground); box-shadow:var(--input-shadow); }
+.ticket-step-filter button span { font:9px var(--font-mono); }
+.ticket-step-focus { margin-left:7px; font-size:9px; font-weight:400; color:var(--muted-foreground); }
+.ticket-step-facts { list-style:none; display:flex; flex-wrap:wrap; gap:4px; padding:0; margin:8px 0 0; }
+.ticket-step-facts li { padding:2px 6px; border:1px solid var(--sidebar-border); border-radius:4px; background:var(--sidebar); font-size:9px; color:var(--muted-foreground); }
+.ticket-rules { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:7px !important; }
+.ticket-rules code { padding:1px 5px; border:1px solid color-mix(in srgb,var(--info) 25%,var(--border)); border-radius:4px; font-size:9px; color:var(--info-foreground); }
 .ticket-detail-empty { flex:1; }
 .ticket-detail-empty > span { display:grid; place-items:center; width:56px; height:56px; border:1px solid var(--border); border-radius:14px; background:var(--sidebar); }
 @media (min-width:1600px) { .ticket-detail { width:470px; } }

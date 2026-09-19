@@ -1,6 +1,6 @@
 import {
   elapsed, injuryLabel, sceneLabel, unitKind,
-  type Action, type Call, type IncidentFrame, type ObservedEvent, type TickRecord, type UnitFrame,
+  type Action, type Call, type CaseEntry, type IncidentFrame, type ObservedEvent, type TickRecord, type UnitFrame,
 } from "../engineTrace";
 import { eventText } from "../thoughts/model";
 
@@ -9,6 +9,13 @@ export type TicketState = keyof typeof ticketStates;
 export type TicketStep = {
   id: string; tick: number; title: string; detail?: string; reason?: string;
   source: string; kind: "call" | "action" | "assessment" | "update" | "alert" | "resolved";
+  /** What the engine filed it as, to filter the timeline by. Absent on runs older than the engine's case file. */
+  group?: "call" | "decision" | "radio" | "update";
+  /** What a call added to what was known. */
+  facts?: string[];
+  /** Doctrine rules the coordinator cited for the order. */
+  applies?: string[];
+  focusId?: string;
 };
 export type Ticket = {
   id: string; incident: IncidentFrame; state: TicketState; title: string; location: string;
@@ -28,6 +35,45 @@ export function closureText(i: IncidentFrame) {
   if (i.closedReason === "merged") return `Agrupado con ${i.mergedInto ?? "otra incidencia"}`;
   if (i.closedReason === "not_found") return "La dotación no encontró a nadie en el lugar";
   return "Atención en el lugar finalizada";
+}
+
+const decidedBy = { llm: "Agente coordinador", fallback: "Coordinador · respaldo por reglas", rules: "Coordinador · reglas", operator: "Operador · orden directa" } as const;
+
+function entrySource(e: CaseEntry) {
+  if (e.kind === "call") return "112 · llamada";
+  if (e.kind === "order" || e.kind === "operator") return decidedBy[e.decidedBy ?? "rules"];
+  if (e.from.startsWith("radio ")) return `Dotación ${e.from.slice(6)} · radio`;
+  if (e.from.startsWith("hospital ")) return `Hospital ${e.from.slice(9)}`;
+  if (e.from === "reglas") return "Protocolo de triaje";
+  if (e.from === "sistema") return "Centro de coordinación";
+  return `Según el aviso ${e.from}`;
+}
+
+/** The engine's own case file, as steps: nothing here is inferred by the UI. */
+export function caseSteps(incident: IncidentFrame, seconds: number): TicketStep[] {
+  const steps: TicketStep[] = [];
+  incident.timeline.forEach((e, n) => {
+    const last = steps.at(-1);
+    // What a call changed is part of that call, not a line of its own.
+    if (e.kind === "update" && last?.kind === "call" && last.tick === e.tick && e.from === last.id.split(":call:")[1] && !e.flag) {
+      (last.facts ??= []).push(e.text);
+      return;
+    }
+    const step: TicketStep = { id: `${incident.id}:t:${n}`, tick: e.tick, title: e.text, source: entrySource(e), kind: "update", group: "update", focusId: e.focusId };
+    if (e.kind === "call") Object.assign(step, { id: `${incident.id}:t:${n}:call:${e.callId}`, title: `Aviso al 112 · ${e.callId}`, detail: e.text, kind: "call", group: "call" });
+    else if (e.kind === "order" || e.kind === "operator") Object.assign(step, {
+      kind: e.accepted ? "action" : "alert", group: "decision", applies: e.applies,
+      detail: e.accepted && e.etaTicks !== undefined ? `Orden aceptada · llegada estimada en ${elapsed(e.etaTicks, seconds)}` : undefined,
+      reason: e.reason ?? (e.kind === "operator" ? "Orden directa del operador, por encima del coordinador." : "Sin justificación registrada para esta orden."),
+    });
+    else if (e.kind === "radio") Object.assign(step, { kind: e.flag ?? "update", group: "radio" });
+    else if (e.kind === "closed") Object.assign(step, { kind: "resolved", title: "Ticket resuelto", detail: closureText(incident) });
+    else if (e.flag === "alert") Object.assign(step, e.text.startsWith("prioridad:")
+      ? { kind: "alert", title: "La incidencia es más grave de lo previsto", detail: `${e.text.slice(11)} · según la información registrada en este instante.` }
+      : { kind: "alert" });
+    steps.push(step);
+  });
+  return steps;
 }
 
 /** Rebuild from the visible past, keeping closed tickets after the engine drops their snapshots. */
@@ -147,6 +193,11 @@ export function buildTickets(records: TickRecord[], seconds: number): Ticket[] {
     ticket.crews = current?.frame.units.filter((u) => u.incidentId === ticket.id) ?? [];
     ticket.state = ticket.incident.status === "closed" ? "resolved"
       : started.has(ticket.id) || ticket.incident.located || ticket.crews.length ? "progress" : "triage";
+    // Runs that carry the engine's case file are shown from it; the reconstruction above is for older runs.
+    if (ticket.incident.timeline?.length) {
+      ticket.steps = caseSteps(ticket.incident, seconds);
+      if (ticket.incident.status !== "closed" && ticket.state === "triage" && ticket.incident.timeline.some((e) => e.action?.type === "dispatch" && e.accepted)) ticket.state = "progress";
+    }
     ticket.steps.sort((a, b) => a.tick - b.tick);
     ticket.updatedTick = Math.max(ticket.incident.updatedTick, ticket.steps.at(-1)?.tick ?? 0);
   }
