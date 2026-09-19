@@ -1,28 +1,7 @@
-import type { GraphData } from "../../gabriel/src/engine/types";
-import type {
-  AmbulanceFrame as EngineAmbulanceFrame,
-  RunMeta,
-  TickRecord as EngineTickRecord,
-} from "../../gabriel/src/engine/trace";
-export type { GraphData, RunMeta };
+import type { GraphData } from "../../../gabriel/src/engine/types";
+import type { AmbulanceFrame, RunMeta, TickRecord } from "./legacyRun";
+export type { GraphData, RunMeta, TickRecord, AmbulanceFrame };
 
-// Operational fields supplied by the data service. Optional so older recordings
-// remain readable; their absence must never be treated as proof of availability.
-export type AmbulanceFrame = EngineAmbulanceFrame & {
-  busyUntil?: number;
-  brokenUntil?: number | null;
-  /** Travel only; loading, unloading and repair are separate. */
-  etaTicks?: number | null;
-};
-export type TickRecord = Omit<EngineTickRecord, "frame"> & {
-  frame: Omit<EngineTickRecord["frame"], "ambulances" | "patients"> & {
-    ambulances: AmbulanceFrame[];
-    patients: (EngineTickRecord["frame"]["patients"][number] & {
-      spawnTick?: number;
-      pickupTick?: number | null;
-    })[];
-  };
-};
 export const elapsed = (tick: number, seconds: number) => {
   const n = Math.floor(tick * seconds);
   return [Math.floor(n / 3600), Math.floor(n / 60) % 60, n % 60]
@@ -44,9 +23,14 @@ export function unitStatus(a: AmbulanceFrame) {
   if (a.mission === "reposition") return "Reubicándose";
   return "Sin misión"; // An idle mission alone is not proof of availability.
 }
-export function assertRunRecords(records: TickRecord[]) {
+export function assertRunRecords(records: unknown): asserts records is TickRecord[] {
+  if (!Array.isArray(records)) throw new Error("Formato de registros de actividad no válido.");
   for (const r of records) {
+    if (r?.frame && Array.isArray(r.frame.units) && Array.isArray(r.frame.scenes) && Array.isArray(r.frame.incidents)) {
+      throw new Error("Esta ejecución utiliza el nuevo formato de unidades e incidentes, todavía no compatible con Control Center. Selecciona una ejecución del formato anterior.");
+    }
     if (
+      !r ||
       !Number.isInteger(r.tick) ||
       !r.frame ||
       !Array.isArray(r.frame.ambulances) ||

@@ -125,6 +125,16 @@ test("invalid activity records fail explicitly instead of silently showing an em
   );
 });
 
+test("new engine traces are rejected explicitly instead of being treated as legacy patients", () => {
+  assert.throws(() => assertRunRecords([{
+    tick: 0,
+    frame: { units: [], scenes: [], incidents: [], hospitals: [], closedEdges: [] },
+    events: [], calls: [], actions: [],
+  }]), /nuevo formato de unidades e incidentes/);
+  assert.throws(() => assertRunRecords(null), /Formato de registros/);
+  assert.throws(() => assertRunRecords([null]), /Formato de registros/);
+});
+
 const meta: RunMeta = {
   id: "situation-test", map: "test", seed: 1, ticks: 10, coordinator: "rules", model: null,
   config: { tickSeconds: 30, ambulances: 3, hospitals: 1, hospitalCapacity: 2, ambulanceSpeedFactor: 1, pickupTicks: 2, dropoffTicks: 3, ttlDecayInAmbulance: 0.5 }, hospitals: [{ id: "H1", name: "Hospital", node: 0, capacity: 2 }],

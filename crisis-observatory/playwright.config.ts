@@ -14,6 +14,7 @@ export default defineConfig({
   webServer: {
     command: `npm run dev -- --port ${port} --strictPort`,
     url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: true,
+    // An explicit port belongs to this worktree, never to another running checkout.
+    reuseExistingServer: !process.env.PLAYWRIGHT_PORT,
   },
 });

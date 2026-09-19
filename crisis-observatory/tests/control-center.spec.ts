@@ -1,50 +1,43 @@
 import { test, expect } from "@playwright/test";
-import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { RunMeta, TickRecord } from "../src/ui/runModel";
 let id: string, meta: RunMeta, records: TickRecord[];
-test.beforeAll(async ({ request }) => {
-  const output = execFileSync(
-    process.execPath,
-    [
-      resolve("node_modules/tsx/dist/cli.mjs"),
-      "src/run.ts",
-      "--coordinator",
-      "greedy",
-      "--seed",
-      "2",
-      "--ticks",
-      "120",
-    ],
-    { cwd: resolve("gabriel"), encoding: "utf8" },
-  );
-  id = output.match(/trace: runs\/(.+)/)![1].trim();
-  const data = await (await request.get(`/api/runs/${id}`)).json();
-  meta = data.meta;
-  records = data.ticks;
+test.beforeAll(() => {
+  const fixture = JSON.parse(readFileSync(resolve("tests/fixtures/legacy-run.json"), "utf8"));
+  meta = fixture.meta;
+  records = fixture.ticks;
+  id = meta.id;
 });
 async function open(page: any) {
   await page.goto("/");
   await page.getByLabel("Seleccionar ejecución").selectOption(id);
   await expect(
-    page.getByText("120 registros recibidos", { exact: true }),
+    page.getByText(`${records.length} registros recibidos`, { exact: true }),
   ).toBeVisible();
 }
 // Cartography is external; keep state, markers and interactions deterministic offline.
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/runs", (route) => route.fulfill({ json: [meta] }));
+  await page.route(`**/api/runs/${id}?*`, (route) => {
+    const from = Number(new URL(route.request().url()).searchParams.get("from"));
+    return route.fulfill({ json: { meta, ticks: records.slice(from) } });
+  });
   await page.route("https://tiles.openfreemap.org/styles/positron", (route) => route.fulfill({ json: { version: 8, sources: {}, layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f5f6" } }] } }));
 });
-test("real Gabriel run drives patients, hospital capacity, GPS, playback and historical state", async ({
+test("archived legacy run drives patients, hospital capacity, GPS, playback and historical state", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await open(page);
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.fonts.check("12px 'Geist Variable'"))).toBe(true);
   await expect(page.locator(".run-hospital")).toHaveCount(
     meta.hospitals.length,
     { timeout: 30000 },
   );
-  for (const i of [25, 80, 119, 0]) {
+  for (const i of [25, records.length - 2, records.length - 1, 0]) {
     await page
       .getByLabel("Navegar por el historial", { exact: true })
       .fill(String(i));
@@ -176,6 +169,17 @@ test("empty and incompatible executions are explicit, with no mock fallback", as
   await expect(page.locator('.situation-row[data-entity^="patient:"]')).toHaveCount(0);
 });
 
+test("new engine records show an explicit compatibility error while the run picker remains usable", async ({ page }) => {
+  await page.route(`**/api/runs/${meta.id}?*`, (route) => route.fulfill({
+    json: { meta, ticks: [{ tick: 0, frame: { units: [], scenes: [], incidents: [] }, events: [], calls: [], actions: [] }] },
+  }));
+  await page.goto("/");
+  await expect(page.getByRole("alert")).toContainText("nuevo formato de unidades e incidentes");
+  await expect(page.getByLabel("Seleccionar ejecución")).toBeEnabled();
+  await expect(page.getByTestId("available-units")).toHaveCount(0);
+  await expect(page.locator(".situation-row")).toHaveCount(0);
+});
+
 test("completion drains trailing records even if finished metadata races the file read", async ({
   page,
 }) => {
@@ -193,12 +197,12 @@ test("completion drains trailing records even if finished metadata races the fil
   });
   await page.goto("/");
   await expect(
-    page.getByText("120 registros recibidos", { exact: true }),
+    page.getByText(`${records.length} registros recibidos`, { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Ir al final", exact: true }).click();
   await expect(
     page.getByLabel("Navegar por el historial", { exact: true }),
-  ).toHaveValue("119");
+  ).toHaveValue(String(records.length - 1));
 });
 
 test("operational sidebar explores the map, keeps global context and respects the selected instant", async ({ page }) => {

@@ -9,8 +9,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --import tsx --test tests/run-model.test.ts",
     "test:ui": "playwright test",
-    "data:local": "cd gabriel && ../node_modules/.bin/tsx src/run.ts --coordinator greedy --seed 2 --ticks 120",
-    "test:gabriel": "vitest run gabriel/test/engine.test.ts"
+    "data:local": "cd ../gabriel && ../crisis-observatory/node_modules/.bin/tsx src/run.ts --coordinator greedy --seed 2 --ticks 120",
+    "test:gabriel": "vitest run ../gabriel/test/engine.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

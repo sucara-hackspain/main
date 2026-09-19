@@ -19,11 +19,11 @@ La aplicación tiene una sola UI, servida en `/`. `src/ui/map/` contiene el mapa
 | `GET /api/runs/:id?from=N` | Metadatos y registros desde el índice `N` | Lectura incremental cada 1,5 s |
 | `GET /api/graph/:map` | Callejero, geometrías, nodos y hospitales | Representación del mapa |
 
-Los tipos proceden de `gabriel/src/engine/types.ts` y `trace.ts`, mediante imports de tipos. `src/ui/runModel.ts` exporta los tipos usados por la UI y valida los registros recibidos. `src/ui/useRuns.ts` mantiene el polling y conserva el último snapshot válido ante un error.
+El contrato de ejecuciones anterior se declara en `src/ui/legacyRun.ts`, separado de los tipos nuevos del motor. El tipo del callejero se importa de `../gabriel/src/engine/types.ts`. `src/ui/runModel.ts` exporta los tipos usados por la UI y valida los registros recibidos; rechaza explícitamente el formato nuevo de unidades, escenas e incidentes, cuya integración está pendiente. `src/ui/useRuns.ts` mantiene el polling y conserva el último snapshot válido ante un error.
 
 Cambiar de ejecución reinicia mapa, reloj, selección y filtros. Pausar el historial afecta a la reproducción del navegador. Tras una ejecución finalizada o fallida se continúa leyendo hasta recibir una respuesta sin registros nuevos: el middleware lee los registros antes de los metadatos y puede observar el cierre entre ambas lecturas.
 
-La API funciona dentro del servidor de desarrollo. Para servir el build estático hay que proporcionar estos endpoints desde un servicio HTTP. `npm run data:local` genera datos de desarrollo con el runner local; la UI los consume mediante el mismo contrato.
+La API funciona dentro del servidor de desarrollo. Para servir el build estático hay que proporcionar estos endpoints desde un servicio HTTP. `npm run data:local` genera ahora el nuevo formato del motor, que se consulta en el visor de Gabriel. Esta UI sigue leyendo las grabaciones anteriores compatibles.
 
 ## Representación de los registros
 
@@ -42,6 +42,6 @@ Las justificaciones se muestran tal como aparecen en los registros. La UI no rec
 
 ## Verificación
 
-`npm test` comprueba la validación de registros, la clasificación de actividad, los estados de unidades y las geometrías de rutas. `npm run test:ui` genera datos locales y comprueba posiciones, capacidad, historial, expansión del detalle, polling, recuperación tras errores y layout móvil contra la API.
+`npm test` comprueba la validación de registros, la clasificación de actividad, los estados de unidades y las geometrías de rutas. `npm run test:ui` sirve una grabación archivada del formato soportado y comprueba posiciones, capacidad, historial, expansión del detalle, polling, recuperación tras errores y layout móvil a través del contrato incremental de la API. También comprueba el rechazo explícito del formato nuevo.
 
 Estas pruebas no hacen llamadas a modelos reales. Las pruebas de navegador sustituyen el estilo externo por un fondo local para comprobar interacciones sin conexión a las teselas. La aplicación normal carga la cartografía de OpenFreeMap.
