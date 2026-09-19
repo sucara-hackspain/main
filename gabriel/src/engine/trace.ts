@@ -162,7 +162,9 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
       })),
     incidents: belief.incidents
       .filter((i) => i.status === "open" || recent(i.updatedTick))
-      .map((i) => ({ ...structuredClone(i), line: incidentLine(i), cutOffIn: i.status === "open" ? cutOffIn(i.node) : null })),
+      // On a night with hundreds of incidents the case files are most of the record: a frame carries in full only the
+      // ones that changed just now; the rest keep their headline and the viewers take the file from when it last moved.
+      .map((i) => ({ ...(belief.incidents.length > 150 && unchanged(belief, i) ? { ...i, timeline: [], history: [], foci: [], callIds: [...i.callIds], victims: [...i.victims] } : structuredClone(i)), line: incidentLine(i), cutOffIn: i.status === "open" ? cutOffIn(i.node) : null })),
     sites: world.sites.map(({ people, ...site }) => ({
       ...site,
       people: people.length,
@@ -188,6 +190,17 @@ export function makeFrame(world: World, belief: Belief, graph: Graph): Frame {
   };
 }
 
+/** What an incident looked like the last time a frame carried it in full, per session. */
+const lastShape = new WeakMap<Belief, Map<string, string>>();
+function unchanged(belief: Belief, i: Incident): boolean {
+  const shapes = lastShape.get(belief) ?? new Map<string, string>();
+  lastShape.set(belief, shapes);
+  const shape = `${i.status}|${i.priority}|${i.node}|${i.located}|${i.unreachable}|${i.callIds.length}|${i.victims.map((v) => v.status).join("")}`;
+  const same = shapes.get(i.id) === shape;
+  shapes.set(i.id, shape);
+  return same;
+}
+
 export function makeTickRecord(result: TickResult, world: World, belief: Belief, graph: Graph, desk: LeadDesk | null = null): TickRecord {
   const calls = result.reports.flatMap((r) => (r.event.type === "call_received" ? [r.event.call] : []));
   const record: TickRecord = {
@@ -198,7 +211,8 @@ export function makeTickRecord(result: TickResult, world: World, belief: Belief,
         ? {
             reader: desk.reader.name,
             ...desk.stats,
-            fresh: desk.lastTick,
+            // On a loud night hundreds come in per tick: the record keeps every one that mattered and a sample of the rest.
+            fresh: [...desk.lastTick.filter((m) => m.relevant || m.leadId), ...desk.lastTick.filter((m) => !m.relevant && !m.leadId).slice(0, 40)],
             leads: desk.leads.map((l) => ({ id: l.id, tick: l.tick, node: l.node, street: l.street, summary: l.summary, credibility: l.credibility, urgency: l.urgency, messages: l.messages, registry: l.registry?.who ?? null, real: l.about !== null })),
           }
         : undefined,

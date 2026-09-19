@@ -104,6 +104,11 @@ export interface ScenarioSpec {
   /** How loud the citizen channel is: 1 is a bad night, 5 is everyone posting at once. */
   volume?: number;
   buried?: number;
+  /** A longer night than the training ones: ticks of new emergencies, and total ticks. */
+  eventTicks?: number;
+  ticks?: number;
+  /** Ticks at which a bridge goes: every street within 140 m of a crossing between the water and the city closes at once. */
+  bridges?: number[];
 }
 
 const SITE_NAMES: Record<SiteKind, string[]> = {
@@ -144,6 +149,8 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
   const breakdownRng = root.fork();
   const roadUnits = world.units.filter((u) => u.kind === "ambulance" || u.kind === "fire");
 
+  const EVENTS = spec.eventTicks ?? EVENT_TICKS;
+  const LENGTH = spec.ticks ?? TICKS;
   const script: Scenario["script"] = [];
   const siteRng = root.fork();
   for (let n = 0; n < (spec.sites ?? 0); n++) {
@@ -160,12 +167,23 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
   const gaugeRng = root.fork();
   const gauges = floods.filter((f) => f.tick > 0);
 
-  for (let tick = 0; tick < TICKS; tick++) {
+  const bridgeRng = new Rng(spec.seed + 7919);
+  for (let tick = 0; tick < LENGTH; tick++) {
     const actions = master.act(world, graph, masterRng);
+    if (spec.bridges?.includes(tick)) {
+      const flood = floods[spec.bridges.indexOf(tick) % floods.length];
+      const source = graph.nearestNode(flood.lon, flood.lat);
+      const crossing = bridgeRng.pick(graph.nodesWithin(source, 1500).filter((node) => graph.distanceM(source, node) > 900));
+      const around = new Set(graph.nodesWithin(crossing, 140));
+      graph.data.edges.forEach((e, edge) => {
+        if (around.has(e.a) && around.has(e.b)) actions.push({ type: "close_road", edge });
+      });
+      actions.push({ type: "narrate", text: `Cae un puente junto a ${graph.streetAt(crossing) ?? "el cauce"}: el barrio queda partido en dos.` });
+    }
     if (tick === spec.blackoutTick) for (const f of floods) actions.push({ type: "blackout", node: graph.nearestNode(f.lon, f.lat), radiusM: 1500, ticks: TICKS });
     // A catastrophe is many emergencies at once, not one after another: more rolls of the same dice per tick.
     for (let extra = 1; extra < (spec.intensity ?? 1); extra++) actions.push(...master.act(world, graph, masterRng).filter((a) => a.type === "spawn_scene"));
-    for (let i = actions.length - 1; i >= 0; i--) if (tick >= EVENT_TICKS && actions[i].type === "spawn_scene") actions.splice(i, 1);
+    for (let i = actions.length - 1; i >= 0; i--) if (tick >= EVENTS && actions[i].type === "spawn_scene") actions.splice(i, 1);
     // The channel fills for a while before it spills, and the forecast of when sharpens as it gets closer.
     for (const f of gauges) {
       if (tick % 3 !== 0 || tick > f.tick + 6) continue;
@@ -173,7 +191,7 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
       actions.push({ type: "gauge_reading", name: f.name, node: graph.nearestNode(f.lon, f.lat), level: Number(Math.min(1.3, 1 - left * 0.025).toFixed(2)), overflowTick: f.tick + Math.round(gaugeRng.range(-1, 1) * (left / 5)), radiusM: f.radiusM, growthM: f.growthM });
     }
     for (const unit of roadUnits) {
-      if (tick < EVENT_TICKS && breakdownRng.chance(P_BREAKDOWN)) actions.push({ type: "puncture", unitId: unit.id, ticks: breakdownRng.int(10, 25) });
+      if (tick < EVENTS && breakdownRng.chance(P_BREAKDOWN)) actions.push({ type: "puncture", unitId: unit.id, ticks: breakdownRng.int(10, 25) });
     }
     for (const action of actions) {
       applyMasterAction(world, graph, action);
@@ -190,8 +208,8 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
     split: spec.split,
     title: spec.title,
     seed: spec.seed,
-    eventTicks: EVENT_TICKS,
-    ticks: TICKS,
+    eventTicks: EVENTS,
+    ticks: LENGTH,
     config: spec.config ?? {},
     script,
     volume: spec.volume,
@@ -251,6 +269,16 @@ export const COLLECTION: ScenarioSpec[] = [
   { id: "H2", family: "H · Apagón y redes", split: "train", title: "La Punta a oscuras", seed: 802, buried: 0.6, floods: [LA_PUNTA], blackoutTick: 5, volume: 3, dana: SILENT },
   { id: "H3", family: "H · Apagón y redes", split: "validation", title: "Malilla a oscuras", seed: 803, buried: 0.6, floods: [MALILLA], blackoutTick: 4, volume: 3, dana: SILENT },
   { id: "H4", family: "H · Apagón y redes", split: "test", title: "Natzaret a oscuras", seed: 804, buried: 0.6, floods: [NATZARET], blackoutTick: 2, volume: 3, dana: SILENT },
+
+  // The showcase: never trained on. Modelled on the evening of 29 October 2024 south of Valencia: the channel fills for
+  // a quarter of an hour before it spills, three fronts open one after another, the power and the phones go, two
+  // crossings fall, care homes, schools and car parks stand in the water's path, and the whole city is posting.
+  {
+    id: "X1", family: "X · 29 de octubre", split: "test", title: "Tres frentes, apagón, puentes caídos, 14 centros en el camino del agua", seed: 2910,
+    floods: [LA_TORRE, SANT_ISIDRE, LA_PUNTA], floodTicks: [14, 24, 38], sites: 14, blackoutTick: 18, bridges: [22, 46], buried: 0.6, volume: 5, intensity: 8,
+    eventTicks: 90, ticks: 150, dana: { pSilent: 0.3, pSilentFlood: 0.45, pSilentInWater: 0.8 },
+    config: { ambulances: 22, fireUnits: 10, rescueUnits: 8, helicopters: 3, drones: 6, hospitals: 8, hospitalCapacity: 40, outboundLines: 8 },
+  },
 
   { id: "E1", family: "E · Dos focos y hospitales saturados", split: "test", title: "La Torre y Natzaret a la vez", seed: 501, floods: [LA_TORRE, NATZARET], config: SATURATED },
   { id: "E2", family: "E · Dos focos y hospitales saturados", split: "test", title: "Sant Isidre y La Punta a la vez", seed: 502, floods: [SANT_ISIDRE, LA_PUNTA], config: SATURATED },

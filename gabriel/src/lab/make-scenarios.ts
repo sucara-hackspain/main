@@ -7,7 +7,8 @@ import { COLLECTION, generateScenario, SCENARIO_DIR } from "./scenario";
 const graph = new Graph(JSON.parse(readFileSync("data/valencia.json", "utf8")) as GraphData);
 mkdirSync(SCENARIO_DIR, { recursive: true });
 
-for (const spec of COLLECTION) {
+const only = process.argv.slice(2);
+for (const spec of COLLECTION.filter((c) => only.length === 0 || only.includes(c.id))) {
   const scenario = generateScenario(spec, graph);
   writeFileSync(`${SCENARIO_DIR}/${scenario.id}.json`, JSON.stringify(scenario));
   const greedy = await play(scenario, { kind: "greedy" }, graph);
