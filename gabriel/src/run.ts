@@ -17,6 +17,7 @@ import { MemoryStore } from "./memory/store";
 import { HappyRobotCoordinator } from "./coordinators/happyrobot";
 import { happyRobotCallWriter, HappyRobotMaster } from "./masters/happyrobot";
 import { HappyRobotPhoneLine } from "./phone/happyrobot";
+import { startPhoneWebhook } from "./phone/webhook";
 import {
   clock,
   describe,
@@ -28,6 +29,7 @@ import {
   Simulation,
   type Coordinator,
   type GraphData,
+  type PhoneCall,
   type RunMeta,
   type TickRecord,
 } from "./engine";
@@ -46,6 +48,8 @@ const { values } = parseArgs({
     calls: { type: "string", default: "engine" },
     /** Listen to the real 112 line (the HappyRobot voice workflow): whoever phones it puts a call into this session. */
     phone: { type: "boolean", default: false },
+    /** Port for the 112 workflow's POST node to reach (through a tunnel). 0 = only poll the platform. */
+    "phone-port": { type: "string", default: "8112" },
     /** Decide without the doctrine (to measure what the memory is worth). */
     "no-memory": { type: "boolean", default: false },
     /** Skip the end-of-session dream; `--dream` forces it for a greedy run. */
@@ -126,18 +130,22 @@ saveMeta();
 writeFileSync(`${dir}/ticks.jsonl`, "");
 log(`run ${id}: ${meta.coordinator}${meta.model ? ` (${meta.model})` : ""}, seed ${seed}, ${ticks} ticks`);
 
-const phoneLine = values.phone
-  ? new HappyRobotPhoneLine({
-      onCall: (call, runId) => {
-        log(`TELÉFONO 112: entra una llamada real (${runId}) · ${call.street ?? "sin calle"} · ${call.text}`);
-        appendFileSync(`${dir}/phone.jsonl`, JSON.stringify({ at: new Date().toISOString(), runId, call }) + "\n");
-        sim.phone(call);
-      },
-      onError: (error) => log(`TELÉFONO 112: no se pudo consultar la línea [${error}]`),
-    })
-  : null;
+// A real call can arrive twice: posted by the workflow the moment it ends, and seen again when polling its runs.
+const heard = new Set<string>();
+const takeCall = (call: PhoneCall, via: string) => {
+  const key = `${call.street}|${call.text}`;
+  if (heard.has(key)) return;
+  heard.add(key);
+  log(`TELÉFONO 112: entra una llamada real (${via}) · ${call.street ?? "sin calle"} · ${call.text}`);
+  appendFileSync(`${dir}/phone.jsonl`, JSON.stringify({ at: new Date().toISOString(), via, call }) + "\n");
+  sim.phone(call);
+};
+const phoneError = (error: string) => log(`TELÉFONO 112: ${error}`);
+const phoneLine = values.phone ? new HappyRobotPhoneLine({ onCall: (call, runId) => takeCall(call, `sondeo ${runId}`), onError: phoneError }) : null;
+const phonePort = Number(values["phone-port"]);
+const phoneHook = values.phone && phonePort > 0 ? startPhoneWebhook({ port: phonePort, onCall: (call) => takeCall(call, "webhook"), onError: phoneError }) : null;
 phoneLine?.start();
-if (phoneLine) log("TELÉFONO 112: línea abierta, las llamadas reales entran en esta sesión");
+if (phoneLine) log(`TELÉFONO 112: línea abierta${phoneHook ? `, webhook en http://localhost:${phonePort}/phone` : ""}`);
 
 let llmCalls = 0;
 let llmCost = 0;
@@ -170,6 +178,7 @@ try {
 }
 
 phoneLine?.stop();
+phoneHook?.close();
 meta.summary = sim.summary();
 saveMeta();
 const s = meta.summary;
