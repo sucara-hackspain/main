@@ -552,3 +552,40 @@ describe("reconocimiento", () => {
     expect(s.world.log.some((e) => e.type === "area_surveyed")).toBe(true);
   });
 });
+
+describe("agentic master", () => {
+  it("turns the master's wishes into what the engine can do, and drops what the map does not have", async () => {
+    const { buildMasterTurn, readMasterOutput, toMasterActions } = await import("../src/masters/protocol");
+    const graph = grid(9);
+    const world = createWorld(graph, { ...DEFAULT_CONFIG, ...CONFIG });
+    const turn = buildMasterTurn(world, graph, new Rng(3), 1, 10, "test");
+    expect(JSON.parse(turn.payload.places).length).toBeGreaterThan(4);
+    expect(turn.payload.places).not.toContain('"node"');
+
+    // As the platform hands it back: the reply under a couple of envelopes.
+    const output = readMasterOutput({ data: { response: {
+      narration: "Empieza a llover con fuerza.",
+      scenes: [{ place: 0, kind: "traffic", victims: 2, severity: "critico", trapped: true, silent: false }, { place: 99, kind: "fall", victims: 1, severity: "leve", trapped: false, silent: false }],
+      flood: [{ source: 0, strength: "rapida" }], cut: ["Carrer que no existe"], puncture: ["A1"],
+    } } });
+    const { actions, dropped } = toMasterActions(output, turn, world, graph, new Rng(3));
+    expect(actions.map((a) => a.type)).toEqual(["narrate", "start_flood", "spawn_scene", "puncture"]);
+    expect(dropped).toEqual(["scene at place 99 (fall)", 'street "Carrer que no existe"']);
+    const scene = actions.find((a) => a.type === "spawn_scene")!;
+    expect(scene).toMatchObject({ kind: "traffic", node: turn.places[0].node, silent: false });
+    if (scene.type === "spawn_scene") {
+      expect(scene.victims).toHaveLength(2);
+      expect(scene.victims[0]).toMatchObject({ injury: "hemorrhage", trapped: true });
+    }
+  });
+
+  it("lets an agent word the 112 calls without touching what they say", async () => {
+    const s = new Simulation({
+      graph: grid(5), master: scripted({ 0: [scene(12, [victim("hemorrhage", 90)])] }), coordinator: new GreedyCoordinator(),
+      observer: new CallObserver({ callers: ["family"] }), config: CONFIG, callWriter: async (call) => `reescrita ${call.id}`,
+    });
+    await s.run(10);
+    expect(s.belief.calls[0]).toMatchObject({ text: "reescrita L1", node: 12 });
+    expect(s.belief.incidents[0].timeline[0]).toMatchObject({ kind: "call", text: "reescrita L1" });
+  });
+});

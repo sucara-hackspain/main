@@ -5,7 +5,7 @@ import type { Master } from "./master";
 import { createBelief, recordOrders, updateBelief } from "./incidents";
 import { CallObserver, type Observer } from "./observer";
 import { Rng } from "./rng";
-import type { Action, Belief, MasterAction, Report, SimConfig, World, WorldEvent } from "./types";
+import type { Action, Belief, Call, MasterAction, Report, SimConfig, World, WorldEvent } from "./types";
 
 export interface SimulationOptions {
   graph: Graph;
@@ -14,6 +14,8 @@ export interface SimulationOptions {
   seed?: number;
   config?: Partial<SimConfig>;
   observer?: Observer;
+  /** Puts a 112 call into words. It gets the call as the operator filed it, nothing more; null keeps the engine's wording. */
+  callWriter?: (call: Call) => Promise<string | null>;
 }
 
 export interface TickResult {
@@ -40,6 +42,7 @@ export class Simulation {
   private readonly observerRng: Rng;
   private observedUpTo = 0;
   private nextReportId = 1;
+  private readonly callWriter?: (call: Call) => Promise<string | null>;
   private injected: MasterAction[] = [];
   private orders: Action[] = [];
 
@@ -51,6 +54,7 @@ export class Simulation {
     this.master = options.master;
     this.coordinator = options.coordinator;
     this.observer = options.observer ?? new CallObserver();
+    this.callWriter = options.callWriter;
     this.world = createWorld(options.graph, { ...DEFAULT_CONFIG, ...options.config });
     this.belief = createBelief(this.world);
   }
@@ -80,6 +84,11 @@ export class Simulation {
     const reports = this.observer
       .observe(fresh, world, graph, this.observerRng)
       .map((report) => ({ ...report, id: this.nextReportId++ }));
+    if (this.callWriter) {
+      const calls = reports.flatMap((r) => (r.event.type === "call_received" ? [r.event.call] : []));
+      const texts = await Promise.all(calls.map((call) => this.callWriter!(call).catch(() => null)));
+      calls.forEach((call, n) => (call.text = texts[n] ?? call.text));
+    }
     // What a crew is working on may turn out to belong to another incident: dispatch relabels it.
     for (const { unitId, incidentId } of updateBelief(this.belief, reports, world, graph)) {
       for (const fleet of [world.units, this.belief.units]) fleet.find((u) => u.id === unitId)!.incidentId = incidentId;

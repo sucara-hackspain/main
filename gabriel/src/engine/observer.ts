@@ -16,6 +16,7 @@ export interface Observer {
 const SOURCE: Record<WorldEvent["type"], ReportSource | null> = {
   // Nobody announces a scene or a death in the street: calls do, or the crew that finds them.
   scene_created: null,
+  master_narration: null,
   victim_died: null,
   scene_assessed: "ambulance",
   scene_not_found: "ambulance",

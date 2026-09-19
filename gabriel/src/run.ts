@@ -15,6 +15,7 @@ import { pickDreamers } from "./memory/dreamers";
 import { evaluate } from "./memory/evaluate";
 import { MemoryStore } from "./memory/store";
 import { HappyRobotCoordinator } from "./coordinators/happyrobot";
+import { happyRobotCallWriter, HappyRobotMaster } from "./masters/happyrobot";
 import {
   clock,
   describe,
@@ -38,6 +39,10 @@ const { values } = parseArgs({
     ticks: { type: "string", default: "120" },
     ambulances: { type: "string", default: "5" },
     coordinator: { type: "string", default: "claude" },
+    /** Who decides what happens to the city: the scripted night of the scenario, or the agent in the HappyRobot `master` workflow. */
+    master: { type: "string", default: "scripted" },
+    /** Who words the 112 calls: the engine's templates, or the HappyRobot `sim-112` workflow (facts stay the engine's). */
+    calls: { type: "string", default: "engine" },
     /** Decide without the doctrine (to measure what the memory is worth). */
     "no-memory": { type: "boolean", default: false },
     /** Skip the end-of-session dream; `--dream` forces it for a greedy run. */
@@ -52,7 +57,7 @@ const seed = Number(values.seed);
 const ticks = Number(values.ticks);
 const tickMs = Number(values["tick-ms"]);
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-const id = `${stamp}-${values.scenario}-${values.coordinator}-s${seed}`;
+const id = `${stamp}-${values.scenario}-${values.coordinator}${values.master === "happyrobot" ? "-hrmaster" : ""}-s${seed}`;
 const dir = `runs/${id}`;
 mkdirSync(dir, { recursive: true });
 
@@ -74,11 +79,28 @@ const coordinator: Coordinator =
       ? new HappyRobotCoordinator({ onTrace, memory })
       : new ClaudeCliCoordinator({ model: values.model, onTrace, memory });
 
+const agenticMaster = values.master === "happyrobot"
+  ? new HappyRobotMaster({
+      gameId: id,
+      onTrace: (trace) => {
+        appendFileSync(`${dir}/master.jsonl`, JSON.stringify(trace) + "\n");
+        log(`MASTER turno ${trace.turn} (${(trace.ms / 1000).toFixed(1)} s) ${trace.error ? `SIN RESPUESTA [${trace.error}]` : `${trace.actions.length} acciones`}${trace.dropped.length ? ` · descartado: ${trace.dropped.join(", ")}` : ""}`);
+      },
+    })
+  : null;
+const callWriter = values.calls === "happyrobot"
+  ? happyRobotCallWriter({
+      context: () => agenticMaster?.narration ?? "",
+      onTrace: (trace) => appendFileSync(`${dir}/calls.jsonl`, JSON.stringify(trace) + "\n"),
+    })
+  : undefined;
+
 const graph = new Graph(JSON.parse(readFileSync(`data/${values.map}.json`, "utf8")) as GraphData);
 const sim = new Simulation({
   graph,
   seed,
-  master: values.scenario === "random" ? new RandomMaster() : new DanaMaster(),
+  master: agenticMaster ?? (values.scenario === "random" ? new RandomMaster() : new DanaMaster()),
+  callWriter,
   coordinator,
   config: { ambulances: Number(values.ambulances) },
 });

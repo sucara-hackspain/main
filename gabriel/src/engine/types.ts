@@ -219,7 +219,9 @@ export type MasterAction =
   | { type: "start_flood"; name: string; node: number; radiusM: number; growthM: number; maxRadiusM: number }
   | { type: "close_road"; edge: number }
   | { type: "open_road"; edge: number }
-  | { type: "puncture"; unitId: string; ticks: number };
+  | { type: "puncture"; unitId: string; ticks: number }
+  /** The master tells, in a sentence, what it is doing to the city. For whoever is watching; the coordinator never hears it. */
+  | { type: "narrate"; text: string };
 
 // ---------- What the coordinator can order ----------
 
@@ -250,6 +252,7 @@ export interface AssessedVictim {
 }
 
 type EventBody =
+  | { type: "master_narration"; text: string }
   | { type: "scene_created"; sceneId: string; kind: SceneKind; node: number; victims: number }
   /** `inSight`: not the scene the crew is working, but something else it can see from there. */
   | { type: "scene_assessed"; unitId: string; incidentId: string | null; sceneId: string; kind: SceneKind; node: number; inSight: boolean; victims: AssessedVictim[] }

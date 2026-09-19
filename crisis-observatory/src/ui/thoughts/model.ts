@@ -32,6 +32,8 @@ export function eventText(e: ObservedEvent, seconds: number): string {
       return `Llamada ${e.call.id} · ${e.call.street ?? "ubicación aproximada"}`;
     case "flood_bulletin":
       return `Parte oficial del agua · muestra la situación de hace ${elapsed(e.tick - e.asOfTick, seconds)}`;
+    case "master_narration":
+      return `Máster · ${e.text}`;
     case "scene_created":
       return `Ocurre · ${sceneLabel(e.kind)} · ${count(e.victims, "víctima", "víctimas")}`;
     case "scene_assessed":

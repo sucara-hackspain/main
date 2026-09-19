@@ -25,6 +25,8 @@ export function describe(e: ObservedEvent): string {
   switch (e.type) {
     case "call_received":
       return `112 ${e.call.id} — ${e.call.text}`;
+    case "master_narration":
+      return `[MASTER] ${e.text}`;
     case "scene_created":
       return `[REAL] ${e.sceneId}: ${SCENES[e.kind].label} en nodo ${e.node}, ${e.victims} víctima(s)`;
     case "scene_assessed":

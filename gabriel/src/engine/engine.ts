@@ -262,6 +262,9 @@ export function applyMasterAction(world: World, graph: Graph, action: MasterActi
       emit(world, { type: "road_opened", edge: action.edge, name: graph.edgeName(action.edge) });
       return;
     }
+    case "narrate":
+      emit(world, { type: "master_narration", text: action.text });
+      return;
     case "puncture": {
       const amb = world.units.find((a) => a.id === action.unitId);
       if (!amb || amb.brokenUntil !== null) return;
