@@ -57,6 +57,7 @@ export class HappyRobotPhoneLine {
   private readonly failures = new Map<string, number>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private busy = false;
+  private failing = false;
 
   constructor(private readonly options: PhoneLineOptions) {
     const apiKey = options.apiKey ?? process.env.HAPPYROBOT_API_KEY;
@@ -68,7 +69,8 @@ export class HappyRobotPhoneLine {
     this.client = new HappyRobotClient({ apiKey, cluster: options.cluster ?? (process.env.HAPPYROBOT_CLUSTER as "us" | "eu") ?? "eu" });
     this.workflowId = workflowId;
     this.nodeId = nodeId;
-    this.pollMs = options.pollMs ?? 4000;
+    // The workflow posts to the session when a call ends; polling is the safety net, and need not hammer the platform.
+    this.pollMs = options.pollMs ?? 10_000;
     this.since = Date.now() - (options.sinceMinutes ?? 0) * 60_000;
   }
 
@@ -111,8 +113,12 @@ export class HappyRobotPhoneLine {
           if (tries === 5) this.options.onError?.(`la llamada ${run.id} no se pudo leer: ${err instanceof Error ? err.message : err}`);
         }
       }
+      if (this.failing) this.options.onError?.("la línea vuelve a responder");
+      this.failing = false;
     } catch (err) {
-      this.options.onError?.(err instanceof Error ? err.message : String(err));
+      // Said once per outage, not once per look.
+      if (!this.failing) this.options.onError?.(`no se puede consultar la plataforma (${err instanceof Error ? err.message : err}); las llamadas siguen entrando por el webhook`);
+      this.failing = true;
     } finally {
       this.busy = false;
     }
