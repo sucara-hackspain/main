@@ -1,6 +1,6 @@
 # Alerta · Control Center
 
-> **Formato soportado.** Control Center lee las partidas que escribe `../backend/` en `backend/runs/` (`frame.units`, `scenes`, `incidents`; eventos `call_*`, `scene_*`, `victim_*`, `unit_*`). El modelo de datos vive en `src/engine/` y `src/ui/engineTrace.ts` reúne las etiquetas y los helpers compartidos.
+> **Formato soportado.** Control Center lee el modelo de unidades e incidentes del motor de `../gabriel/` (`frame.units`, `scenes`, `incidents`, `knownWater`, `knownClosedEdges`; eventos `call_*`, `scene_*`, `victim_*`, `unit_*`, `flood_*`). `src/ui/engineTrace.ts` reexporta sus tipos y reúne las etiquetas y los helpers compartidos. Las grabaciones del contrato anterior (`frame.ambulances`, `patients`) se rechazan con un mensaje explícito.
 
 Panel de gestión con React + TypeScript + Vite. La UI se sirve en `/` y muestra mapa, tickets de incidencias, flota, hospitales, intervenciones y línea temporal.
 
@@ -10,7 +10,8 @@ Panel de gestión con React + TypeScript + Vite. La UI se sirve en `/` y muestra
 | --- | --- |
 | `src/ui/` | Frontend: Control Center, mapa, tickets de incidencias e intervenciones. |
 | `server/` | API de lectura que sirve las ejecuciones y el callejero mediante Vite. |
-| `../backend/` | El simulador: CLI, agentes 112 de HappyRobot y webhook de llamadas reales. Escribe cada turno en `backend/runs/<partida>/`. |
+| `../gabriel/` | Motor, coordinadores y su propio visor. Escribe las ejecuciones en `gabriel/runs/`. |
+| `../backend/` | Módulo independiente con CLI y estado en `state.json`. Esta UI lee las ejecuciones de `gabriel/`. |
 
 ## Arranque
 
@@ -21,9 +22,13 @@ npm install
 npm run dev         # http://localhost:5173/
 ```
 
-La aplicación lee las partidas de `backend/runs/`: en `backend/`, `npm run sim -- init -n 4` crea una y cada `npm run sim -- step` añade un registro que la UI sigue en vivo. Si todavía no hay ninguna, muestra el estado de espera. Las nuevas partidas aparecen automáticamente en el selector.
+La aplicación lee las ejecuciones de `gabriel/runs/`. Si todavía no hay ninguna, muestra el estado de espera. Las nuevas ejecuciones aparecen automáticamente en el selector; la selección se conserva mientras se revisa una ejecución.
+
+`npm run data:local` ejecuta el motor con el coordinador por reglas (semilla 2, 120 registros) y escribe la ejecución en `../gabriel/runs/`. El generador de pruebas local usa únicamente el motor, sin requerir el SDK de HappyRobot ni inicializar la memoria persistente del agente. Las grabaciones del formato anterior que queden en esa carpeta muestran el error de formato; el selector sigue disponible para elegir otra.
 
 «Seguir ejecución» lleva la aplicación al último registro recibido. Play/pause controla la reproducción en el navegador; el proceso que escribe los datos continúa en la terminal. Las posiciones se actualizan con cada snapshot del motor.
+
+El runner admite `--coordinator claude --model haiku`, con Claude CLI instalado y autenticado. La aplicación distingue IA, reglas y respaldo por reglas, y muestra las justificaciones que figuran en la ejecución.
 
 La pestaña **Incidencias**, la primera y la que se abre por defecto, muestra una tabla independiente del mapa, con búsqueda por identificador, calle, llamada o unidad y filtros **Triage**, **Progreso** y **Resuelto**. Triage reúne los avisos sin intervención iniciada; Progreso indica una asignación, una orden de envío aceptada o una valoración en el lugar; Resuelto corresponde al cierre del motor, con su motivo (atención finalizada, aviso agrupado o nadie en el lugar). Un cierre de atención en el lugar puede preceder al ingreso en hospital.
 
@@ -51,7 +56,7 @@ Los estilos se reparten por responsabilidad:
 - `src/ui/session.css`: selector de ejecución, estado de conexión, avisos y flota.
 - `src/ui/map/map.css`, `src/ui/situation/situation.css`, `src/ui/tickets/tickets.css`, `src/ui/audit/audit.css`, `src/ui/interventions/interventions.css` y `src/ui/interventions/room.css`: estilos propios de cada área.
 
-Los cambios del Control Center viven en este paquete.
+Los cambios del Control Center viven en este paquete. El visor de `../gabriel/ui/` es una aplicación independiente.
 
 ## Intervenciones del operador
 

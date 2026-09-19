@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import { runsApi } from "./server/runsApi";
 
 // Serve activity records through /api/runs and /api/graph.
-// The simulator runs in ../backend (npm run sim), outside the browser.
+// The engine runs in gabriel/src/run.ts, outside the browser.
 export default defineConfig({
   optimizeDeps: { include: ["@huggingface/transformers"] },
   plugins: [react(), runsApi()],
