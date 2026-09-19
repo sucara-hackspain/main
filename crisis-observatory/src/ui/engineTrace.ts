@@ -1,6 +1,8 @@
 import type {
   Action,
   Call,
+  CaseEntry,
+  Focus,
   GraphData,
   LonLat,
   ObservedEvent,
@@ -24,6 +26,8 @@ import { INJURIES, SCENES } from "../../../gabriel/src/engine/victims";
 export type {
   Action,
   Call,
+  CaseEntry,
+  Focus,
   Frame,
   GraphData,
   IncidentFrame,

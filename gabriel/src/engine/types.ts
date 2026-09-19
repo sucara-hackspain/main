@@ -355,6 +355,8 @@ export interface CaseEntry {
    */
   kind: "call" | "update" | "radio" | "order" | "operator" | "link" | "closed";
   text: string;
+  /** assessment = a crew says what is there. alert = bad news: no way in, a breakdown, nobody there, it is worse than thought, an order refused. */
+  flag?: "assessment" | "alert";
   /** Call id, `radio A2`, `hospital H3`, `reglas`, `agente`, `operador`... */
   from: string;
   focusId?: string;

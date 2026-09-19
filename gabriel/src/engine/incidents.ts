@@ -81,7 +81,7 @@ export function updateBelief(belief: Belief, reports: Report[], world: Readonly<
         radio(incident, event);
         if (!incident.unreachable) {
           incident.unreachable = true;
-          note(incident, tick, "acceso", "sin ruta por carretera: necesita rescate acuático o aéreo", `radio ${event.unitId}`);
+          note(incident, tick, "acceso", "sin ruta por carretera: necesita rescate acuático o aéreo", `radio ${event.unitId}`, undefined, "alert");
         }
         break;
       }
@@ -90,7 +90,7 @@ export function updateBelief(belief: Belief, reports: Report[], world: Readonly<
           const incident = resolve(belief, event.action.incidentId);
           if (incident && !incident.unreachable) {
             incident.unreachable = true;
-            note(incident, tick, "acceso", "sin ruta conocida por carretera", "sistema");
+            note(incident, tick, "acceso", "sin ruta conocida por carretera", "sistema", undefined, "alert");
           }
         }
         break;
@@ -170,6 +170,7 @@ export function recordOrders(belief: Belief, tick: number, decision: Decision | 
       unitId: action.unitId,
       action,
       accepted,
+      flag: accepted ? undefined : "alert",
       etaTicks: outcome?.type === "action_applied" ? outcome.etaTicks : undefined,
       text: accepted ? what : `Orden rechazada (${outcome?.type === "action_rejected" ? outcome.reason : "sin respuesta"}): ${what}`,
       reason: byOperator ? undefined : decision?.reasons?.[n] || undefined,
@@ -187,12 +188,13 @@ function log(incident: Incident, entry: CaseEntry): void {
 /** A crew's or hospital's report, in the incident's file as it was said. */
 function radio(incident: Incident, event: WorldEvent & { unitId: string }, focusId?: string): void {
   const from = event.type === "victim_delivered" ? `hospital ${event.hospitalId}` : `radio ${event.unitId}`;
-  log(incident, { tick: event.tick, kind: "radio", from, unitId: event.unitId, focusId, text: describe(event) });
+  const alert = event.type === "road_blocked_found" || event.type === "unit_broken" || event.type === "unit_stranded" || event.type === "scene_not_found";
+  log(incident, { tick: event.tick, kind: "radio", flag: alert ? "alert" : undefined, from, unitId: event.unitId, focusId, text: describe(event) });
 }
 
-function note(incident: Incident, tick: number, field: string, value: string, from: string, focusId?: string): void {
+function note(incident: Incident, tick: number, field: string, value: string, from: string, focusId?: string, flag?: CaseEntry["flag"]): void {
   incident.history.push({ tick, field, value, from });
-  log(incident, { tick, kind: "update", from, focusId, text: `${field}: ${value}` });
+  log(incident, { tick, kind: "update", flag, from, focusId, text: `${field}: ${value}` });
 }
 
 const STATUS: Record<AssessedVictim["status"], string> = { waiting: "esperando", in_ambulance: "recogido", delivered: "en hospital", treated: "atendido", dead: "fallecido" };
@@ -390,7 +392,7 @@ function assess(belief: Belief, event: WorldEvent & { type: "scene_assessed" }, 
   // Every crew that turns up says what it sees: only what is news goes in the file.
   if (victims !== focus.lastReport) {
     incident.history.push({ tick, field: "víctimas", value: victims, from });
-    log(incident, { tick, kind: "radio", from, unitId, focusId: focus.id, text: `${unitId} ${own ? "en el lugar" : "ve desde allí"} · ${SCENES[event.kind].label}: ${victims}` });
+    log(incident, { tick, kind: "radio", flag: "assessment", from, unitId, focusId: focus.id, text: `${unitId} ${own ? "en el lugar" : "ve desde allí"} · ${SCENES[event.kind].label}: ${victims}` });
   }
   focus.lastReport = victims;
   focus.victims = structuredClone(event.victims);
@@ -480,7 +482,7 @@ function refresh(incident: Incident, tick: number): void {
   }
   const before = incident.priority;
   incident.priority = deducePriority(incident);
-  if (incident.priority !== before) note(incident, tick, "prioridad", `P${before} → P${incident.priority}`, "reglas");
+  if (incident.priority !== before) note(incident, tick, "prioridad", `P${before} → P${incident.priority}`, "reglas", undefined, incident.priority < before ? "alert" : undefined);
   if (incident.status === "open" && todo.length === 0 && incident.foci.length > 0) close(incident, confirmed.length > 0 ? "resolved" : "not_found", tick);
 }
 
