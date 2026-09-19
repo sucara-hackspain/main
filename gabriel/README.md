@@ -46,6 +46,24 @@ A trapped victim (car, rubble) cannot be loaded by anyone until firefighters or 
 
 Emergency vehicles may drive against one-way streets (3x slower): otherwise a flooded exit traps them on a one-way carriageway for good.
 
+## Memory: doctrine, hindsight and the dream
+
+The agent (HappyRobot or Claude; never the greedy baseline) decides with a long-term memory that sessions reshape.
+
+1. **Doctrine in, citations out.** `memory/memory.db` (SQLite, built into Node) holds the memory as a graph. Its live rules - principles (D), heuristics (H), mistakes to avoid (A) - are rendered into ~30 lines and placed before every briefing. Each order comes back with `applies: ["H5","D2"]`: the ids the agent says it followed. Made-up ids are dropped.
+2. **Hindsight** (`src/memory/evaluate.ts`, rules only). When the session ends the evaluator reads the ground truth the coordinator never had and gives every death and wasted trip a cause: never dispatched, arrived late, trapped with nobody to free them, left waiting for a second unit, died in transport, inside the water, nobody there, turned back by the water, hospital full. Critical saves count as evidence too. Written to `runs/<id>/evaluation.json`.
+3. **Dream** (`src/memory/dream-protocol.ts`). A HappyRobot workflow (Claude/sonnet if `HAPPYROBOT_DREAM_*` is not set) reads the evaluation, how often each rule was cited and the current memory, and returns operations: `reinforce`, `weaken`, `rewrite`, `add`, `merge`, `retire`, each citing the evidence behind it, plus a few sentences of lessons.
+4. **Consolidation** (`src/memory/consolidate.ts`). New rules start *on trial* and become doctrine only when a later session backs them; rules nobody can defend sink below 0.25 and are retired. Nothing is deleted: episodes, evidence, retired rules and every change stay in the graph. `memory/MEMORY.md` is a generated snapshot of what the agent reads.
+
+```
+pnpm run-sim --coordinator happyrobot   # session -> evaluation -> dream -> memory, all in one
+pnpm run-sim --no-memory                # same agent without the doctrine: what is the memory worth?
+pnpm dream [runId] [--dry-run]          # dream again over a finished session
+pnpm hr:sync --dream                    # push the dream's prompt + schema to its HappyRobot workflow
+```
+
+The starting doctrine is `src/memory/seed.ts`; delete `memory/memory.db` to go back to it. The viewer's **Memoria** tab draws the graph: rules hang from the concepts they are about, sessions and their evidence from the rules they backed or undermined. Click anything to see what it says, where it came from and how it changed.
+
 ## One tick (30 simulated seconds)
 
 1. **Master** acts: spawn scene, close/open road, puncture ambulance (`MasterAction`).
@@ -70,7 +88,8 @@ Emergency vehicles may drive against one-way streets (3x slower): otherwise a fl
 | `src/engine/briefing.ts` | Situation report for an LLM, with every ETA precomputed. Skips the call when nothing is decidable. |
 | `src/engine/trace.ts` | On-disk run format: `meta.json`, `ticks.jsonl`, `llm.jsonl` (full prompts), `run.log`. |
 | `src/coordinators/claude-cli.ts` | LLM coordinator on headless Claude Code. Falls back to greedy on timeout/error. |
-| `src/run.ts` | Traced runner. |
+| `src/memory/` | The agent's long-term memory: graph store, seed doctrine, hindsight evaluator, dream protocol and back ends, consolidation. |
+| `src/run.ts` | Traced runner: session, then evaluation, then dream. |
 | `ui/` | React + MapLibre viewer: map (truth vs. belief), incident board, knowledge graph. Reads `runs/` through a Vite middleware. |
 | `scripts/fetch-graph.ts` | OpenStreetMap (Overpass) -> `data/<name>.json`. |
 

@@ -24,7 +24,7 @@ npm run dev         # http://localhost:5173/
 
 La aplicación lee las ejecuciones de `gabriel/runs/`. Si todavía no hay ninguna, muestra el estado de espera. Las nuevas ejecuciones aparecen automáticamente en el selector; la selección se conserva mientras se revisa una ejecución.
 
-`npm run data:local` ejecuta el motor con el coordinador por reglas (semilla 2, 120 registros) y escribe la ejecución en `../gabriel/runs/`. Las grabaciones del formato anterior que queden en esa carpeta muestran el error de formato; el selector sigue disponible para elegir otra.
+`npm run data:local` ejecuta el motor con el coordinador por reglas (semilla 2, 120 registros) y escribe la ejecución en `../gabriel/runs/`. El generador de pruebas local usa únicamente el motor, sin requerir el SDK de HappyRobot ni inicializar la memoria persistente del agente. Las grabaciones del formato anterior que queden en esa carpeta muestran el error de formato; el selector sigue disponible para elegir otra.
 
 «Seguir ejecución» lleva la aplicación al último registro recibido. Play/pause controla la reproducción en el navegador; el proceso que escribe los datos continúa en la terminal. Las posiciones se actualizan con cada snapshot del motor.
 

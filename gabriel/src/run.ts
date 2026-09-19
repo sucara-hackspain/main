@@ -9,6 +9,12 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ClaudeCliCoordinator } from "./coordinators/claude-cli";
+import { consolidate, exportMemory, recordEpisode } from "./memory/consolidate";
+import { buildDreamInput } from "./memory/dream-protocol";
+import { pickDreamers } from "./memory/dreamers";
+import { evaluate } from "./memory/evaluate";
+import { MemoryStore } from "./memory/store";
+import { HappyRobotCoordinator } from "./coordinators/happyrobot";
 import {
   clock,
   describe,
@@ -21,6 +27,7 @@ import {
   type Coordinator,
   type GraphData,
   type RunMeta,
+  type TickRecord,
 } from "./engine";
 
 const { values } = parseArgs({
@@ -31,6 +38,11 @@ const { values } = parseArgs({
     ticks: { type: "string", default: "120" },
     ambulances: { type: "string", default: "5" },
     coordinator: { type: "string", default: "claude" },
+    /** Decide without the doctrine (to measure what the memory is worth). */
+    "no-memory": { type: "boolean", default: false },
+    /** Skip the end-of-session dream; `--dream` forces it for a greedy run. */
+    "no-dream": { type: "boolean", default: false },
+    dream: { type: "boolean", default: false },
     model: { type: "string", default: "haiku" },
     "tick-ms": { type: "string", default: "0" },
   },
@@ -49,13 +61,18 @@ const log = (line: string) => {
   appendFileSync(`${dir}/run.log`, line + "\n");
 };
 
+// The agent's long-term memory: read before every decision, rewritten by the dream after the session.
+const usesAgent = values.coordinator !== "greedy";
+const store = new MemoryStore();
+const memory = usesAgent && !values["no-memory"] ? () => store.renderView() : undefined;
+
 const onTrace = (trace: unknown) => appendFileSync(`${dir}/llm.jsonl`, JSON.stringify(trace) + "\n");
 const coordinator: Coordinator =
   values.coordinator === "greedy"
     ? new GreedyCoordinator()
     : values.coordinator === "happyrobot"
-      ? new (await import("./coordinators/happyrobot")).HappyRobotCoordinator({ onTrace })
-      : new ClaudeCliCoordinator({ model: values.model, onTrace });
+      ? new HappyRobotCoordinator({ onTrace, memory })
+      : new ClaudeCliCoordinator({ model: values.model, onTrace, memory });
 
 const graph = new Graph(JSON.parse(readFileSync(`data/${values.map}.json`, "utf8")) as GraphData);
 const sim = new Simulation({
@@ -86,18 +103,24 @@ log(`run ${id}: ${meta.coordinator}${meta.model ? ` (${meta.model})` : ""}, seed
 
 let llmCalls = 0;
 let llmCost = 0;
+const records: TickRecord[] = [];
 try {
   for (let i = 0; i < ticks; i++) {
     const result = await sim.step();
     const record = makeTickRecord(result, sim.world, sim.belief, graph);
     appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
+    records.push(record);
+    result.decision?.applies?.forEach((ids, i) => {
+      const action = result.decision!.actions[i];
+      store.recordApplied(id, result.tick, ids, action.type === "dispatch" ? action.incidentId : null, action.unitId);
+    });
     const at = `${clock(result.tick, sim.world.config.tickSeconds)} t${result.tick}`;
     const d = result.decision;
     if (d && d.source !== "rules") {
       llmCalls++;
       llmCost += d.costUsd ?? 0;
       log(`${at}  ${d.source === "llm" ? "LLM" : "FALLBACK"} (${((d.ms ?? 0) / 1000).toFixed(1)} s) ${d.situation ?? ""}${d.error ? ` [${d.error}]` : ""}`);
-      d.reasons?.forEach((reason, i) => log(`${at}      ${JSON.stringify(d.actions[i])} <- ${reason}`));
+      d.reasons?.forEach((reason, i) => log(`${at}      ${JSON.stringify(d.actions[i])} <- ${reason}${d.applies?.[i]?.length ? ` [${d.applies[i].join(", ")}]` : ""}`));
     }
     for (const e of record.events) log(`${at}  ${describe(e)}`);
     if (tickMs > 0) await new Promise((resolve) => setTimeout(resolve, tickMs));
@@ -116,3 +139,31 @@ log(
     ` | survival ${(s.survivalRate * 100).toFixed(0)}% (${(s.reachableSurvivalRate * 100).toFixed(0)}% of reachable, ${s.inWater} lost to the water) | ${llmCalls} LLM calls, $${llmCost.toFixed(3)}`,
 );
 log(`trace: ${dir}`);
+
+// ---------- after the session: judge it with hindsight, then dream ----------
+
+const evaluation = evaluate({ session: id, coordinator: meta.coordinator, seed, sim, records, applications: store.applications(id) });
+writeFileSync(`${dir}/evaluation.json`, JSON.stringify(evaluation, null, 2));
+recordEpisode(store, evaluation);
+log(`evaluation: ${Object.entries(evaluation.counts).map(([k, n]) => `${k} x${n}`).join(", ") || "nothing to report"}`);
+
+if ((usesAgent && !values["no-dream"] && !values["no-memory"]) || values.dream) {
+  const input = buildDreamInput(evaluation, store);
+  for (const dreamer of pickDreamers()) {
+    try {
+      log(`dreaming with ${dreamer.name}...`);
+      const started = Date.now();
+      const output = await dreamer.dream(input);
+      const changes = consolidate(store, evaluation, output, dreamer.name);
+      writeFileSync(`${dir}/dream.json`, JSON.stringify({ dreamer: dreamer.name, ms: Date.now() - started, input, output, changes }, null, 2));
+      log(`dream (${((Date.now() - started) / 1000).toFixed(0)} s): ${output.lessons}`);
+      for (const c of changes.applied) log(`  memory ${c.op}: ${c.summary}`);
+      for (const k of changes.skipped) log(`  memory skipped ${k.op.op} ${k.op.id ?? k.op.title ?? ""}: ${k.why}`);
+      break;
+    } catch (err) {
+      log(`dream with ${dreamer.name} failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+}
+exportMemory(store);
+store.close();

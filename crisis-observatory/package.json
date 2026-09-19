@@ -9,7 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --import tsx --test tests/run-model.test.ts tests/engine-trace.test.ts tests/interventions.test.ts tests/situation.test.ts tests/tickets.test.ts",
     "test:ui": "playwright test",
-    "data:local": "cd ../gabriel && tsx src/run.ts --coordinator greedy --seed 2 --ticks 120",
+    "data:local": "node --import tsx server/generateLocalRun.ts",
     "test:gabriel": "vitest run ../gabriel/test/engine.test.ts"
   },
   "dependencies": {

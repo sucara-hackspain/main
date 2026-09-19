@@ -11,6 +11,7 @@ import {
 } from "../../src/engine";
 import { IncidentBoard, IncidentDetail } from "./Incidents";
 import { KnowledgeGraph } from "./Knowledge";
+import { MemoryGraph } from "./Memory";
 import { ambulanceState, KIND_COLORS, KIND_LABELS, MapView, PRIORITY_COLORS, type MapHandle, type ViewMode } from "./MapView";
 
 const POLL_MS = 1500;
@@ -55,7 +56,7 @@ export function App() {
   const [speed, setSpeed] = useState(5);
   const [mode, setMode] = useState<ViewMode>("belief");
   const [selected, setSelected] = useState<string | null>(null);
-  const [view, setView] = useState<"map" | "board" | "graph">("map");
+  const [view, setView] = useState<"map" | "board" | "graph" | "memory">("map");
 
   const mapRef = useRef<MapHandle>(null);
   const playhead = useRef(0);
@@ -154,7 +155,7 @@ export function App() {
           tone: d.source === "llm" ? "llm" : "bad",
           badge: d.source === "llm" ? `IA · ${((d.ms ?? 0) / 1000).toFixed(1)} s` : "FALLBACK",
           text: d.situation ?? "",
-          detail: record.actions.map((a, i) => `${describeAction(a)}${d.reasons?.[i] ? ` — ${d.reasons[i]}` : ""}`),
+          detail: record.actions.map((a, i) => `${describeAction(a)}${d.reasons?.[i] ? ` — ${d.reasons[i]}` : ""}${d.applies?.[i]?.length ? ` [${d.applies[i].join(", ")}]` : ""}`),
         });
       }
       record.events.forEach((e, i) => {
@@ -209,12 +210,14 @@ export function App() {
         {current && meta && view === "graph" && (
           <KnowledgeGraph frame={current.frame} meta={meta} calls={calls} selected={selected} onSelect={setSelected} />
         )}
+        {view === "memory" && <MemoryGraph />}
         <div className="views">
           <button className={view === "map" ? "on" : ""} onClick={() => setView("map")}>Mapa</button>
           <button className={view === "board" ? "on" : ""} onClick={() => setView("board")}>
             Incidencias <b>{open.length}</b>
           </button>
           <button className={view === "graph" ? "on" : ""} onClick={() => setView("graph")}>Qué sabe el agente</button>
+          <button className={view === "memory" ? "on" : ""} onClick={() => setView("memory")}>Memoria</button>
         </div>
 
         <div className="transport">

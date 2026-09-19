@@ -2,6 +2,7 @@ import { createReadStream, existsSync, readdirSync, readFileSync } from "node:fs
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { MemoryStore } from "../src/memory/store";
 
 const ROOT = resolve(__dirname, "..");
 const SAFE = /^[\w.-]+$/;
@@ -40,6 +41,15 @@ function runsApi(): Plugin {
             }
           });
           return json({ meta: JSON.parse(readFileSync(resolve(dir, "meta.json"), "utf8")), ticks });
+        }
+        if (kind === "memory") {
+          // The agent's long-term memory, as the graph it is stored as.
+          const store = new MemoryStore(resolve(ROOT, "memory/memory.db"));
+          try {
+            return json({ nodes: store.nodes(), edges: store.edges(), history: store.history() });
+          } finally {
+            store.close();
+          }
         }
         if (kind === "graph") {
           const file = resolve(ROOT, "data", `${name}.json`);
