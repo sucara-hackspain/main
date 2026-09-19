@@ -21,6 +21,8 @@ export interface Decision {
   situation?: string;
   /** Why each action, same order as `actions`. */
   reasons?: string[];
+  /** Doctrine ids (from the agent's memory) cited for each action, same order as `actions`. */
+  applies?: string[][];
   ms?: number;
   costUsd?: number;
   error?: string;

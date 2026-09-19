@@ -35,7 +35,7 @@ export class Simulation {
   readonly belief: Belief;
   private readonly master: Master;
   private readonly coordinator: Coordinator;
-  private readonly observer: Observer;
+  readonly observer: Observer;
   private readonly masterRng: Rng;
   private readonly observerRng: Rng;
   private observedUpTo = 0;

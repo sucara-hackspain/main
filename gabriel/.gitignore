@@ -3,3 +3,5 @@ data/*.raw.json
 runs
 
 .env
+memory/*.db
+memory/*.db-*

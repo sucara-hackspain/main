@@ -90,6 +90,8 @@ export class CallObserver implements Observer {
   private pendingTraffic: { deliverTick: number; event: WorldEvent }[] = [];
   private lastCall = new Map<string, number>();
   private nextCallNum = 1;
+  /** Which real scene each call was about. Never shown to the coordinator: only hindsight (evaluation) may read it. */
+  readonly sceneOfCall = new Map<string, string>();
 
   constructor(private readonly options: CallObserverOptions = {}) {}
 
@@ -134,6 +136,7 @@ export class CallObserver implements Observer {
       const call = this.makeCall(p, world, graph, rng);
       if (!call) continue;
       this.lastCall.set(p.sceneId, world.tick);
+      this.sceneOfCall.set(call.id, p.sceneId);
       const event: ObservedEvent = { type: "call_received", tick: world.tick, call };
       reports.push({ tick: world.tick, source: "call_112", confidence: 1 - CALLERS[p.caller].wrong, event });
     }
