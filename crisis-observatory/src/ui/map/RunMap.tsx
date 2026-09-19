@@ -4,13 +4,13 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { LocateFixed } from "lucide-react";
 import {
-  unitStatus,
   patientStatus,
   type GraphData,
   type RunMeta,
   type TickRecord,
 } from "../runModel";
 import { remainingRoute } from "./routes";
+import { entityKey, sameEntity, selectionPosition, type EntityRef, type Situation } from "../situation/model";
 import "./map.css";
 ml.setWorkerUrl(workerUrl);
 const empty: GeoJSON.FeatureCollection = {
@@ -23,12 +23,22 @@ export default function RunMap({
   record,
   selected,
   onSelect,
+  situation,
+  related,
+  matches,
+  filtered,
+  focusRequest,
 }: {
   graph: GraphData;
   meta: RunMeta;
   record: TickRecord;
-  selected: string | null;
-  onSelect: (id: string) => void;
+  selected: EntityRef | null;
+  onSelect: (ref: EntityRef) => void;
+  situation: Situation;
+  related: Set<string>;
+  matches: Set<string>;
+  filtered: boolean;
+  focusRequest: number;
 }) {
   const host = useRef<HTMLDivElement>(null),
     map = useRef<ml.Map | null>(null),
@@ -36,6 +46,15 @@ export default function RunMap({
     [ready, setReady] = useState(false),
     [error, setError] = useState(false);
   callback.current = onSelect;
+  const focusPosition = useRef<[number, number] | undefined>(undefined);
+  focusPosition.current = selected ? selectionPosition(situation, graph, selected) : undefined;
+  const selectedKey = selected ? entityKey(selected) : null;
+  useEffect(() => {
+    if (ready && selectedKey && focusPosition.current) map.current?.easeTo({ center: focusPosition.current, zoom: Math.max(map.current.getZoom(), 13), duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 350 });
+  }, [ready, selectedKey, focusRequest]);
+  useEffect(() => {
+    if (ready && focusRequest > 0 && window.matchMedia("(max-width: 800px)").matches) host.current?.scrollIntoView({ block: "center", behavior: "instant" });
+  }, [ready, focusRequest]);
   const markers = useRef<ml.Marker[]>([]);
   function fit() {
     const [s, w, n, e] = graph.bbox;
@@ -76,8 +95,8 @@ export default function RunMap({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": theme.getPropertyValue("--info").trim(),
-          "line-width": 2.5,
-          "line-opacity": 0.65,
+          "line-width": ["case", ["boolean", ["get", "related"], false], 4, 2.5],
+          "line-opacity": ["case", ["boolean", ["get", "muted"], false], 0.12, 0.7],
         },
       });
       m.addLayer({
@@ -88,6 +107,7 @@ export default function RunMap({
           "line-color": theme.getPropertyValue("--destructive").trim(),
           "line-width": 4,
           "line-dasharray": [1.5, 1.5],
+          "line-opacity": ["case", ["boolean", ["get", "muted"], false], 0.15, 0.9],
         },
       });
       setReady(true);
@@ -103,10 +123,18 @@ export default function RunMap({
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
+    const focusedKey = host.current?.contains(document.activeElement) ? (document.activeElement as HTMLElement)?.dataset.entity : undefined;
     markers.current.forEach((x) => x.remove());
     markers.current = [];
     const routeFeatures: GeoJSON.Feature[] = [];
-    function marker(el: HTMLElement, pos: [number, number], label: string) {
+    function marker(el: HTMLElement, pos: [number, number], label: string, ref: EntityRef) {
+      const key = entityKey(ref);
+      el.dataset.entity = key;
+      el.classList.toggle("selected", sameEntity(selected, ref));
+      el.classList.toggle("related", related.has(key));
+      el.classList.toggle("is-muted", filtered && !matches.has(key) && !related.has(key));
+      el.setAttribute("aria-pressed", String(sameEntity(selected, ref)));
+      el.onclick = () => callback.current(ref);
       el.title = label;
       el.setAttribute("aria-label", label);
       markers.current.push(
@@ -114,6 +142,7 @@ export default function RunMap({
           .setLngLat(pos)
           .addTo(m!),
       );
+      if (focusedKey === key) el.focus({ preventScroll: true });
     }
     for (const h of meta.hospitals) {
       const el = document.createElement("button");
@@ -129,35 +158,23 @@ export default function RunMap({
       badge.textContent = String(h.capacity - occupied);
       el.append(badge);
       const label = `${h.name} · ${h.capacity - occupied}/${h.capacity} camas libres`;
-      marker(el, graph.nodes[h.node], label);
-      const content = document.createElement("div");
-      content.className = "fleet-popup";
-      const strong = document.createElement("strong");
-      strong.textContent = h.name;
-      const span = document.createElement("span");
-      span.textContent = `${h.capacity - occupied} camas libres de ${h.capacity}`;
-      content.append(strong, span);
-      markers.current
-        .at(-1)!
-        .setPopup(new ml.Popup({ offset: 16 }).setDOMContent(content));
+      marker(el, graph.nodes[h.node], label, { kind: "hospital", id: h.id });
     }
     for (const p of record.frame.patients) {
       if (
-        p.status === "delivered" ||
-        (p.status === "dead" && selected !== p.id)
+        (p.status === "delivered" || p.status === "dead") &&
+        !related.has(`patient:${p.id}`) && !matches.has(`patient:${p.id}`)
       )
         continue;
       const el = document.createElement("button");
-      el.className = `run-patient ${p.status === "dead" ? "deceased" : ""} ${selected === p.id ? "selected" : ""}`;
+      el.className = `run-patient ${p.status === "dead" ? "deceased" : ""} ${sameEntity(selected, { kind: "patient", id: p.id }) ? "selected" : ""}`;
       el.textContent = p.id;
       el.dataset.patient = p.id;
-      el.onclick = () => callback.current(p.id);
-      const pos =
-        p.status === "in_ambulance"
-          ? (record.frame.ambulances.find((a) => a.patientId === p.id)?.pos ??
-            graph.nodes[p.node])
-          : graph.nodes[p.node];
-      marker(el, pos, `${p.id} · ${patientStatus[p.status]}`);
+      const pos = selectionPosition(situation, graph, { kind: "patient", id: p.id });
+      if (pos) {
+        marker(el, pos, `${p.id} · ${patientStatus[p.status]}`, { kind: "patient", id: p.id });
+        if (p.status === "in_ambulance") markers.current.at(-1)?.setOffset([0, -24]);
+      }
     }
     for (const a of record.frame.ambulances) {
       const el = document.createElement("button");
@@ -170,20 +187,24 @@ export default function RunMap({
       label.className = "unit-number";
       label.textContent = a.id;
       el.append(label);
-      const patient = a.patientId || a.targetPatientId;
-      el.onclick = () => {
-        if (patient) callback.current(patient);
-      };
-      marker(el, a.pos, `${a.id} · ${unitStatus(a)}`);
+      marker(el, a.pos, `${a.id} · ${situation.units.find((unit) => unit.id === a.id)?.label ?? a.mission}`, { kind: "ambulance", id: a.id });
       if (a.route.length)
         routeFeatures.push({
           type: "Feature",
-          properties: {},
+          properties: { related: related.has(`ambulance:${a.id}`), muted: filtered && !matches.has(`ambulance:${a.id}`) && !related.has(`ambulance:${a.id}`) },
           geometry: {
             type: "LineString",
             coordinates: remainingRoute(a, graph),
           },
         });
+    }
+    for (const road of situation.roads) {
+      const pos = selectionPosition(situation, graph, road.ref);
+      if (!pos) continue;
+      const el = document.createElement("button");
+      el.className = "route-restriction";
+      el.textContent = "×";
+      marker(el, pos, `${road.name} · Tramo cerrado`, road.ref);
     }
     (m.getSource("run-routes") as ml.GeoJSONSource).setData({
       type: "FeatureCollection",
@@ -195,11 +216,11 @@ export default function RunMap({
         .filter((e) => graph.edges[e])
         .map((e) => ({
           type: "Feature",
-          properties: {},
+          properties: { muted: filtered && !matches.has(`road:${e}`) && !related.has(`road:${e}`) },
           geometry: { type: "LineString", coordinates: graph.edges[e].geom },
         })),
     });
-  }, [ready, record, graph, meta, selected]);
+  }, [ready, record, graph, meta, selected, situation, related, matches, filtered]);
   return (
     <div className="app-map-wrap operational-map">
       <div ref={host} className="operational-map-canvas" />
@@ -212,6 +233,7 @@ export default function RunMap({
         Centrar mapa
       </button>
       <div className="operational-legend">
+        {filtered && <span className="operational-filter-label">Filtro activo</span>}
         <span>
           <i className="critical" />
           Pacientes

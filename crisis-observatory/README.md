@@ -1,6 +1,6 @@
 # Alerta · Control Center
 
-> **Pendiente de portar.** Esta aplicación lee el formato de ejecuciones anterior del motor (`frame.ambulances`, `patients`, eventos `patient_*`). El motor de `../gabriel/` escribe ahora `frame.units`, `scenes`, `incidents`, `knownWater` y eventos `unit_*` / `victim_*`, así que ni compila contra sus tipos ni puede leer ejecuciones nuevas hasta adaptarla. Mientras tanto, el visor del modelo nuevo está en `../gabriel/ui` (`cd ../gabriel && pnpm ui`).
+> **Formato soportado.** Esta aplicación reproduce grabaciones del contrato anterior (`frame.ambulances`, `patients`, eventos `patient_*`). Sus tipos están aislados en `src/ui/legacyRun.ts` para que siga compilando al cambiar el motor. Las ejecuciones nuevas de `../gabriel/` (`frame.units`, `scenes`, `incidents`, `knownWater`) se rechazan con un mensaje explícito hasta portar la UI. El visor del modelo nuevo está en `../gabriel/ui` (`cd ../gabriel && pnpm ui`).
 
 Panel de gestión con React + TypeScript + Vite. La UI se sirve en `/` y muestra mapa, avisos, flota, hospitales, actividad y línea temporal.
 
@@ -19,18 +19,12 @@ Desde este directorio (`crisis-observatory/`):
 
 ```sh
 npm install
-npm run data:local  # genera registros de desarrollo locales; sin llamadas a IA
 npm run dev         # http://localhost:5173/
 ```
 
 La aplicación lee las ejecuciones de `gabriel/runs/`. Si todavía no hay ninguna, muestra el estado de espera. Las nuevas ejecuciones aparecen automáticamente en el selector; la selección se conserva mientras se revisa una ejecución.
 
-Para generar registros de desarrollo de forma progresiva:
-
-```sh
-cd ../gabriel
-../crisis-observatory/node_modules/.bin/tsx src/run.ts --coordinator greedy --seed 7 --ticks 120 --tick-ms 500
-```
+Las grabaciones compatibles existentes en `../gabriel/runs/` se pueden revisar sin ejecutar el motor. `npm run data:local` genera ahora el formato nuevo; esas ejecuciones se consultan en el visor de Gabriel hasta completar la migración.
 
 «Seguir ejecución» lleva la aplicación al último registro recibido. Play/pause controla la reproducción en el navegador; el proceso que escribe los datos continúa en la terminal. Las posiciones se actualizan con cada snapshot del motor.
 
@@ -41,9 +35,10 @@ El runner admite `--coordinator claude --model haiku`, con Claude CLI instalado 
 | Área | Archivos dentro de `src/ui/` | Qué tocar |
 | --- | --- | --- |
 | Mapa | `map/RunMap.tsx`, `map/routes.ts`, `map/map.css` | Cartografía, marcadores, rutas, controles y estilos del mapa, incluido móvil. |
-| Chain of thoughts / actividad | `thoughts/ThoughtsView.tsx`, `thoughts/ActivityLog.tsx`, `thoughts/model.ts`, `thoughts/thoughts.css` | Flujo central, detalle de decisiones, registro lateral, transformación de eventos y estilos, incluido móvil. |
+| Panel de situación | `situation/SituationSidebar.tsx`, `situation/model.ts`, `situation/situation.css` | Resumen global, recursos, capacidad, casos, cortes, filtros e inspector de entidades. |
+| Chain of thoughts / actividad | `thoughts/ThoughtsView.tsx`, `thoughts/ActivityLog.tsx`, `thoughts/model.ts`, `thoughts/thoughts.css` | Flujo central, detalle de decisiones, transformación de eventos y estilos, incluido móvil. |
 
-`ControlCenter.tsx` conecta ambas partes mediante props y mantiene la ejecución, reproducción, filtros y selección compartida. El mapa recibe `graph`, `meta`, `record`, `selected` y `onSelect`; la actividad recibe los eventos filtrados, el tiempo y callbacks para seleccionar o abrir un registro. Cada componente gestiona sus referencias al DOM y su scroll.
+`ControlCenter.tsx` conecta estas vistas mediante props y mantiene la ejecución, reproducción, filtros y selección compartida. El mapa y el panel de situación comparten una selección `{ kind, id }` (`patient`, `ambulance`, `hospital` o `road`), el snapshot operativo y los conjuntos de entidades relacionadas y coincidentes con el filtro. `onSelect` actualiza la selección; `focusRequest` permite volver a centrarla. La actividad conserva sus eventos filtrados, el tiempo y el detalle expandido. Seleccionar un paciente o su ambulancia mantiene el filtro por paciente de la actividad. Cada componente gestiona sus referencias al DOM y su scroll.
 
 Los cambios de cada área se hacen en su carpeta. Si cambia la comunicación entre ambas, coordinad el cambio en `ControlCenter.tsx`. `runModel.ts` define los tipos y helpers comunes de las ejecuciones; `useRuns.ts` carga las ejecuciones desde la API.
 
@@ -53,9 +48,9 @@ Los estilos se reparten por responsabilidad:
 - `src/theme.css`: colores, tipografía y tokens compartidos.
 - `src/ui/control-center.css`: layout y controles comunes del panel.
 - `src/ui/session.css`: selector de ejecución, estado de conexión, avisos y flota.
-- `src/ui/map/map.css` y `src/ui/thoughts/thoughts.css`: estilos propios de cada área.
+- `src/ui/map/map.css`, `src/ui/situation/situation.css` y `src/ui/thoughts/thoughts.css`: estilos propios de cada área.
 
-Integrad esta separación antes de abrir las dos ramas.
+Los cambios del Control Center viven en este paquete. El visor de `../gabriel/ui/` es una aplicación independiente.
 
 ## Integración
 
@@ -74,4 +69,6 @@ npm run test:gabriel    # tests del motor
 npm run test:ui         # Chrome instalado; integración API/UI
 ```
 
-Los tests de integración generan una ejecución greedy local en `gabriel/runs/` y verifican snapshots y GPS contra la API real. Los casos de polling/error usan respuestas controladas. Las trazas, capturas y resultados de pruebas se ignoran en Git.
+Para comprobar un worktree separado sin usar el servidor de otra rama: `PLAYWRIGHT_PORT=5180 npm run test:ui`.
+
+Los tests de navegador sirven una grabación archivada en `tests/fixtures/legacy-run.json` a través del contrato incremental de la API. Comprueban snapshots, GPS, actividad, historial, filtros y navegación móvil. También verifican el rechazo explícito del nuevo formato. No ejecutan ni modifican el motor. Las teselas externas se sustituyen por un fondo local; los marcadores conservan los datos de la grabación. Las capturas y resultados de pruebas se ignoran en Git.

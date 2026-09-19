@@ -1,26 +1,20 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   Activity,
-  Bot,
   ChevronLeft,
   ChevronRight,
   GitBranch,
-  Hospital,
   Layers,
   Map as MapIcon,
   Pause,
   Play,
   Radio,
   RotateCcw,
-  Truck,
-  Waves,
   X,
 } from "lucide-react";
 import { useRun, useRuns } from "./useRuns";
 import {
   elapsed,
-  patientStatus,
-  unitStatus,
   type RunMeta,
 } from "./runModel";
 import "@fontsource-variable/geist";
@@ -29,12 +23,11 @@ import "../theme.css";
 import "./control-center.css";
 import "./session.css";
 import ThoughtsView from "./thoughts/ThoughtsView";
-import ActivityLog from "./thoughts/ActivityLog";
-import { auditItems, laneName, type AuditItem } from "./thoughts/model";
+import { auditItems, laneName } from "./thoughts/model";
+import SituationSidebar from "./situation/SituationSidebar";
+import { buildSituation, entityExists, matchingEntities, relatedEntities, sameEntity, type EntityRef, type SituationFilter } from "./situation/model";
 
 const RunMap = lazy(() => import("./map/RunMap"));
-const runLabel = (r: RunMeta) =>
-  `${r.coordinator}${r.model ? ` / ${r.model}` : ""} · ${new Date(r.startedAt).toLocaleString("es-ES")}`;
 export default function ControlCenter() {
   const { runs, error, loaded } = useRuns();
   const [selected, setSelected] = useState("");
@@ -88,7 +81,10 @@ function RunSession({
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
     [view, setView] = useState<"map" | "flow">("map"),
-    [patient, setPatient] = useState<string | null>(null),
+    [entity, setEntity] = useState<EntityRef | null>(null),
+    [filter, setFilter] = useState<SituationFilter>("all"),
+    [query, setQuery] = useState(""),
+    [focusRequest, setFocusRequest] = useState(0),
     [lane, setLane] = useState<"master" | "coordinator" | null>(null),
     [expanded, setExpanded] = useState<string | null>(null),
     [showClosed, setShowClosed] = useState(false);
@@ -110,6 +106,14 @@ function RunSession({
   }, [index, ticks.length, playing]);
   const visible = useMemo(() => ticks.slice(0, index + 1), [ticks, index]);
   const all = useMemo(() => auditItems(visible), [visible]);
+  const situation = useMemo(() => current && meta ? buildSituation(current, meta, visible, graph) : null, [current, meta, visible, graph]);
+  const selection = entity && entityExists(current, meta, entity) ? entity : null;
+  const related = useMemo(() => situation ? relatedEntities(situation, selection) : new Set<string>(), [situation, selection]);
+  const matches = useMemo(() => situation ? matchingEntities(situation, filter, query, showClosed) : new Set<string>(), [situation, filter, query, showClosed]);
+  const patient = selection?.kind === "patient" ? selection.id : selection?.kind === "ambulance"
+    ? (current?.frame.ambulances.find((a) => a.id === selection.id)?.patientId || current?.frame.ambulances.find((a) => a.id === selection.id)?.targetPatientId || null)
+    : null;
+  useEffect(() => { if (entity && !entityExists(current, meta, entity)) setEntity(null); }, [current, meta, entity]);
   const items = all.filter(
     (x) =>
       (!lane ||
@@ -118,43 +122,18 @@ function RunSession({
           : x.lane === "coordinator")) &&
       (!patient || x.patients.includes(patient)),
   );
-  const births = useMemo(
-    () =>
-      new Map(
-        visible.flatMap((r) =>
-          r.events
-            .filter((e) => e.type === "patient_spawned")
-            .map((e) => [e.patientId, r.tick] as const),
-        ),
-      ),
-    [visible],
-  );
-  const active =
-    current?.frame.patients.filter(
-      (p) => p.status === "waiting" || p.status === "in_ambulance",
-    ) ?? [];
-  const closed =
-    current?.frame.patients.filter(
-      (p) => p.status === "delivered" || p.status === "dead",
-    ) ?? [];
-  const patients = [...active, ...(showClosed ? closed : [])].sort(
-    (a, b) =>
-      (births.get(b.id) ?? 0) - (births.get(a.id) ?? 0) || a.ttl - b.ttl,
-  );
-  const summary = current?.frame.summary;
   function seek(i: number) {
     setIndex(i);
     setPlaying(false);
     setFollow(false);
     setExpanded(null);
   }
-  function reveal(item: AuditItem) {
-    setView("flow");
-    setExpanded(item.id);
+  function chooseEntity(value: EntityRef | null) {
+    setEntity(value);
+    setExpanded(null);
   }
   function choosePatient(value: string | null) {
-    setPatient(value);
-    setExpanded(null);
+    chooseEntity(value ? { kind: "patient", id: value } : null);
   }
   return (
     <main className="app-layout">
@@ -205,30 +184,29 @@ function RunSession({
         <div className="app-scope">
           <div>
             <button
-              className={!patient && !lane ? "is-active" : ""}
+              className={!selection && !lane && filter === "all" && !query ? "is-active" : ""}
               onClick={() => {
                 choosePatient(null);
                 setLane(null);
+                setFilter("all");
+                setQuery("");
               }}
             >
               <Layers size={13} />
               Contexto global
             </button>
-            {patient && (
-              <button className="app-filter" onClick={() => choosePatient(null)}>
-                {patient}
+            {selection && (
+              <button className="app-filter" onClick={() => chooseEntity(null)}>
+                {selection.kind === "road" ? `Corte ${selection.id}` : selection.id}
                 <X size={12} />
               </button>
             )}
-            {lane && (
-              <button className="app-filter" onClick={() => setLane(null)}>
-                {laneName[lane]}
-                <X size={12} />
-              </button>
-            )}
+            {view === "flow" && (["master", "coordinator"] as const).map((key) => (
+              <button key={key} aria-pressed={lane === key} className={lane === key ? "app-filter" : ""} onClick={() => setLane(lane === key ? null : key)}>{laneName[key]}</button>
+            ))}
           </div>
           <span>
-            {items.length} registros · +{elapsed(current?.tick ?? 0, seconds)}
+            {view === "map" ? `${situation?.active.length ?? 0} casos activos` : `${items.length} registros`} · +{elapsed(current?.tick ?? 0, seconds)}
           </span>
         </div>
         {!current ? (
@@ -245,8 +223,13 @@ function RunSession({
                 graph={graph}
                 meta={meta}
                 record={current}
-                selected={patient}
-                onSelect={(p) => choosePatient(patient === p ? null : p)}
+                selected={selection}
+                onSelect={(ref) => chooseEntity(sameEntity(selection, ref) ? null : ref)}
+                situation={situation!}
+                related={related}
+                matches={matches}
+                filtered={filter !== "all" || !!query.trim()}
+                focusRequest={focusRequest}
               />
             </Suspense>
           )
@@ -345,181 +328,17 @@ function RunSession({
           </div>
         </div>
       </section>
-      <aside className="app-sidebar">
-        <div className="app-sidebar-title">
-          <div>
-            <span className="app-eyebrow">CENTRO OPERATIVO</span>
-            <h2>Control Center</h2>
-          </div>
-          <Radio size={17} />
-        </div>
-        <label className="run-picker">
-          <span>Ejecución</span>
-          <select
-            aria-label="Seleccionar ejecución"
-            value={id}
-            onChange={(e) => onRun(e.target.value)}
-          >
-            {runs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {runLabel(r)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="app-agent-cards">
-          {(["master", "coordinator"] as const).map((key) => (
-            <button
-              key={key}
-              aria-pressed={lane === key}
-              className={lane === key ? "is-active" : ""}
-              onClick={() => setLane(lane === key ? null : key)}
-            >
-              <span className="app-agent-icon">
-                {key === "master" ? <Waves size={15} /> : <Bot size={15} />}
-              </span>
-              <span>
-                <strong>{key === "master" ? "Master" : "Coordinador"}</strong>
-                <small>
-                  {key === "master"
-                    ? "Entorno operativo"
-                    : meta?.coordinator || "Conectando"}
-                </small>
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="run-kpis">
-          <div>
-            <strong>{summary?.saved ?? 0}</strong>
-            <span>En hospital</span>
-          </div>
-          <div className="danger">
-            <strong>{summary?.dead ?? 0}</strong>
-            <span>Fallecidos</span>
-          </div>
-          <div>
-            <strong>{active.length}</strong>
-            <span>En atención</span>
-          </div>
-          <div>
-            <strong>{current?.frame.closedEdges.length ?? 0}</strong>
-            <span>Cortes</span>
-          </div>
-        </div>
-        <section className="app-cases">
-          <div className="app-section-title">
-            <h3>
-              Avisos <span>{active.length} activos</span>
-            </h3>
-            <button
-              aria-expanded={showClosed}
-              onClick={() => setShowClosed(!showClosed)}
-            >
-              {showClosed ? "Ocultar cerrados" : `Cerrados (${closed.length})`}
-            </button>
-          </div>
-          <div className="run-patient-list">
-            {patients.length === 0 && (
-              <p className="app-muted">No hay avisos en este momento.</p>
-            )}
-            {patients.map((p) => {
-              const fresh = (births.get(p.id) ?? -1) === (current?.tick ?? 0);
-              const unit = current?.frame.ambulances.find(
-                (a) => a.patientId === p.id || a.targetPatientId === p.id,
-              );
-              return (
-                <button
-                  className={`run-case ${patient === p.id ? "selected" : ""}`}
-                  key={p.id}
-                  aria-pressed={patient === p.id}
-                  onClick={() => choosePatient(patient === p.id ? null : p.id)}
-                >
-                  <span className="run-case-id">
-                    {p.id}
-                    {fresh && <b>NUEVO</b>}
-                  </span>
-                  <span>
-                    <strong>{patientStatus[p.status]}</strong>
-                    <small>
-                      {unit ? unit.id : "Sin unidad vinculada"} · nodo {p.node}
-                    </small>
-                  </span>
-                  <span className={p.status === "dead" ? "danger" : "run-ttl"}>
-                    {p.status === "waiting" || p.status === "in_ambulance" ? (
-                      <>TTL {elapsed(p.ttl, seconds)}</>
-                    ) : p.status === "delivered" ? (
-                      "Ingresado"
-                    ) : (
-                      "Fallecido"
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-        <section className="app-resources">
-          <div className="app-section-title">
-            <h3>
-              Flota{" "}
-              <span>{current?.frame.ambulances.length ?? 0} ambulancias</span>
-            </h3>
-          </div>
-          <div className="app-unit-list">
-            {current?.frame.ambulances.map((a) => (
-              <button
-                className={`app-unit ${a.broken || a.stranded ? "danger" : ""}`}
-                key={a.id}
-                disabled={!a.patientId && !a.targetPatientId}
-                onClick={() => choosePatient(a.patientId || a.targetPatientId)}
-                title={unitStatus(a)}
-              >
-                <Truck size={14} />
-                <strong>{a.id}</strong>
-                <span>{unitStatus(a)}</span>
-                <small>{a.patientId || a.targetPatientId || "—"}</small>
-              </button>
-            ))}
-          </div>
-          <details className="run-hospitals">
-            <summary>
-              <Hospital size={13} />
-              Hospitales · capacidad actual
-            </summary>
-            {meta?.hospitals.map((h) => (
-              <div key={h.id}>
-                <span>
-                  {h.id} · {h.name}
-                </span>
-                <strong>
-                  {h.capacity -
-                    (current?.frame.hospitals.find((x) => x.id === h.id)
-                      ?.occupied ?? 0)}
-                  /{h.capacity}
-                </strong>
-              </div>
-            ))}
-          </details>
-        </section>
-        <ActivityLog
-          items={items}
-          seconds={seconds}
-          tick={current?.tick ?? 0}
-          patient={patient}
-          expanded={expanded}
-          onSelectPatient={choosePatient}
-          onReveal={reveal}
-        />
-        <div className="app-last-update">
-          <span>
-            {error
-              ? "Conexión interrumpida"
-              : `${ticks.length} registros recibidos`}
-          </span>
-          <span>Solo observación</span>
-        </div>
-      </aside>
+      <SituationSidebar
+        id={id} runs={runs} onRun={onRun} situation={situation}
+        selection={selection} onSelect={chooseEntity}
+        onLocate={() => { setView("map"); setFocusRequest((n) => n + 1); }}
+        related={related} matches={matches}
+        filter={filter} onFilter={setFilter} query={query} onQuery={setQuery}
+        showClosed={showClosed} onShowClosed={() => setShowClosed(!showClosed)}
+        historical={!!current && current.tick < (ticks.at(-1)?.tick ?? 0)}
+        following={follow} running={meta?.status === "running"}
+        records={ticks.length} error={!!(error || listError)}
+      />
     </main>
   );
 }
