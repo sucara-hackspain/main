@@ -1,35 +1,14 @@
-import type {
-  Action,
-  GraphData,
-  WorldEvent,
-} from "../../gabriel/src/engine/types";
-import type {
-  AmbulanceFrame,
-  RunMeta,
-  TickRecord,
-} from "../../gabriel/src/engine/trace";
-export type { GraphData, RunMeta, TickRecord, AmbulanceFrame };
-export const elapsed = (tick: number, seconds: number) => {
-  const n = Math.floor(tick * seconds);
-  return [Math.floor(n / 3600), Math.floor(n / 60) % 60, n % 60]
-    .map((x) => String(x).padStart(2, "0"))
-    .join(":");
+import type { Action, WorldEvent } from "../../../gabriel/src/engine/types";
+import { elapsed, type TickRecord } from "../runModel";
+
+export const laneName = {
+  master: "Master · entorno",
+  coordinator: "Coordinador",
+  world: "Motor · evolución",
 };
-export const patientStatus = {
-  waiting: "Esperando atención",
-  in_ambulance: "En traslado",
-  delivered: "En hospital",
-  dead: "Fallecido",
-};
-export function unitStatus(a: AmbulanceFrame) {
-  if (a.broken) return "Averiada";
-  if (a.stranded) return "Sin ruta abierta";
-  if (a.mission === "to_patient") return "Hacia paciente";
-  if (a.mission === "to_hospital") return "Hacia hospital";
-  if (a.patientId) return "Paciente a bordo";
-  if (a.mission === "reposition") return "Reubicándose";
-  return "Sin misión"; // Frame does not include busyUntil: idle is not proof of availability.
-}
+export const auditTitle = (item: AuditItem, seconds: number) =>
+  item.event ? eventText(item.event, seconds) : item.title;
+
 export function actionText(a: Action) {
   if (a.type === "dispatch")
     return `${a.ambulanceId} → recoger a ${a.patientId}${a.hospitalId ? ` → ${a.hospitalId}` : ""}`;
@@ -153,58 +132,4 @@ export function auditItems(records: TickRecord[]): AuditItem[] {
       });
   }
   return items;
-}
-export function assertMainContract(records: TickRecord[]) {
-  for (const r of records) {
-    if (
-      !Number.isInteger(r.tick) ||
-      !r.frame ||
-      !Array.isArray(r.frame.ambulances) ||
-      !Array.isArray(r.frame.patients) ||
-      !Array.isArray(r.events) ||
-      !Array.isArray(r.actions)
-    )
-      throw new Error(
-        "Formato de ejecución no compatible con Gabriel main. La PR rich-world cambia el contrato y requiere migración.",
-      );
-  }
-}
-// Trim the first edge at the reported GPS position. No chord cutting across a street bend.
-export function remainingRoute(
-  a: AmbulanceFrame,
-  graph: GraphData,
-): [number, number][] {
-  const coords: [number, number][] = [a.pos];
-  a.route.forEach(([edge, forward], i) => {
-    const source = graph.edges[edge]?.geom;
-    if (!source) return;
-    const points = forward ? source : [...source].reverse();
-    if (i !== 0) {
-      coords.push(...points);
-      return;
-    }
-    let best = Infinity,
-      segment = 0;
-    for (let j = 0; j < points.length - 1; j++) {
-      const [x, y] = points[j],
-        [xx, yy] = points[j + 1];
-      const dx = xx - x,
-        dy = yy - y,
-        k = Math.max(
-          0,
-          Math.min(
-            1,
-            ((a.pos[0] - x) * dx + (a.pos[1] - y) * dy) /
-              (dx * dx + dy * dy || 1),
-          ),
-        );
-      const d = (a.pos[0] - x - k * dx) ** 2 + (a.pos[1] - y - k * dy) ** 2;
-      if (d < best) {
-        best = d;
-        segment = j;
-      }
-    }
-    coords.push(...points.slice(segment + 1));
-  });
-  return coords;
 }

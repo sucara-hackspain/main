@@ -4,13 +4,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { LocateFixed } from "lucide-react";
 import {
-  remainingRoute,
   unitStatus,
   patientStatus,
   type GraphData,
   type RunMeta,
   type TickRecord,
-} from "./model";
+} from "../runModel";
+import { remainingRoute } from "./routes";
+import "./map.css";
 ml.setWorkerUrl(workerUrl);
 const empty: GeoJSON.FeatureCollection = {
   type: "FeatureCollection",
@@ -200,7 +201,7 @@ export default function RunMap({
     });
   }, [ready, record, graph, meta, selected]);
   return (
-    <div className="v2-map-wrap operational-map">
+    <div className="app-map-wrap operational-map">
       <div ref={host} className="operational-map-canvas" />
       <div className="operational-map-heading">
         <strong>Valencia</strong>
@@ -222,7 +223,7 @@ export default function RunMap({
         <div className="operational-loading">Cargando cartografía…</div>
       )}
       {error && (
-        <div className="v2-map-error">
+        <div className="app-map-error">
           No se ha podido cargar parte de la cartografía. El registro sigue
           disponible.
         </div>

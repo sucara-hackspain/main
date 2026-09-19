@@ -8,7 +8,7 @@ pnpm sim --seed 7 --ticks 480     # same seed = same scenario
 pnpm sim --runs 20 --quiet        # average score over 20 seeds
 pnpm run-sim                      # traced run with the Claude coordinator (claude -p, haiku) -> runs/<id>/
 pnpm run-sim --coordinator greedy --seed 1 --ticks 120
-pnpm ui                           # http://localhost:5173: follow a run live or replay it
+pnpm ui                           # starts the shared viewer at http://localhost:5173/
 pnpm test
 pnpm fetch-graph madrid 40.38,-3.75,40.48,-3.63   # another city: south,west,north,east
 ```
@@ -37,9 +37,10 @@ The coordinator never reads `World`, only `Belief`. Today reports are truthful; 
 | `src/engine/trace.ts` | On-disk run format: `meta.json`, `ticks.jsonl`, `llm.jsonl` (full prompts), `run.log`. |
 | `src/coordinators/claude-cli.ts` | LLM coordinator on headless Claude Code. Falls back to greedy on timeout/error. |
 | `src/run.ts` | Traced runner. |
-| `ui/` | React + MapLibre viewer. Reads `runs/` through a Vite middleware. |
+| `../src/ui/` | The application's React + MapLibre viewer. |
+| `../server/runsApi.ts` | Read-only API for `runs/` and `data/`, served by the root Vite config. |
 | `scripts/fetch-graph.ts` | OpenStreetMap (Overpass) -> `data/<name>.json`. |
 
 To plug another brain in, implement `Coordinator.decide()` (it can be async). Same for `Master.act()`.
 
-maplibre-gl is pinned to v5: v6 ships its worker as a separate ESM file that Vite's dep optimizer breaks (map stays black).
+The viewer is maintained in the repository root. Install its dependencies there with `npm install`; `pnpm ui` in this directory starts that same application. Map and activity UI changes belong in `../src/ui/map/` and `../src/ui/thoughts/`.

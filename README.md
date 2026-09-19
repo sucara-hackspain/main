@@ -1,54 +1,75 @@
-# Alerta · interfaz de coordinación
+# Alerta · Control Center
 
-React + TypeScript + Vite. La V2 mantiene la UI de HappyRobot y muestra las ejecuciones del backend `gabriel/` de este mismo repo. Todo se ejecuta localmente.
+Panel de gestión con React + TypeScript + Vite. La UI se sirve en `/` y muestra mapa, avisos, flota, hospitales, actividad y línea temporal.
+
+## Qué es cada parte
+
+| Directorio | Responsabilidad |
+| --- | --- |
+| `src/ui/` | Frontend: Control Center, mapa y actividad de los agentes. |
+| `server/` | API de lectura que sirve las ejecuciones y el callejero mediante Vite. |
+| `gabriel/` | Motor y coordinadores conectados a esta UI. Escribe las ejecuciones en `gabriel/runs/`. |
+| `backend/` | Módulo independiente con CLI y estado en `state.json`. Esta UI lee las ejecuciones de `gabriel/`. |
 
 ## Arranque
 
+Desde la raíz del repositorio:
+
 ```sh
 npm install
-npm run sim:local   # ejecución real del motor, greedy, seed 2, 120 registros; sin llamadas a IA
-npm run dev         # http://localhost:5173/v2
+npm run data:local  # genera registros de desarrollo locales; sin llamadas a IA
+npm run dev         # http://localhost:5173/
 ```
 
-- `/v2`: V2 conectada al backend. Selector de ejecución, mapa, avisos, flota, hospitales, actividad y línea temporal.
-- `/`: acceso a la misma V2 conectada.
+La aplicación lee las ejecuciones de `gabriel/runs/`. Si todavía no hay ninguna, muestra el estado de espera. Las nuevas ejecuciones aparecen automáticamente en el selector; la selección se conserva mientras se revisa una ejecución.
 
-La V2 lee las ejecuciones existentes de `gabriel/runs/`. Si todavía no hay ninguna, muestra cómo generarlas. Una ejecución nueva aparece automáticamente en el selector. No sustituye una ejecución seleccionada por otra mientras se está revisando.
-
-Para seguir una ejecución mientras el motor escribe nuevos registros:
+Para generar registros de desarrollo de forma progresiva:
 
 ```sh
 cd gabriel
 ../node_modules/.bin/tsx src/run.ts --coordinator greedy --seed 7 --ticks 120 --tick-ms 500
 ```
 
-El botón «Seguir ejecución» lleva el visor al último registro recibido. Play/pause controla el historial del navegador, **no** la simulación que corre en la terminal. Las posiciones se actualizan al registro real de 30 segundos; no se extrapolan trayectorias entre snapshots.
+«Seguir ejecución» lleva la aplicación al último registro recibido. Play/pause controla la reproducción en el navegador; el proceso que escribe los datos continúa en la terminal. Las posiciones se actualizan con cada snapshot del motor.
 
-Para usar el coordinador Claude, el runner original admite `--coordinator claude --model haiku`, con Claude CLI instalado y autenticado. No se ha ejecutado una llamada real al modelo durante esta integración. El visor distingue IA, reglas y respaldo por reglas, y muestra solo las justificaciones registradas.
+El runner admite `--coordinator claude --model haiku`, con Claude CLI instalado y autenticado. La aplicación distingue IA, reglas y respaldo por reglas, y muestra las justificaciones que figuran en la ejecución.
 
-## Integración y restricciones
+## Trabajar en paralelo en la UI
 
-[Análisis de main, PR #1, contratos y decisiones de UI](docs/backend-integration.md).
+| Área | Archivos dentro de `src/ui/` | Qué tocar |
+| --- | --- | --- |
+| Mapa | `map/RunMap.tsx`, `map/routes.ts`, `map/map.css` | Cartografía, marcadores, rutas, controles y estilos del mapa, incluido móvil. |
+| Chain of thoughts / actividad | `thoughts/ThoughtsView.tsx`, `thoughts/ActivityLog.tsx`, `thoughts/model.ts`, `thoughts/thoughts.css` | Flujo central, detalle de decisiones, registro lateral, transformación de eventos y estilos, incluido móvil. |
 
-`vite.config.ts` reutiliza el middleware de lectura de `gabriel/ui/vite.config.ts`: `/api/runs`, `/api/runs/:id?from=N`, `/api/graph/:map`. El motor de Gabriel no está modificado. El frontend no tiene endpoints de escritura ni puede crear pacientes o asignar recursos. Los hospitales y las posiciones vienen de la ejecución.
+`ControlCenter.tsx` conecta ambas partes mediante props y mantiene la ejecución, reproducción, filtros y selección compartida. El mapa recibe `graph`, `meta`, `record`, `selected` y `onSelect`; la actividad recibe los eventos filtrados, el tiempo y callbacks para seleccionar o abrir un registro. Cada componente gestiona sus referencias al DOM y su scroll.
 
-La PR rich-world cambia el contrato a unidades de varios tipos, incidentes y conocimiento imperfecto. Está analizada, pero no mergeada. El adaptador rechaza ese formato explícitamente hasta su migración, sin mostrar datos ficticios.
+Los cambios de cada área se hacen en su carpeta. Si cambia la comunicación entre ambas, coordinad el cambio en `ControlCenter.tsx`. `runModel.ts` define los tipos y helpers comunes de las ejecuciones; `useRuns.ts` carga las ejecuciones desde la API.
 
-El build estático necesita un servicio equivalente a esta API para usarse fuera del servidor local de Vite. No se ha realizado ningún despliegue.
+Los estilos se reparten por responsabilidad:
 
-## UI
+- `src/global.css`: estilos base del documento.
+- `src/theme.css`: colores, tipografía y tokens compartidos.
+- `src/ui/control-center.css`: layout y controles comunes del panel.
+- `src/ui/session.css`: selector de ejecución, estado de conexión, avisos y flota.
+- `src/ui/map/map.css` y `src/ui/thoughts/thoughts.css`: estilos propios de cada área.
 
-`src/happyrobot-theme.css` aplica los tokens de la skill `happyrobot-interface` v2.0.0. Geist y Geist Mono se sirven localmente. Inspector derecho, controles compactos, bordes neutros, rojo para avisos/bloqueos y detalle expandido solo en el flujo central. La interfaz se presenta en tema claro; no hay selector de tema.
+Integrad esta separación antes de abrir las dos ramas. Hay una única UI; `npm run ui` desde `gabriel/` arranca la misma aplicación de la raíz.
 
-El mapa usa MapLibre y OpenFreeMap/OSM, con conexión para cargar las teselas. La V2 conectada dibuja las geometrías del grafo del backend.
+## Integración
+
+[Contrato de datos y funcionamiento de la integración](docs/data-integration.md).
+
+`server/runsApi.ts` expone `/api/runs`, `/api/runs/:id?from=N` y `/api/graph/:map`. La API lee archivos locales; el motor corre por separado. La aplicación valida el formato de los registros y muestra un error si los datos no son válidos.
+
+El build estático necesita un servicio equivalente a esta API para usarse fuera de Vite. El mapa usa MapLibre y OpenFreeMap/OSM, con conexión para cargar las teselas. Geist y Geist Mono se sirven localmente.
 
 ## Verificación
 
 ```sh
 npm run build          # TypeScript + build de producción
-npm test               # adaptador y geometrías de rutas
-npm run test:gabriel    # tests del motor commiteado, sin modificarlo
+npm test               # formato de registros, actividad y geometrías de rutas
+npm run test:gabriel    # tests del motor
 npm run test:ui         # Chrome instalado; integración API/UI
 ```
 
-Los tests de integración generan una ejecución greedy local en `gabriel/runs/` y verifican snapshots y GPS contra la API real. Los casos de polling/error usan respuestas controladas. Las trazas, capturas y copias temporales de revisión no se versionan.
+Los tests de integración generan una ejecución greedy local en `gabriel/runs/` y verifican snapshots y GPS contra la API real. Los casos de polling/error usan respuestas controladas. Las trazas, capturas y resultados de pruebas se ignoran en Git.

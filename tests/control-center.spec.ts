@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import type { RunMeta, TickRecord } from "../src/backend/model";
+import type { RunMeta, TickRecord } from "../src/ui/runModel";
 let id: string, meta: RunMeta, records: TickRecord[];
 test.beforeAll(async ({ request }) => {
   const output = execFileSync(
@@ -24,7 +24,7 @@ test.beforeAll(async ({ request }) => {
   records = data.ticks;
 });
 async function open(page: any) {
-  await page.goto("/v2");
+  await page.goto("/");
   await page.getByLabel("Seleccionar ejecución").selectOption(id);
   await expect(
     page.getByText("120 registros recibidos", { exact: true }),
@@ -62,9 +62,9 @@ test("real Gabriel run drives patients, hospital capacity, GPS, playback and his
     page.getByLabel("Navegar por el historial", { exact: true }),
   ).not.toHaveValue("0");
   await page.getByLabel("Pausar historial", { exact: true }).click();
-  const paused = await page.getByLabel("Tiempo simulado").textContent();
+  const paused = await page.getByLabel("Tiempo transcurrido").textContent();
   await page.waitForTimeout(700);
-  await expect(page.getByLabel("Tiempo simulado")).toHaveText(paused!);
+  await expect(page.getByLabel("Tiempo transcurrido")).toHaveText(paused!);
   expect(errors).toEqual([]);
 });
 test("coordinator detail expands only centrally and records actual accepted actions", async ({
@@ -79,15 +79,22 @@ test("coordinator detail expands only centrally and records actual accepted acti
     .getByRole("button", { name: "Actividad de los agentes", exact: true })
     .click();
   await page
-    .locator(".v2-event-row.coordinator .v2-event-button")
+    .locator(".app-event-row.coordinator .app-event-button")
     .last()
     .click();
-  await expect(page.locator(".v2-event-detail")).toContainText("Aceptada");
-  await expect(page.locator(".v2-event-detail")).toContainText(
+  await expect(page.locator(".app-event-detail")).toContainText("Aceptada");
+  await expect(page.locator(".app-event-detail")).toContainText(
     "Sin justificación registrada",
   );
-  await expect(page.locator(".v2-sidebar .v2-event-detail")).toHaveCount(0);
-  await expect(page.locator(".v2-event-detail")).not.toContainText("IA");
+  await expect(page.locator(".app-sidebar .app-event-detail")).toHaveCount(0);
+  await expect(page.locator(".app-event-detail")).not.toContainText("IA");
+  await page.getByRole("button", { name: "Territorio", exact: true }).click();
+  await expect(page.locator(".app-event-detail")).toHaveCount(0);
+  await page.locator(".app-log.selected").click();
+  await expect(
+    page.getByRole("button", { name: "Actividad de los agentes", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".app-event-detail")).toContainText("Aceptada");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
@@ -113,7 +120,7 @@ test("new records follow on demand, paused history stays fixed and connection er
       },
     });
   });
-  await page.goto("/v2");
+  await page.goto("/");
   await expect(
     page.getByText("8 registros recibidos", { exact: true }),
   ).toBeVisible();
@@ -147,7 +154,7 @@ test("empty and incompatible executions are explicit, with no mock fallback", as
   page,
 }) => {
   await page.route("**/api/runs", (r) => r.fulfill({ json: [] }));
-  await page.goto("/v2");
+  await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "No hay ejecuciones todavía" }),
   ).toBeVisible();
@@ -160,7 +167,7 @@ test("empty and incompatible executions are explicit, with no mock fallback", as
     }),
   );
   await page.reload();
-  await expect(page.getByRole("alert")).toContainText("rich-world");
+  await expect(page.getByRole("alert")).toContainText("Formato de registros de actividad no válido");
   await expect(page.locator(".run-case")).toHaveCount(0);
 });
 
@@ -179,7 +186,7 @@ test("completion drains trailing records even if finished metadata races the fil
       },
     });
   });
-  await page.goto("/v2");
+  await page.goto("/");
   await expect(
     page.getByText("120 registros recibidos", { exact: true }),
   ).toBeVisible();

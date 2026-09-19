@@ -1,13 +1,12 @@
 import { createReadStream, existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import type { Plugin } from "vite";
 
-const ROOT = resolve(__dirname, "..");
+const engineRoot = resolve(__dirname, "../gabriel");
 const SAFE = /^[\w.-]+$/;
 
-/** Serves run traces straight from runs/ so the UI can follow a simulation while it is being written. */
-function runsApi(): Plugin {
+/** Serves run traces straight from runs/ so the UI can follow a run while its records are being written. */
+export function runsApi(): Plugin {
   return {
     name: "runs-api",
     configureServer(server) {
@@ -22,13 +21,13 @@ function runsApi(): Plugin {
         if (name && !SAFE.test(name)) return json({ error: "bad name" }, 400);
 
         if (kind === "runs" && !name) {
-          const dir = resolve(ROOT, "runs");
+          const dir = resolve(engineRoot, "runs");
           const ids = existsSync(dir) ? readdirSync(dir).filter((id) => existsSync(resolve(dir, id, "meta.json"))) : [];
           const metas = ids.map((id) => JSON.parse(readFileSync(resolve(dir, id, "meta.json"), "utf8")));
           return json(metas.sort((a, b) => b.startedAt.localeCompare(a.startedAt)));
         }
         if (kind === "runs") {
-          const dir = resolve(ROOT, "runs", name);
+          const dir = resolve(engineRoot, "runs", name);
           if (!existsSync(resolve(dir, "meta.json"))) return json({ error: "unknown run" }, 404);
           const from = Number(url.searchParams.get("from") ?? 0);
           const lines = readFileSync(resolve(dir, "ticks.jsonl"), "utf8").split("\n").filter(Boolean);
@@ -42,7 +41,7 @@ function runsApi(): Plugin {
           return json({ meta: JSON.parse(readFileSync(resolve(dir, "meta.json"), "utf8")), ticks });
         }
         if (kind === "graph") {
-          const file = resolve(ROOT, "data", `${name}.json`);
+          const file = resolve(engineRoot, "data", `${name}.json`);
           if (!existsSync(file)) return json({ error: "unknown map" }, 404);
           res.setHeader("Content-Type", "application/json");
           return createReadStream(file).pipe(res);
@@ -52,8 +51,3 @@ function runsApi(): Plugin {
     },
   };
 }
-
-export default defineConfig({
-  plugins: [react(), runsApi()],
-  server: { port: 5173, fs: { allow: [ROOT] } },
-});

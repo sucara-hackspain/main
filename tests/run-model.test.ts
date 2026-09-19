@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  assertMainContract,
-  auditItems,
-  remainingRoute,
+  assertRunRecords,
   unitStatus,
   type AmbulanceFrame,
   type GraphData,
   type TickRecord,
-} from "../src/backend/model";
+} from "../src/ui/runModel";
+import { auditItems } from "../src/ui/thoughts/model";
+import { remainingRoute } from "../src/ui/map/routes";
 const unit: AmbulanceFrame = {
   id: "A1",
   pos: [0.5, 0],
@@ -112,13 +112,13 @@ test("idle without busyUntil is not presented as available", () =>
     unitStatus({ ...unit, mission: "idle", targetPatientId: null }),
     "Sin misión",
   ));
-test("rich-world frames fail explicitly instead of silently showing an empty fleet", () => {
-  assert.doesNotThrow(() => assertMainContract([record]));
+test("invalid activity records fail explicitly instead of silently showing an empty fleet", () => {
+  assert.doesNotThrow(() => assertRunRecords([record]));
   assert.throws(
     () =>
-      assertMainContract([
+      assertRunRecords([
         { ...record, frame: { units: [unit] } } as unknown as TickRecord,
       ]),
-    /rich-world/,
+    /Formato de registros de actividad no válido/,
   );
 });

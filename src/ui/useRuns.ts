@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import {
-  assertMainContract,
+  assertRunRecords,
   type GraphData,
   type RunMeta,
   type TickRecord,
-} from "./model";
+} from "./runModel";
 async function json<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(path, { signal, cache: "no-store" });
   if (!response.ok)
-    throw new Error(`No se pudo leer Gabriel (${response.status}).`);
+    throw new Error(`No se pudo leer la ejecución (${response.status}).`);
   if (!response.headers.get("content-type")?.includes("application/json"))
     throw new Error(
-      "La API de Gabriel no está disponible. Reinicia el servidor con npm run dev.",
+      "El servicio de datos no está disponible. Reinicia el servidor con npm run dev.",
     );
   return response.json();
 }
@@ -64,7 +64,7 @@ export function useRun(id: string) {
           `/api/runs/${encodeURIComponent(id)}?from=${loaded}`,
           abort.signal,
         );
-        assertMainContract(data.ticks);
+        assertRunRecords(data.ticks);
         let nextLastTick = lastTick;
         for (const record of data.ticks) {
           if (record.tick <= nextLastTick)

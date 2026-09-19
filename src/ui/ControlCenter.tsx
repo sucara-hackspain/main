@@ -1,11 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   Activity,
-  ArrowUpRight,
   Bot,
   ChevronLeft,
   ChevronRight,
-  CircleDot,
   GitBranch,
   Hospital,
   Layers,
@@ -20,36 +18,31 @@ import {
 } from "lucide-react";
 import { useRun, useRuns } from "./useRuns";
 import {
-  actionText,
-  auditItems,
   elapsed,
-  eventText,
   patientStatus,
   unitStatus,
-  type AuditItem,
   type RunMeta,
-} from "./model";
+} from "./runModel";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
-import "../happyrobot-theme.css";
-import "../v2.css";
-import "./backend.css";
-const RunMap = lazy(() => import("./RunMap"));
-const laneName = {
-  master: "Master · entorno",
-  coordinator: "Coordinador",
-  world: "Motor · evolución",
-};
+import "../theme.css";
+import "./control-center.css";
+import "./session.css";
+import ThoughtsView from "./thoughts/ThoughtsView";
+import ActivityLog from "./thoughts/ActivityLog";
+import { auditItems, laneName, type AuditItem } from "./thoughts/model";
+
+const RunMap = lazy(() => import("./map/RunMap"));
 const runLabel = (r: RunMeta) =>
-  `${r.coordinator}${r.model ? ` / ${r.model}` : ""} · semilla ${r.seed} · ${new Date(r.startedAt).toLocaleString("es-ES")}`;
-export default function BackendV2() {
+  `${r.coordinator}${r.model ? ` / ${r.model}` : ""} · ${new Date(r.startedAt).toLocaleString("es-ES")}`;
+export default function ControlCenter() {
   const { runs, error, loaded } = useRuns();
   const [selected, setSelected] = useState("");
   const id = selected || runs[0]?.id;
   return (
-    <div className="v2 backend-v2">
+    <div className="control-center run-session">
       {id ? (
-        <Session
+        <RunSession
           key={id}
           id={id}
           runs={runs}
@@ -61,27 +54,24 @@ export default function BackendV2() {
           <Radio size={24} />
           <h1>
             {error
-              ? "Sin conexión con Gabriel"
+              ? "Sin conexión con el servicio de datos"
               : loaded
                 ? "No hay ejecuciones todavía"
-                : "Conectando con Gabriel…"}
+                : "Conectando con el servicio de datos…"}
           </h1>
           <p>
             {error ||
-              "La V2 muestra las ejecuciones guardadas por el simulador."}
+              "Aquí aparecerán las ejecuciones y la actividad de los agentes."}
           </p>
           {loaded && (
-            <>
-              <code>npm run sim:local</code>
-              <p>La ejecución aparecerá aquí automáticamente.</p>
-            </>
+            <p>Los nuevos registros aparecerán aquí automáticamente.</p>
           )}
         </div>
       )}
     </div>
   );
 }
-function Session({
+function RunSession({
   id,
   runs,
   onRun,
@@ -102,8 +92,6 @@ function Session({
     [lane, setLane] = useState<"master" | "coordinator" | null>(null),
     [expanded, setExpanded] = useState<string | null>(null),
     [showClosed, setShowClosed] = useState(false);
-  const activity = useRef<HTMLDivElement>(null),
-    flow = useRef<HTMLDivElement>(null);
   const current = ticks[Math.min(index, ticks.length - 1)],
     seconds = meta?.config.tickSeconds ?? 30;
   useEffect(() => {
@@ -130,13 +118,6 @@ function Session({
           : x.lane === "coordinator")) &&
       (!patient || x.patients.includes(patient)),
   );
-  useEffect(() => {
-    if (activity.current)
-      activity.current.scrollTop = activity.current.scrollHeight;
-    if (playing || follow) {
-      if (flow.current) flow.current.scrollTop = flow.current.scrollHeight;
-    }
-  }, [index, playing, follow]);
   const births = useMemo(
     () =>
       new Map(
@@ -170,23 +151,16 @@ function Session({
   function reveal(item: AuditItem) {
     setView("flow");
     setExpanded(item.id);
-    requestAnimationFrame(() =>
-      document
-        .getElementById(`audit-${item.id}`)
-        ?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
-    );
   }
   function choosePatient(value: string | null) {
     setPatient(value);
     setExpanded(null);
   }
-  const title = (item: AuditItem) =>
-    item.event ? eventText(item.event, seconds) : item.title;
   return (
-    <main className="v2-layout">
-      <section className="v2-workspace">
-        <div className="v2-toolbar">
-          <div className="v2-tabs">
+    <main className="app-layout">
+      <section className="app-workspace">
+        <div className="app-toolbar">
+          <div className="app-tabs">
             <button
               aria-pressed={view === "map"}
               className={view === "map" ? "is-active" : ""}
@@ -205,9 +179,9 @@ function Session({
             </button>
           </div>
         </div>
-        <div className="v2-context run-context">
-          <span className="v2-eyebrow">
-            VALENCIA <span>GABRIEL / V2</span>
+        <div className="app-context run-context">
+          <span className="app-eyebrow">
+            VALENCIA <span>GESTIÓN</span>
           </span>
           <span
             className={`run-status ${meta?.status === "failed" ? "danger" : ""}`}
@@ -228,7 +202,7 @@ function Session({
             {ticks.length > 0 && "Se conserva el último registro recibido."}
           </div>
         )}
-        <div className="v2-scope">
+        <div className="app-scope">
           <div>
             <button
               className={!patient && !lane ? "is-active" : ""}
@@ -241,13 +215,13 @@ function Session({
               Contexto global
             </button>
             {patient && (
-              <button className="v2-filter" onClick={() => choosePatient(null)}>
+              <button className="app-filter" onClick={() => choosePatient(null)}>
                 {patient}
                 <X size={12} />
               </button>
             )}
             {lane && (
-              <button className="v2-filter" onClick={() => setLane(null)}>
+              <button className="app-filter" onClick={() => setLane(null)}>
                 {laneName[lane]}
                 <X size={12} />
               </button>
@@ -258,15 +232,15 @@ function Session({
           </span>
         </div>
         {!current ? (
-          <div className="v2-empty">
+          <div className="app-empty">
             {error
               ? "No hay registros compatibles disponibles."
-              : "Esperando el primer registro del simulador…"}
+              : "Esperando el primer registro de actividad…"}
           </div>
         ) : view === "map" ? (
           graph &&
           meta && (
-            <Suspense fallback={<div className="v2-empty">Cargando mapa…</div>}>
+            <Suspense fallback={<div className="app-empty">Cargando mapa…</div>}>
               <RunMap
                 graph={graph}
                 meta={meta}
@@ -277,97 +251,17 @@ function Session({
             </Suspense>
           )
         ) : (
-          <>
-            <div className="v2-lanes">
-              <div>
-                <span className="v2-agent-icon">
-                  <Waves size={16} />
-                </span>
-                <div>
-                  <strong>Master y entorno</strong>
-                  <span>Avisos y evolución del mundo</span>
-                </div>
-              </div>
-              <div>
-                <span className="v2-agent-icon">
-                  <Bot size={16} />
-                </span>
-                <div>
-                  <strong>Coordinador</strong>
-                  <span>Órdenes y resultados del motor</span>
-                </div>
-              </div>
-            </div>
-            <div className="v2-flow" ref={flow}>
-              {items.length === 0 && (
-                <div className="v2-empty">
-                  Sin actividad en este contexto y momento.
-                </div>
-              )}
-              {items.map((item, i) => (
-                <div key={item.id}>
-                  {(i === 0 || items[i - 1].tick !== item.tick) && (
-                    <div className="v2-turn-label">
-                      <span>+{elapsed(item.tick, seconds)}</span>
-                      <strong>Registro de simulación</strong>
-                    </div>
-                  )}
-                  <div
-                    className={`v2-event-row ${item.lane === "coordinator" ? "coordinator" : "master"}`}
-                    id={`audit-${item.id}`}
-                  >
-                    <article
-                      className={`v2-event ${expanded === item.id ? "selected" : ""}`}
-                    >
-                      <button
-                        className="v2-event-button"
-                        aria-expanded={expanded === item.id}
-                        onClick={() =>
-                          setExpanded(expanded === item.id ? null : item.id)
-                        }
-                      >
-                        <span className="v2-event-meta">
-                          <span>
-                            {item.lane === "coordinator" ? (
-                              <Bot size={12} />
-                            ) : item.lane === "world" ? (
-                              <Activity size={12} />
-                            ) : (
-                              <Waves size={12} />
-                            )}{" "}
-                            {laneName[item.lane]}
-                          </span>
-                          <span>
-                            {item.record.decision && item.lane === "coordinator"
-                              ? sourceName(item.record.decision.source)
-                              : "Evento"}
-                          </span>
-                        </span>
-                        <strong>{title(item)}</strong>
-                        <span className="v2-event-tags">
-                          {[...item.patients, ...item.units].map((id) => (
-                            <span key={id}>{id}</span>
-                          ))}
-                          <ChevronRight size={12} />
-                        </span>
-                      </button>
-                      {expanded === item.id && (
-                        <AuditDetail item={item} seconds={seconds} />
-                      )}
-                    </article>
-                  </div>
-                </div>
-              ))}
-              <div className="v2-history-end">
-                <CircleDot size={12} />
-                Hasta +{elapsed(current.tick, seconds)} · solo registros
-                recibidos
-              </div>
-            </div>
-          </>
+          <ThoughtsView
+            items={items}
+            seconds={seconds}
+            tick={current.tick}
+            autoScroll={playing || follow}
+            expanded={expanded}
+            onExpand={setExpanded}
+          />
         )}
-        <div className="v2-playback">
-          <div className="v2-playback-title">
+        <div className="app-playback">
+          <div className="app-playback-title">
             <span>
               <Activity size={13} />
               Línea temporal
@@ -381,9 +275,9 @@ function Session({
               · {seconds} s por registro
             </span>
           </div>
-          <div className="v2-controls">
+          <div className="app-controls">
             <button
-              className="v2-play"
+              className="app-play"
               disabled={ticks.length < 2}
               title={playing ? "Pausar historial" : "Reproducir historial"}
               aria-label={playing ? "Pausar historial" : "Reproducir historial"}
@@ -418,7 +312,7 @@ function Session({
               value={index}
               onChange={(e) => seek(Number(e.target.value))}
             />
-            <output className="v2-turn-total" aria-label="Tiempo simulado">
+            <output className="app-turn-total" aria-label="Tiempo transcurrido">
               +{elapsed(current?.tick ?? 0, seconds)}
             </output>
             <select
@@ -443,7 +337,7 @@ function Session({
                 setFollow(!follow);
                 setPlaying(false);
               }}
-              title="Seguir los registros que escribe el backend"
+              title="Seguir los nuevos registros de actividad"
             >
               <Radio size={13} />
               {meta?.status === "running" ? "Seguir ejecución" : "Ir al final"}
@@ -451,11 +345,11 @@ function Session({
           </div>
         </div>
       </section>
-      <aside className="v2-sidebar">
-        <div className="v2-sidebar-title">
+      <aside className="app-sidebar">
+        <div className="app-sidebar-title">
           <div>
-            <span className="v2-eyebrow">SIMULADOR CONECTADO</span>
-            <h2>Centro de coordinación</h2>
+            <span className="app-eyebrow">CENTRO OPERATIVO</span>
+            <h2>Control Center</h2>
           </div>
           <Radio size={17} />
         </div>
@@ -473,7 +367,7 @@ function Session({
             ))}
           </select>
         </label>
-        <div className="v2-agent-cards">
+        <div className="app-agent-cards">
           {(["master", "coordinator"] as const).map((key) => (
             <button
               key={key}
@@ -481,14 +375,14 @@ function Session({
               className={lane === key ? "is-active" : ""}
               onClick={() => setLane(lane === key ? null : key)}
             >
-              <span className="v2-agent-icon">
+              <span className="app-agent-icon">
                 {key === "master" ? <Waves size={15} /> : <Bot size={15} />}
               </span>
               <span>
                 <strong>{key === "master" ? "Master" : "Coordinador"}</strong>
                 <small>
                   {key === "master"
-                    ? "Escenario aleatorio"
+                    ? "Entorno operativo"
                     : meta?.coordinator || "Conectando"}
                 </small>
               </span>
@@ -513,8 +407,8 @@ function Session({
             <span>Cortes</span>
           </div>
         </div>
-        <section className="v2-cases">
-          <div className="v2-section-title">
+        <section className="app-cases">
+          <div className="app-section-title">
             <h3>
               Avisos <span>{active.length} activos</span>
             </h3>
@@ -527,7 +421,7 @@ function Session({
           </div>
           <div className="run-patient-list">
             {patients.length === 0 && (
-              <p className="v2-muted">No hay avisos en este momento.</p>
+              <p className="app-muted">No hay avisos en este momento.</p>
             )}
             {patients.map((p) => {
               const fresh = (births.get(p.id) ?? -1) === (current?.tick ?? 0);
@@ -565,17 +459,17 @@ function Session({
             })}
           </div>
         </section>
-        <section className="v2-resources">
-          <div className="v2-section-title">
+        <section className="app-resources">
+          <div className="app-section-title">
             <h3>
               Flota{" "}
               <span>{current?.frame.ambulances.length ?? 0} ambulancias</span>
             </h3>
           </div>
-          <div className="v2-unit-list">
+          <div className="app-unit-list">
             {current?.frame.ambulances.map((a) => (
               <button
-                className={`v2-unit ${a.broken || a.stranded ? "danger" : ""}`}
+                className={`app-unit ${a.broken || a.stranded ? "danger" : ""}`}
                 key={a.id}
                 disabled={!a.patientId && !a.targetPatientId}
                 onClick={() => choosePatient(a.patientId || a.targetPatientId)}
@@ -608,49 +502,16 @@ function Session({
             ))}
           </details>
         </section>
-        <section className="v2-observation">
-          <div className="v2-section-title">
-            <h3>
-              {patient ? `${patient} · seguimiento` : "Registro compartido"}
-            </h3>
-            {patient && (
-              <button onClick={() => choosePatient(null)}>
-                Ver todo <X size={12} />
-              </button>
-            )}
-          </div>
-          <div className="v2-activity" ref={activity}>
-            {items.slice(-150).map((item) => (
-              <button
-                key={item.id}
-                className={`v2-log ${expanded === item.id ? "selected" : ""}`}
-                onClick={() => reveal(item)}
-              >
-                <span className="v2-log-icon">
-                  {item.lane === "coordinator" ? (
-                    <Bot size={13} />
-                  ) : item.lane === "world" ? (
-                    <Activity size={13} />
-                  ) : (
-                    <Waves size={13} />
-                  )}
-                </span>
-                <span>
-                  <small>
-                    +{elapsed(item.tick, seconds)} · {laneName[item.lane]}
-                  </small>
-                  <strong>{title(item)}</strong>
-                  <span>{item.patients.join(" · ")}</span>
-                </span>
-                <ArrowUpRight size={12} />
-              </button>
-            ))}
-            {items.length === 0 && (
-              <p className="v2-muted">Sin actividad en este contexto.</p>
-            )}
-          </div>
-        </section>
-        <div className="v2-last-update">
+        <ActivityLog
+          items={items}
+          seconds={seconds}
+          tick={current?.tick ?? 0}
+          patient={patient}
+          expanded={expanded}
+          onSelectPatient={choosePatient}
+          onReveal={reveal}
+        />
+        <div className="app-last-update">
           <span>
             {error
               ? "Conexión interrumpida"
@@ -660,94 +521,5 @@ function Session({
         </div>
       </aside>
     </main>
-  );
-}
-function sourceName(source: string) {
-  return source === "llm"
-    ? "IA"
-    : source === "fallback"
-      ? "Respaldo por reglas"
-      : "Reglas";
-}
-function AuditDetail({ item, seconds }: { item: AuditItem; seconds: number }) {
-  const d = item.record.decision;
-  return (
-    <div className="v2-event-detail">
-      {item.event ? (
-        <>
-          <label>EVENTO REGISTRADO</label>
-          <p>{eventText(item.event, seconds)}</p>
-          {item.event.type === "patient_spawned" && (
-            <p>
-              Nodo {item.event.node} · TTL inicial{" "}
-              {elapsed(item.event.ttl, seconds)}. El backend actual no registra
-              una categoría clínica de gravedad.
-            </p>
-          )}
-          <details className="run-json">
-            <summary>Ver datos del evento</summary>
-            <pre>{JSON.stringify(item.event, null, 2)}</pre>
-          </details>
-        </>
-      ) : (
-        <>
-          <label>DECISIÓN · {sourceName(d?.source ?? "rules")}</label>
-          <p>
-            {d?.situation ||
-              "El coordinador no ha registrado un resumen de situación."}
-          </p>
-          {d?.ms !== undefined && (
-            <p>
-              Duración: {(d.ms / 1000).toFixed(1)} s
-              {d.costUsd !== undefined
-                ? ` · coste: $${d.costUsd.toFixed(4)}`
-                : ""}
-            </p>
-          )}
-          {d?.error && <p className="danger">{d.error}</p>}
-          <label>ÓRDENES Y RESULTADOS</label>
-          {item.record.actions.length === 0 ? (
-            <p>
-              Sin nuevas órdenes. No implica que hayan terminado las misiones en
-              curso.
-            </p>
-          ) : (
-            item.record.actions.map((a, i) => {
-              const result = item.record.events.find(
-                (e) =>
-                  (e.type === "action_applied" ||
-                    e.type === "action_rejected") &&
-                  JSON.stringify(e.action) === JSON.stringify(a),
-              );
-              return (
-                <div className="run-order" key={i}>
-                  <strong>{actionText(a)}</strong>
-                  <p>
-                    {d?.reasons?.[i] ||
-                      "Sin justificación registrada para esta orden."}
-                  </p>
-                  <span
-                    className={
-                      result?.type === "action_rejected" ? "danger" : ""
-                    }
-                  >
-                    {result?.type === "action_rejected"
-                      ? `Rechazada: ${result.reason}`
-                      : result?.type === "action_applied"
-                        ? `Aceptada · ETA ${elapsed(result.etaTicks, seconds)}`
-                        : "Sin confirmación del motor"}
-                  </span>
-                </div>
-              );
-            })
-          )}
-          <label>CONTEXTO AUDITABLE</label>
-          <p>
-            El registro contiene el resultado del motor. No incluye una copia
-            del conocimiento del coordinador ni los informes que recibió.
-          </p>
-        </>
-      )}
-    </div>
   );
 }

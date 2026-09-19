@@ -1,4 +1,5 @@
-.backend-v2 .run-empty {
+/* Shared session UI: connection, run picker, patients, fleet and playback. */
+.run-session .run-empty {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -80,7 +81,7 @@
   font-size: 10px;
   color: var(--muted-foreground);
 }
-.backend-v2 .danger {
+.run-session .danger {
   color: var(--destructive-foreground);
 }
 .run-patient-list {
@@ -136,12 +137,12 @@
 .run-ttl {
   color: var(--warning-foreground);
 }
-.backend-v2 .v2-unit {
+.run-session .app-unit {
   grid-template-columns: 16px 42px 1fr 44px;
   min-height: 28px;
   font-size: 11px;
 }
-.backend-v2 .v2-unit-list {
+.run-session .app-unit-list {
   max-height: 180px;
   overflow: auto;
   scrollbar-width: thin;
@@ -172,7 +173,7 @@
   white-space: nowrap;
   font: 11px var(--font-mono);
 }
-.backend-v2 .v2-controls .run-follow {
+.run-session .app-controls .run-follow {
   width: auto;
   display: flex;
   gap: 5px;
@@ -185,76 +186,17 @@
   background: var(--accent);
   color: var(--foreground);
 }
-.backend-v2 .v2-event-tags {
-  margin-top: 8px;
-}
-.run-order {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px;
-  margin-bottom: 8px;
-  background: var(--card);
-}
-.run-order strong {
-  font-size: 12px;
-  font-weight: 500;
-}
-.run-order > span {
-  font-size: 11px;
-  display: block;
-  margin-top: 6px;
-  color: var(--success-foreground);
-}
-.run-json {
-  margin-top: 12px;
-  font-size: 11px;
-}
-.run-json summary {
-  cursor: pointer;
-}
-.run-json pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: 11px/1.5 var(--font-mono);
-}
-.run-patient {
-  border: 2px solid var(--card);
-  border-radius: 999px;
-  background: var(--destructive-foreground);
-  color: white !important;
-  padding: 3px 6px;
-  font: 10px var(--font-mono) !important;
-  box-shadow: var(--dropdown-shadow);
-}
-.v2 .run-patient:hover {
-  background: var(--destructive-foreground);
-}
-.run-patient.selected {
-  outline: 3px solid color-mix(in srgb, var(--destructive) 30%, transparent);
-}
-.run-patient.deceased {
-  background: var(--foreground);
-}
-.run-hospital {
-  z-index: 1;
-}
-.backend-v2 .ambulance-marker .unit-number {
-  min-width: 18px;
-}
-.backend-v2 .v2-empty {
+.run-session .app-empty {
   flex: 1;
 }
 @media (max-width: 800px) {
-  .backend-v2 .v2-sidebar {
+  .run-session .app-sidebar {
     min-height: 1000px;
   }
-  .backend-v2 .v2-workspace {
+  .run-session .app-workspace {
     height: 850px;
   }
-  .backend-v2 .v2-playback-title {
+  .run-session .app-playback-title {
     font-size: 10px;
-  }
-  .backend-v2 .operational-map-heading > small {
-    display: none;
   }
 }
