@@ -1,9 +1,10 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight, CircleHelp, Clock3, Layers, MapPin, Radio, Search, ShieldAlert, SlidersHorizontal, Truck, Waves, X } from "lucide-react";
 import { elapsed, type GraphData, type RunMeta, type TickRecord } from "../engineTrace";
 import { duration, type Situation } from "../situation/model";
 import { type Pending } from "../interventions/model";
 import type { Ticket } from "../tickets/model";
+import { TicketDetail } from "../tickets/TicketsView";
 import { buildOperations, number, type Queue, type Sector } from "./model";
 import { SCALE_ID } from "./demo";
 import "./operations.css";
@@ -11,16 +12,20 @@ import "./operations.css";
 const OperationsMap = lazy(() => import("./OperationsMap"));
 const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-export default function OperationsView({ graph, meta, record, records, tickets, situation, pending, sectorId, onSector, onTicket, onQueue, onDecision, runs, onRun, received }: {
+export default function OperationsView({ graph, meta, record, records, tickets, situation, pending, sectorId, onSector, onOpenTicket, onQueue, onDecision, runs, onRun, received }: {
   graph: GraphData; meta: RunMeta; record: TickRecord; records: TickRecord[]; tickets: Ticket[]; situation: Situation;
   pending: Pending[]; sectorId: string | null; onSector: (id: string | null) => void;
-  onTicket: (id: string, sector: Sector | null) => void; onQueue: (sector: Sector | null, queue: Queue) => void;
+  onOpenTicket: (id: string, sector: Sector | null) => void; onQueue: (sector: Sector | null, queue: Queue) => void;
   onDecision: (id: string) => void; runs: RunMeta[]; onRun: (id: string) => void; received: number;
 }) {
   const operations = useMemo(() => buildOperations(tickets, record, records, graph, situation), [tickets, record, records, graph, situation]);
   const [query, setQuery] = useState(""), [onlyAttention, setOnlyAttention] = useState(false);
   const [sources, setSources] = useState(false);
+  const [mapTicketId, setMapTicketId] = useState<string | null>(null);
+  const mapContainer = useRef<HTMLDivElement>(null);
   const sector = operations.sectors.find((s) => s.id === sectorId) ?? null;
+  const mapTicket = sector?.tickets.find((t) => t.id === mapTicketId) ?? null;
+  useEffect(() => { if (!mapTicket) setMapTicketId(null); }, [mapTicket]);
   const scope = sector ?? operations;
   const scopedTickets = sector?.tickets ?? tickets;
   const sectors = operations.sectors.filter((s) => normalize(s.name).includes(normalize(query)) && (!onlyAttention || s.critical || s.blocked || s.gaps || s.stale))
@@ -31,7 +36,11 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
     { name: "Con actividad", count: situation.units.filter((u) => !u.available && !u.broken && !u.stranded).length, className: "busy" },
     { name: "Bloqueadas / averiadas", count: situation.units.filter((u) => u.broken || u.stranded).length, className: "blocked" }];
   const simulated = meta.id === SCALE_ID;
-  function select(id: string | null) { onSector(id); }
+  function select(id: string | null) { setMapTicketId(null); onSector(id); }
+  function closeMapTicket() {
+    setMapTicketId(null);
+    mapContainer.current?.querySelector<HTMLCanvasElement>("canvas")?.focus({ preventScroll: true });
+  }
   return <section className="operations-view" aria-label="Panorama operativo">
     <header className="ops-heading">
       <div><div className="ops-eyebrow"><span className="ops-live-dot" />CENTRO DE COORDINACIÓN <span>/</span> VALÈNCIA</div>
@@ -65,13 +74,13 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
         </div>
         <div className="ops-sector-foot"><CircleHelp size={13} /><span>Los sectores conservan cada incidencia. Carga comparada con hace {operations.windowMinutes} min; unidades según su posición.</span></div>
       </aside>
-      <div className="ops-center">
+      <div className="ops-center" ref={mapContainer}>
         <div className="ops-map-breadcrumb"><button onClick={() => select(null)}><MapPin size={13} />Territorio completo</button>{sector && <><ChevronRight size={12} /><strong>{sector.name}</strong><button className="ops-clear-sector" aria-label="Cerrar sector" onClick={() => select(null)}><X size={13} /></button></>}<span>{sector ? `${number(sector.open)} abiertas` : `${operations.sectors.length} sectores`}</span>{sector && <button className="ops-open-cases" onClick={() => onQueue(sector, "all")}>Ver incidencias<ArrowRight size={13} /></button>}</div>
         <Suspense fallback={<div className="ops-map ops-loading">Preparando el territorio…</div>}>
-          <OperationsMap graph={graph} sectors={operations.sectors} selected={sector?.id ?? null} onSector={select} onTicket={(id) => onTicket(id, sector)} />
+          <OperationsMap graph={graph} sectors={operations.sectors} selected={sector?.id ?? null} selectedTicket={mapTicket?.id ?? null} onSector={select} onTicket={setMapTicketId} />
         </Suspense>
       </div>
-      <aside className="ops-attention" aria-label="Atención y capacidad">
+      <aside className="ops-attention" aria-label="Atención y capacidad" inert={Boolean(mapTicket)} aria-hidden={Boolean(mapTicket)}>
         <div className="ops-section-heading"><div><h2>Requiere atención</h2><p>{sector ? `Sector ${sector.name}` : "Todo el territorio"}</p></div><span className="ops-attention-icon"><ShieldAlert size={16} /></span></div>
         <div className="ops-attention-queues">{([
           { key: "critical" as const, count: scope.critical, label: "Urgentes sin atención", description: "P0 / P1 · revisar respuesta", Icon: ShieldAlert },
@@ -96,6 +105,12 @@ export default function OperationsView({ graph, meta, record, records, tickets, 
           <small className="ops-source-note">{simulated ? "Todos los registros de este escenario son simulados." : "Solo información recibida hasta el instante seleccionado."}</small>
         </section>
       </aside>
+      {mapTicket && <TicketDetail ticket={mapTicket} seconds={situation.seconds} tick={record.tick}
+        onClose={closeMapTicket}
+        mapContext={{ onOpenTickets: () => onOpenTicket(mapTicket.id, sector),
+          actions: pending.filter((p) => p.item.incidentId === mapTicket.id).map(({ item }) =>
+            <button key={item.id} className="ops-incident-decision" onClick={() => onDecision(item.id)}><ShieldAlert size={15} /><span>Revisar decisión<strong>{item.title}</strong></span><ChevronRight size={14} /></button>),
+        }} />}
     </div>
   </section>;
 }

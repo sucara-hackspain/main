@@ -342,7 +342,7 @@ function RunSession({
             </div>
           ) : view === "operations" && graph && meta && situation ? (
             <OperationsView graph={graph} meta={meta} record={current} records={visible} tickets={tickets} situation={situation}
-              pending={pending} sectorId={sectorId} onSector={setSectorId} onTicket={(id, sector) => openOperationsQueue(sector, "all", id)}
+              pending={pending} sectorId={sectorId} onSector={setSectorId} onOpenTicket={(id, sector) => openOperationsQueue(sector, "all", id)}
               onQueue={openOperationsQueue} onDecision={activate} runs={runs} onRun={onRun} received={ticks.length} />
           ) : view === "tickets" ? (
             <TicketsView tickets={scopedTickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}

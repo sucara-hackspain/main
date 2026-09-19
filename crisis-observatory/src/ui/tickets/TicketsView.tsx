@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, CheckCheck, ChevronLeft, ChevronRight, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowUpRight, Check, CheckCheck, ChevronLeft, ChevronRight, ChevronsDown, ChevronsUp, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
 import { elapsed, injuryLabel, priority, sceneLabel, triageLabel, unitKind, unitStatus, victimStatus, type Focus, type IncidentFrame, type RunMeta } from "../engineTrace";
 import { duration } from "../situation/model";
 import { ticketNextStep, ticketStates, type Ticket, type TicketState, type TicketStep } from "./model";
@@ -132,50 +132,81 @@ function TimelineStep({ step, seconds }: { step: TicketStep; seconds: number }) 
   </li>;
 }
 
-export function TicketDetail({ ticket, seconds, tick, onOpenSector, onClose, runs, runId, onRun, records }: {
-  ticket: Ticket | null; seconds: number; tick: number; onOpenSector: (ticket: Ticket) => void; onClose: () => void;
+type TicketDetailProps = {
+  ticket: Ticket | null; seconds: number; tick: number; onClose: () => void;
+} & ({
+  mapContext: { onOpenTickets: () => void; actions?: ReactNode };
+  onOpenSector?: never; runs?: never; runId?: never; onRun?: never; records?: never;
+} | {
+  mapContext?: undefined; onOpenSector: (ticket: Ticket) => void;
   runs: RunMeta[]; runId: string; onRun: (id: string) => void; records: number;
-}) {
+});
+
+export function TicketDetail({ ticket, seconds, tick, onOpenSector, onClose, runs, runId, onRun, records, mapContext }: TicketDetailProps) {
   const panel = useRef<HTMLElement>(null), body = useRef<HTMLDivElement>(null);
   const [group, setGroup] = useState<keyof typeof stepGroups>("all");
+  const [expanded, setExpanded] = useState(false);
+  const inMap = Boolean(mapContext);
   useEffect(() => {
     body.current?.scrollTo({ top: 0 });
-    if (ticket && window.matchMedia("(max-width: 800px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
-  }, [ticket?.id]);
+    setGroup("all");
+    if (inMap) panel.current?.focus({ preventScroll: true });
+    else if (ticket && window.matchMedia("(max-width: 800px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [ticket?.id, inMap]);
+  useEffect(() => {
+    if (!inMap) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || panel.current?.closest("[inert]")) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [inMap, onClose]);
   const next = ticket ? ticketNextStep(ticket) : null;
   const incident = ticket?.incident;
-  return <aside className="app-sidebar ticket-detail" aria-label="Detalle de incidencia" ref={panel}>
-    <header className="ticket-detail-top"><span><ClipboardList size={15} />Detalle de incidencia</span>{ticket && <button aria-label="Cerrar detalle de incidencia" onClick={onClose}><X size={16} /></button>}</header>
-    <label className="run-picker"><span>Ejecución</span><select aria-label="Seleccionar ejecución" value={runId} onChange={(e) => onRun(e.target.value)}>
+  const lastCall = ticket?.calls.at(-1);
+  const history = ticket && <section className="ticket-history" aria-label="Cronología de la incidencia"><header><h3>Actividad y decisiones <span>{ticket.steps.length}</span></h3><span>Del primer aviso al último parte{incident?.timeline?.length ? " · registrado por el motor" : ""}</span></header>
+    {ticket.steps.some((s) => s.group) && <div className="ticket-step-filter" aria-label="Filtrar la cronología">{(Object.keys(stepGroups) as (keyof typeof stepGroups)[]).map((g) =>
+      <button key={g} aria-pressed={group === g} onClick={() => setGroup(g)}>{stepGroups[g]}<span>{g === "all" ? ticket.steps.length : ticket.steps.filter((s) => s.group === g).length}</span></button>)}</div>}
+    <ol>{ticket.steps.filter((s) => group === "all" || s.group === group).map((step) => <TimelineStep key={step.id} step={step} seconds={seconds} />)}</ol>
+  </section>;
+  return <aside className={`ticket-detail ${mapContext ? `ops-incident-panel${expanded ? " is-expanded" : ""}` : "app-sidebar"}`}
+    aria-label={mapContext ? "Detalle de incidencia en el mapa" : "Detalle de incidencia"} ref={panel} tabIndex={mapContext ? -1 : undefined}>
+    <header className="ticket-detail-top"><span><ClipboardList size={15} />Detalle de incidencia</span><div className="ticket-detail-controls">
+      {mapContext && <button className="ops-incident-expand" aria-label={expanded ? "Reducir detalle" : "Ampliar detalle"} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? <ChevronsDown size={18} /> : <ChevronsUp size={18} />}</button>}
+      {ticket && <button aria-label="Cerrar detalle de incidencia" onClick={onClose}><X size={16} /></button>}
+    </div></header>
+    {!mapContext && <label className="run-picker"><span>Ejecución</span><select aria-label="Seleccionar ejecución" value={runId} onChange={(e) => onRun(e.target.value)}>
       {runs.map((r) => <option key={r.id} value={r.id}>{new Date(r.startedAt).toLocaleString("es-ES")} · {r.id}</option>)}
-    </select></label>
+    </select></label>}
     {ticket && incident && next ? <div className="ticket-detail-body" ref={body}>
       <section className="ticket-summary">
         <div className="ticket-summary-meta"><code>{ticket.id}</code><TicketStatus state={ticket.state} /></div>
         <h2>{ticket.title}</h2><p className="ticket-location"><MapPin size={14} />{ticket.location}</p>
-        <div className="ticket-progress" aria-label={`Estado del ticket: ${ticketStates[ticket.state]}`}>
+        {!mapContext && <div className="ticket-progress" aria-label={`Estado del ticket: ${ticketStates[ticket.state]}`}>
           {(["triage", "progress", "resolved"] as const).map((state, n) => <span key={state} className={n <= ["triage", "progress", "resolved"].indexOf(ticket.state) ? "reached" : ""}><i>{state === "resolved" ? <Check size={10} /> : n + 1}</i>{ticketStates[state]}</span>)}
-        </div>
+        </div>}
         <dl className="ticket-facts"><div><dt>Prioridad actual</dt><dd><span className="ticket-priority" data-priority={incident.priority}><i />P{incident.priority} · {priority[incident.priority].label}</span></dd></div>
-          <div><dt>Abierta a las</dt><dd>+{elapsed(incident.openedTick, seconds)}</dd></div>
+          {!mapContext && <div><dt>Abierta a las</dt><dd>+{elapsed(incident.openedTick, seconds)}</dd></div>}
           <div><dt>Personas afectadas</dt><dd>{incident.located ? `${incident.victims.length} confirmadas` : incident.victimsReported ? `${incident.victimsReported.value} según aviso` : "Por confirmar"}</dd></div>
           <div><dt>Ubicación</dt><dd>{incident.located ? "Confirmada por dotación" : `Aproximada · ±${incident.locationErrorM} m`}</dd></div>
           <div><dt>Avisos recibidos</dt><dd>{incident.callIds.length}</dd></div>
           {incident.splitFrom && <div><dt>Separada de</dt><dd><code>{incident.splitFrom}</code> · otro sitio</dd></div>}
         </dl>
-        <button type="button" className="ticket-locate" onClick={() => onOpenSector(ticket)}><MapPin size={16} aria-hidden="true" />Ver sector en operaciones</button>
+        {!mapContext && <button type="button" className="ticket-locate" onClick={() => onOpenSector(ticket)}><MapPin size={16} aria-hidden="true" />Ver sector en operaciones</button>}
         {ticket.lastSeenTick < tick && <small className="ticket-archive-note">El sector muestra la situación del instante seleccionado.</small>}
       </section>
+      {mapContext?.actions}
       <section className="ticket-next" data-state={ticket.state} aria-label="Seguimiento de la incidencia"><span className="ticket-next-icon">{ticket.state === "resolved" ? <CheckCheck size={16} /> : <Clock3 size={16} />}</span><div><span className="app-eyebrow">{ticket.state === "resolved" ? "CIERRE" : "SEGUIMIENTO"}</span><h3>{next.title}</h3><p>{next.detail}</p><small>Según el estado registrado</small></div></section>
       {ticket.crews.length > 0 && <section className="ticket-assigned"><h3>Unidades vinculadas <span>{ticket.crews.length}</span></h3>{ticket.crews.map((u) => <div key={u.id}><Truck size={14} /><strong>{u.id}</strong><span>{unitKind[u.kind].label}<small>{unitStatus(u)}</small></span></div>)}</section>}
+      {mapContext && <section className="ops-incident-call" aria-label="Último aviso"><h3><Phone size={13} />Último aviso{lastCall && <time>+{elapsed(lastCall.tick, seconds)}</time>}</h3>
+        <p>{lastCall?.text ?? "No hay una llamada disponible en el historial seleccionado."}</p>{lastCall && <small>{lastCall.id} · 112</small>}</section>}
       <Foci incident={incident} />
       {!incident.located && <Known incident={incident} />}
-      <section className="ticket-history" aria-label="Cronología de la incidencia"><header><h3>Actividad y decisiones <span>{ticket.steps.length}</span></h3><span>Del primer aviso al último parte{incident.timeline?.length ? " · registrado por el motor" : ""}</span></header>
-        {ticket.steps.some((s) => s.group) && <div className="ticket-step-filter" aria-label="Filtrar la cronología">{(Object.keys(stepGroups) as (keyof typeof stepGroups)[]).map((g) =>
-          <button key={g} aria-pressed={group === g} onClick={() => setGroup(g)}>{stepGroups[g]}<span>{g === "all" ? ticket.steps.length : ticket.steps.filter((s) => s.group === g).length}</span></button>)}</div>}
-        <ol>{ticket.steps.filter((s) => group === "all" || s.group === group).map((step) => <TimelineStep key={step.id} step={step} seconds={seconds} />)}</ol>
-      </section>
+      {mapContext ? <details className="ops-incident-evidence" key={ticket.id}><summary>Actividad y evidencias<span>{ticket.steps.length}</span><ChevronRight size={14} /></summary>{history}</details> : history}
     </div> : <div className="ticket-detail-empty"><span><ClipboardList size={26} /></span><h2>El contexto de cada incidencia</h2><p>Selecciona un ticket para ver sus actuaciones, las decisiones del coordinador y qué falta por confirmar.</p></div>}
-    <div className="app-last-update"><span>{records} registros recibidos</span><span>Solo observación</span></div>
+    {mapContext ? <footer className="ops-incident-footer"><button onClick={mapContext.onOpenTickets}>Abrir en Incidencias<ArrowUpRight size={15} /></button></footer>
+      : <div className="app-last-update"><span>{records} registros recibidos</span><span>Solo observación</span></div>}
   </aside>;
 }

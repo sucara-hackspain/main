@@ -9,8 +9,8 @@ ml.setWorkerUrl(workerUrl);
 const collection = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
 const empty = collection([]);
 
-export default function OperationsMap({ graph, sectors, selected, onSector, onTicket }: {
-  graph: GraphData; sectors: Sector[]; selected: string | null;
+export default function OperationsMap({ graph, sectors, selected, selectedTicket, onSector, onTicket }: {
+  graph: GraphData; sectors: Sector[]; selected: string | null; selectedTicket: string | null;
   onSector: (id: string | null) => void; onTicket: (id: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null), map = useRef<ml.Map | null>(null);
@@ -51,6 +51,7 @@ export default function OperationsMap({ graph, sectors, selected, onSector, onTi
         attributionControl: { compact: true }, style });
     map.current = m;
     m.on("error", (e) => { if ("sourceId" in e && !["ops-streets", "sectors", "cases"].includes(String(e.sourceId))) setBasemapError(true); });
+    m.on("movestart", () => { if (host.current) host.current.dataset.rendered = "false"; });
     m.on("idle", () => { if (host.current) host.current.dataset.rendered = "true"; });
     m.on("style.load", () => {
       m.addSource("sectors", { type: "geojson", data: empty });
@@ -71,7 +72,14 @@ export default function OperationsMap({ graph, sectors, selected, onSector, onTi
         "circle-radius": 5, "circle-color": ["match", ["get", "priority"], 0, "#c45e45", 1, "#c68a3c", "#64877d"],
         "circle-stroke-width": 1.5, "circle-stroke-color": "#fff",
       } });
-      m.on("click", "cases", (event) => {
+      m.addLayer({ id: "case-targets", type: "circle", source: "cases", filter: ["!", ["has", "point_count"]], paint: {
+        "circle-radius": 12, "circle-opacity": 0,
+      } });
+      m.addLayer({ id: "selected-case", type: "circle", source: "cases", filter: ["==", ["get", "id"], ""], paint: {
+        "circle-radius": 12, "circle-color": "#26745f", "circle-opacity": .12,
+        "circle-stroke-color": "#26745f", "circle-stroke-width": 2,
+      } });
+      m.on("click", "case-targets", (event) => {
         const id = event.features?.[0]?.properties?.id;
         if (id) callbacks.current.onTicket(String(id));
       });
@@ -83,7 +91,7 @@ export default function OperationsMap({ graph, sectors, selected, onSector, onTi
           if (map.current === m) m.easeTo({ center: f.geometry.coordinates as [number, number], zoom });
         } catch { /* A source may be removed while the operator changes views. */ }
       });
-      for (const layer of ["cases", "clusters"]) {
+      for (const layer of ["case-targets", "clusters"]) {
         m.on("mouseenter", layer, () => { m.getCanvas().style.cursor = "pointer"; });
         m.on("mouseleave", layer, () => { m.getCanvas().style.cursor = ""; });
       }
@@ -127,6 +135,11 @@ export default function OperationsMap({ graph, sectors, selected, onSector, onTi
     });
   }, [ready, sectors, selected, graph]);
   useEffect(() => {
+    if (!ready || !map.current) return;
+    // Selection only changes styling; it never changes the source or the camera.
+    map.current.setFilter("selected-case", ["==", ["get", "id"], selectedTicket ?? ""]);
+  }, [ready, selectedTicket]);
+  useEffect(() => {
     if (!ready) return;
     const sector = sectors.find((s) => s.id === selected);
     if (sector?.bounds) map.current?.fitBounds(sector.bounds, { padding: 65, duration: 450 });
@@ -134,7 +147,7 @@ export default function OperationsMap({ graph, sectors, selected, onSector, onTi
     // Live counts must not recenter a map the operator is exploring.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, selected, graph]);
-  return <div className="ops-map" aria-label="Mapa de sectores operativos">
+  return <div className="ops-map" aria-label="Mapa de sectores operativos" data-inspecting={Boolean(selectedTicket)}>
     <div className="ops-map-canvas" ref={host} />
     <div className="ops-map-caption"><span className="ops-live-dot" />{selected ? "Incidencias de la zona" : "Visión territorial"}<span>VALÈNCIA</span></div>
     <div className="ops-map-tools"><button aria-label="Acercar mapa de operaciones" onClick={() => map.current?.zoomIn()}><Plus size={16} /></button>
