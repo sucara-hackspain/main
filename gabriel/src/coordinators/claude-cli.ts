@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { buildBriefing, GreedyCoordinator, type Coordinator, type DecideInput, type Decision } from "../engine";
-import { SCHEMA, SYSTEM_PROMPT, toActions, type LlmOutput, type LlmTrace } from "./protocol";
+import { composePrompt, SCHEMA, SYSTEM_PROMPT, toActions, type LlmOutput, type LlmTrace } from "./protocol";
 
 export type { LlmTrace };
 
@@ -8,6 +8,8 @@ export interface ClaudeCliOptions {
   model?: string;
   timeoutMs?: number;
   onTrace?: (trace: LlmTrace) => void;
+  /** The agent's doctrine, rendered fresh for each decision and placed before the briefing. */
+  memory?: () => string;
 }
 
 /** Coordinator that thinks with a headless Claude Code process (`claude -p`), so it needs no API key. */
@@ -16,31 +18,34 @@ export class ClaudeCliCoordinator implements Coordinator {
   readonly model: string;
   private readonly timeoutMs: number;
   private readonly onTrace?: (trace: LlmTrace) => void;
+  private readonly memory?: () => string;
   private readonly fallback = new GreedyCoordinator();
 
   constructor(options: ClaudeCliOptions = {}) {
     this.model = options.model ?? "haiku";
     this.timeoutMs = options.timeoutMs ?? 90_000;
     this.onTrace = options.onTrace;
+    this.memory = options.memory;
   }
 
   async decide(input: DecideInput): Promise<Decision> {
     const briefing = buildBriefing(input);
     if (!briefing.actionable) return { actions: [], source: "rules", situation: "Sin decisiones pendientes." };
 
+    const prompt = composePrompt(briefing.text, this.memory);
     const started = Date.now();
     try {
-      const result = await this.ask(briefing.text, input);
+      const result = await this.ask(prompt, input);
       const ms = Date.now() - started;
-      this.onTrace?.({ tick: input.tick, model: this.model, prompt: briefing.text, response: result.output, ms, costUsd: result.costUsd });
+      this.onTrace?.({ tick: input.tick, model: this.model, prompt, response: result.output, ms, costUsd: result.costUsd });
 
-      const { actions, reasons } = toActions(result.output, input);
-      return { actions, reasons, source: "llm", situation: result.output.situation, ms, costUsd: result.costUsd };
+      const { actions, reasons, applies } = toActions(result.output, input);
+      return { actions, reasons, applies, source: "llm", situation: result.output.situation, ms, costUsd: result.costUsd };
     } catch (err) {
       // The integration is down: keep the city covered with the rule-based dispatcher.
       const error = err instanceof Error ? err.message : String(err);
       const ms = Date.now() - started;
-      this.onTrace?.({ tick: input.tick, model: this.model, prompt: briefing.text, response: null, ms, costUsd: 0, error });
+      this.onTrace?.({ tick: input.tick, model: this.model, prompt, response: null, ms, costUsd: 0, error });
       return {
         actions: this.fallback.decide(input),
         source: "fallback",
@@ -56,6 +61,8 @@ export class ClaudeCliCoordinator implements Coordinator {
     const args = [
       "-p",
       "--model", this.model,
+      // A dispatcher cannot think for a minute per call: the city does not wait.
+      "--effort", "low",
       "--tools", "",
       "--strict-mcp-config",
       "--setting-sources", "",

@@ -36,6 +36,10 @@ CÓMO DECIDIR
 - Reparte entre hospitales: no satures uno si otro está casi igual de cerca.
 - Si no hay nada que mejorar, devuelve actions vacío.
 
+DOCTRINA
+- Cada parte empieza con tu DOCTRINA Y MEMORIA: principios, heurísticas y errores aprendidos en sesiones anteriores, cada uno con un id. Tenla en cuenta al decidir; si en este caso concreto no aplica o ves algo mejor, decide tú.
+- En cada orden, pon en "applies" los ids que has seguido (por ejemplo ["H5","D2"]). Si no has seguido ninguno, déjalo vacío. No inventes ids.
+
 Responde solo con la salida estructurada, en español. "situation": una frase con lo que más importa ahora. Cada acción lleva "reason" de 15 palabras como mucho.`;
 
 /** Structured reply we ask for. Claude enforces it natively; HappyRobot carries it as the node's json_schema. */
@@ -53,6 +57,7 @@ export const SCHEMA = {
           incidentId: { type: "string" },
           hospitalId: { type: "string" },
           reason: { type: "string" },
+          applies: { type: "array", items: { type: "string" }, description: "Ids de la doctrina seguidos en esta orden (D1, H5, A3...)." },
         },
         required: ["type", "unitId", "reason"],
       },
@@ -67,11 +72,19 @@ export interface LlmAction {
   incidentId?: string;
   hospitalId?: string;
   reason: string;
+  /** Doctrine ids the agent says it followed for this order. */
+  applies?: string[];
 }
 
 export interface LlmOutput {
   situation: string;
   actions: LlmAction[];
+}
+
+/** What the agent reads each time: the doctrine from memory, then the situation. */
+export function composePrompt(briefing: string, memory?: () => string): string {
+  const doctrine = memory?.();
+  return doctrine ? `${doctrine}\n\n────────────────────────\n\n${briefing}` : briefing;
 }
 
 /** One call to an LLM coordinator, logged verbatim so a run can be audited or replayed. */
@@ -104,16 +117,18 @@ export function toAction(raw: LlmAction, { belief }: DecideInput): Action | null
  * Orders the engine can carry out, plus the reason for each. Anything naming a unit, incident or
  * hospital that does not exist is dropped: a hallucinated id must never reach the world.
  */
-export function toActions(output: LlmOutput, input: DecideInput): { actions: Action[]; reasons: string[] } {
+export function toActions(output: LlmOutput, input: DecideInput): { actions: Action[]; reasons: string[]; applies: string[][] } {
   const actions: Action[] = [];
   const reasons: string[] = [];
+  const applies: string[][] = [];
   for (const raw of output.actions ?? []) {
     const action = toAction(raw, input);
     if (!action) continue;
     actions.push(action);
     reasons.push(raw.reason);
+    applies.push(Array.isArray(raw.applies) ? raw.applies.filter((id) => typeof id === "string") : []);
   }
-  return { actions, reasons };
+  return { actions, reasons, applies };
 }
 
 /**
@@ -130,7 +145,7 @@ export const HR_SCHEMA = {
     actions: {
       type: "string",
       description:
-        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition","unitId":"...","incidentId":"...","hospitalId":"...","reason":"..."}. Sin órdenes: "[]".',
+        'Array JSON de órdenes, como cadena. Cada orden: {"type":"dispatch"|"transport"|"reposition","unitId":"...","incidentId":"...","hospitalId":"...","reason":"...","applies":["H5","D2"]}. `applies` = ids de la doctrina seguidos en esa orden. Sin órdenes: "[]".',
     },
   },
   required: ["situation", "actions"],

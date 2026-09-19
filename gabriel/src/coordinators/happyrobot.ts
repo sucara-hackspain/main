@@ -1,7 +1,7 @@
 import { HappyRobotClient } from "@happyrobot-ai/sdk";
 import { triggerAndWaitForNodeOutput } from "@happyrobot-ai/sdk/helpers";
 import { buildBriefing, GreedyCoordinator, type Coordinator, type DecideInput, type Decision } from "../engine";
-import { readOutput, toActions, type LlmTrace } from "./protocol";
+import { composePrompt, readOutput, toActions, type LlmTrace } from "./protocol";
 
 export interface HappyRobotOptions {
   apiKey?: string;
@@ -14,6 +14,8 @@ export interface HappyRobotOptions {
   /** The helper polls; the default of 2 s would add minutes over a run. */
   pollIntervalMs?: number;
   onTrace?: (trace: LlmTrace) => void;
+  /** The agent's doctrine, rendered fresh for each decision and placed before the briefing. */
+  memory?: () => string;
 }
 
 /**
@@ -32,6 +34,7 @@ export class HappyRobotCoordinator implements Coordinator {
   private readonly timeoutMs: number;
   private readonly pollIntervalMs: number;
   private readonly onTrace?: (trace: LlmTrace) => void;
+  private readonly memory?: () => string;
   private readonly fallback = new GreedyCoordinator();
 
   constructor(options: HappyRobotOptions = {}) {
@@ -48,6 +51,7 @@ export class HappyRobotCoordinator implements Coordinator {
     this.timeoutMs = options.timeoutMs ?? 90_000;
     this.pollIntervalMs = options.pollIntervalMs ?? 500;
     this.onTrace = options.onTrace;
+    this.memory = options.memory;
     this.model = `happyrobot:${workflowId}`;
   }
 
@@ -55,12 +59,13 @@ export class HappyRobotCoordinator implements Coordinator {
     const briefing = buildBriefing(input);
     if (!briefing.actionable) return { actions: [], source: "rules", situation: "Sin decisiones pendientes." };
 
+    const prompt = composePrompt(briefing.text, this.memory);
     const started = Date.now();
     try {
       const result = await triggerAndWaitForNodeOutput(this.client, {
         workflowId: this.workflowId,
         nodePersistentId: this.nodeId,
-        payload: { data: briefing.text },
+        payload: { data: prompt },
         timeoutMs: this.timeoutMs,
         pollIntervalMs: this.pollIntervalMs,
       });
@@ -68,15 +73,15 @@ export class HappyRobotCoordinator implements Coordinator {
       if (!result.ok) throw new Error(`run ${result.runId} ended as "${result.status}" without node output`);
 
       const output = readOutput(result.nodeOutput);
-      this.onTrace?.({ tick: input.tick, model: this.model, prompt: briefing.text, response: result.nodeOutput, ms, costUsd: 0 });
+      this.onTrace?.({ tick: input.tick, model: this.model, prompt, response: result.nodeOutput, ms, costUsd: 0 });
 
-      const { actions, reasons } = toActions(output, input);
-      return { actions, reasons, source: "llm", situation: output.situation, ms };
+      const { actions, reasons, applies } = toActions(output, input);
+      return { actions, reasons, applies, source: "llm", situation: output.situation, ms };
     } catch (err) {
       // The platform is down or the workflow is misconfigured: keep the city covered with the rule-based dispatcher.
       const error = err instanceof Error ? err.message : String(err);
       const ms = Date.now() - started;
-      this.onTrace?.({ tick: input.tick, model: this.model, prompt: briefing.text, response: null, ms, costUsd: 0, error });
+      this.onTrace?.({ tick: input.tick, model: this.model, prompt, response: null, ms, costUsd: 0, error });
       return {
         actions: this.fallback.decide(input),
         source: "fallback",
