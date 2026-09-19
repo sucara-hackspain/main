@@ -1,0 +1,33 @@
+{
+  "name": "crisis-observatory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --import tsx --test tests/run-model.test.ts",
+    "test:ui": "playwright test",
+    "data:local": "cd ../gabriel && ../crisis-observatory/node_modules/.bin/tsx src/run.ts --coordinator greedy --seed 2 --ticks 120",
+    "test:gabriel": "vitest run ../gabriel/test/engine.test.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "lucide-react": "^0.468.0",
+    "maplibre-gl": "^6.10.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.3",
+    "tsx": "^4.23.13",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.7",
+    "vitest": "^5.0.1"
+  }
+}

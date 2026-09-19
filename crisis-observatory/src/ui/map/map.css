@@ -1,0 +1,113 @@
+/* Map overlays stay compact. Marker dimensions/anchors are part of route geometry. */
+.app-map-wrap { position:relative; flex:1; min-height:0; margin:0 24px 16px; border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; background:var(--sidebar); }
+.operational-map-canvas { height:100%; min-height:260px; }
+.operational-map .maplibregl-canvas:focus-visible { outline-offset:-3px; }
+.operational-map-heading { position:absolute; z-index:2; top:12px; left:12px; pointer-events:none; background:var(--popover); border:1px solid var(--border); border-radius:var(--radius-md); padding:7px 9px; box-shadow:var(--dropdown-shadow); display:flex; flex-direction:column; gap:3px; }
+.operational-map-heading > span { display:flex; align-items:center; gap:5px; font-size:9px; letter-spacing:.3px; color:var(--muted-foreground); }
+.operational-map-heading > span svg { width:12px; height:12px; }
+.operational-map-heading > strong { font-size:16px; letter-spacing:-.3px; font-weight:500; }
+.operational-map-heading > small { font-size:10px; color:var(--muted-foreground); }
+.operational-recenter { position:absolute; z-index:2; top:12px; right:12px; display:flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--popover); height:26px; padding:0 7px; font-size:12px; box-shadow:var(--dropdown-shadow); }
+.operational-legend { position:absolute; z-index:2; bottom:32px; right:12px; display:flex; gap:10px; padding:6px 8px; background:var(--popover); border:1px solid var(--border); border-radius:var(--radius-md); font-size:10px; color:var(--muted-foreground); }
+.operational-legend > span { display:flex; align-items:center; gap:5px; }
+.operational-legend i { width:6px; height:6px; border-radius:50%; }
+.operational-legend .critical { background:var(--destructive); }
+.operational-legend .urgent { background:var(--warning); }
+.operational-legend .resolved { background:var(--success); }
+.operational-pin { display:flex; align-items:center; border:0; padding:0; background:none; cursor:pointer; --pin-color:var(--warning-foreground); --pin-halo:color-mix(in srgb,var(--pin-color) 12%,transparent); isolation:isolate; }
+.operational-pin.critical { --pin-color:var(--destructive-foreground); }
+.operational-pin.resolved { --pin-color:var(--success-foreground); }
+.control-center .operational-pin:hover { background:none; }
+.operational-pin-dot { width:26px; height:26px; display:grid; place-items:center; flex-shrink:0; border:2px solid var(--card); border-radius:50%; background:var(--pin-color); box-shadow:0 0 0 4px var(--pin-halo); color:var(--color-white); font:500 10px var(--font-mono); z-index:1; }
+.operational-pin-label { display:flex; flex-direction:column; text-align:left; gap:2px; background:var(--popover); border:1px solid var(--border); border-radius:0 var(--radius-md) var(--radius-md) 0; padding:4px 6px 4px 11px; margin-left:-8px; box-shadow:var(--dropdown-shadow); white-space:nowrap; }
+.operational-pin-label strong { font:500 10px var(--font-mono); color:var(--foreground); }
+.operational-pin-label small { font-size:10px; color:var(--muted-foreground); }
+.operational-pin.selected .operational-pin-dot { box-shadow:0 0 0 5px var(--pin-halo),0 0 0 1px var(--pin-color); }
+.operational-pin.selected .operational-pin-label { border-color:var(--pin-color); }
+.operational-pin.critical .operational-pin-label strong { color:var(--destructive-foreground); }
+.operational-popup, .fleet-popup { font-family:var(--font-sans); padding:2px; display:flex; flex-direction:column; align-items:flex-start; gap:7px; }
+.operational-popup > strong, .fleet-popup strong { font-size:13px; line-height:1.5; color:var(--foreground); font-weight:500; }
+.operational-popup p, .fleet-popup > span { font-size:12px; color:var(--muted-foreground); margin:0; }
+.operational-popup code { font:11px var(--font-mono); color:var(--muted-foreground); }
+.operational-popup > small, .fleet-popup > small { font-size:10px; color:var(--muted-foreground); }
+.operational-priority { font-size:10px; padding:2px 6px; border-radius:999px; background:color-mix(in srgb,var(--warning) 8%,transparent); color:var(--warning-foreground); }
+.operational-priority.critical { background:color-mix(in srgb,var(--destructive) 8%,transparent); color:var(--destructive-foreground); }
+.operational-priority.resolved { background:color-mix(in srgb,var(--success) 8%,transparent); color:var(--success-foreground); }
+.operational-map .maplibregl-popup-content { border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--dropdown-shadow); padding:12px; background:var(--popover); }
+.operational-map .maplibregl-ctrl-group { border:1px solid var(--border); box-shadow:var(--dropdown-shadow); border-radius:var(--radius-md); }
+.operational-map .maplibregl-ctrl-scale { font:10px var(--font-sans); border-color:var(--ring); background:var(--popover); color:var(--muted-foreground); }
+.operational-map .maplibregl-ctrl-attrib { font:10px var(--font-sans); }
+.operational-loading, .app-map-error { position:absolute; z-index:4; bottom:70px; left:50%; transform:translateX(-50%); font-size:12px; background:var(--popover); border:1px solid var(--border); border-radius:var(--radius-md); padding:8px 12px; color:var(--muted-foreground); }
+.app-map-error { color:var(--warning-foreground); width:min(320px,90%); }
+.hospital-base { display:flex; align-items:center; height:27px; padding:3px 6px 3px 3px; gap:5px; border-radius:var(--radius-md); border:1px solid var(--border); background:var(--popover); box-shadow:var(--dropdown-shadow); white-space:nowrap; cursor:pointer; }
+.hospital-icon { display:grid; place-items:center; width:19px; height:19px; color:var(--foreground); background:var(--muted); border-radius:3px; flex-shrink:0; }
+.hospital-icon svg { width:15px; height:15px; }
+.control-center .hospital-base:hover { background:var(--popover); border-color:var(--ring); }
+.control-center .hospital-base[aria-expanded="true"] { border-color:var(--foreground); }
+.control-center .ambulance-marker:hover { background:var(--popover); box-shadow:0 0 0 3px color-mix(in srgb,var(--info) 16%,transparent); }
+.control-center .ambulance-marker.returning:hover { box-shadow:0 0 0 3px color-mix(in srgb,var(--warning) 16%,transparent); }
+.control-center .ambulance-marker.blocked:hover { box-shadow:0 0 0 3px color-mix(in srgb,var(--destructive) 16%,transparent); }
+.operational-map .maplibregl-popup-close-button { width:24px; height:24px; font-size:18px; border-radius:0 var(--radius-lg) 0 var(--radius-md); color:var(--muted-foreground); }
+.hospital-base > strong { font-size:10px; font-weight:500; }
+.hospital-base > em { font:10px var(--font-mono); display:grid; place-items:center; color:var(--success-foreground); background:color-mix(in srgb,var(--success) 8%,transparent); border-radius:3px; width:15px; height:15px; margin:0 0 0 2px; }
+.hospital-base small, .ambulance-marker small { display:none; }
+.ambulance-marker { display:flex; align-items:center; justify-content:center; width:27px; height:27px; min-width:27px; padding:0; gap:0; border-radius:50%; background:var(--popover); color:var(--info-foreground); box-shadow:var(--dropdown-shadow); z-index:3; border:2px solid var(--info); cursor:pointer; }
+.ambulance-marker .unit-number { position:absolute; right:-7px; top:-6px; min-width:15px; height:13px; border:1px solid var(--border); background:var(--popover); border-radius:3px; display:grid; place-items:center; font:9px/1 var(--font-mono); color:var(--info-foreground); pointer-events:none; }
+.ambulance-marker.returning { border-color:var(--warning); color:var(--warning-foreground); }
+.ambulance-marker.returning .unit-number { color:var(--warning-foreground); }
+.ambulance-marker.selected { box-shadow:0 0 0 4px color-mix(in srgb,var(--info) 16%,transparent); }
+.ambulance-marker.blocked { border-color:var(--destructive); color:var(--destructive-foreground); }
+.ambulance-marker.stationary { opacity:.85; }
+.ambulance-marker > svg { width:15px; height:15px; }
+.route-restriction { width:23px; height:23px; padding:0; display:grid; place-items:center; border-radius:var(--radius-md); background:var(--popover); color:var(--destructive-foreground); border:1px solid var(--destructive); line-height:0; box-shadow:var(--dropdown-shadow); }
+.route-restriction > svg { display:block; width:14px; height:14px; }
+.fleet-map-note { position:absolute; z-index:2; left:66px; bottom:35px; display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted-foreground); background:var(--popover); border:1px solid var(--border); border-radius:var(--radius-md); padding:6px 8px; flex-wrap:wrap; max-width:280px; }
+.fleet-line { display:inline-block; width:15px; border-top:2px solid var(--info); }
+.fleet-line.inbound { border-color:var(--warning); }
+.fleet-line.blocked { border-color:var(--destructive); border-top-style:dashed; }
+.fleet-map-note small { font-size:9px; flex-basis:100%; margin-top:2px; }
+@media(max-width:1150px) {
+  .app-map-wrap { margin-inline:16px; }
+  .fleet-map-note { left:10px; bottom:72px; }
+}
+@media(max-width:800px) {
+  .app-map-wrap { margin-inline:12px; }
+  .operational-map-heading > small { display:none; }
+  .operational-pin-label { display:none; }
+  .operational-pin.selected .operational-pin-label { display:flex; }
+  .fleet-map-note { max-width:260px; }
+  .operational-legend { right:10px; bottom:32px; gap:8px; }
+}
+@media(pointer:coarse) {
+  .control-center button.operational-recenter { position:relative; }
+  .control-center .operational-recenter { position:absolute; min-height:44px; }
+}
+.run-patient {
+  border: 2px solid var(--card);
+  border-radius: 999px;
+  background: var(--destructive-foreground);
+  color: white !important;
+  padding: 3px 6px;
+  font: 10px var(--font-mono) !important;
+  box-shadow: var(--dropdown-shadow);
+}
+.control-center .run-patient:hover {
+  background: var(--destructive-foreground);
+}
+.run-patient.selected {
+  outline: 3px solid color-mix(in srgb, var(--destructive) 30%, transparent);
+}
+.run-patient.deceased {
+  background: var(--foreground);
+}
+.run-hospital {
+  z-index: 1;
+}
+.run-session .ambulance-marker .unit-number {
+  min-width: 18px;
+}
+@media (max-width: 800px) {
+  .run-session .operational-map-heading > small {
+    display: none;
+  }
+}
