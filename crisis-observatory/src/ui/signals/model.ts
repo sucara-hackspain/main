@@ -18,6 +18,8 @@ export interface LeadView {
   evidence: Message[];
   /** Inside a district without power: why nobody phoned about it. */
   dark: boolean;
+  /** A 112 call from the same spot that was already in when the lead came up, if there was one. */
+  heardBy112: string | null;
   incidentId: string | null;
   outcome: { tone: "good" | "bad" | "neutral"; text: string };
 }
@@ -62,6 +64,7 @@ export function channelView(records: TickRecord[], distanceM: (a: number, b: num
       ...lead,
       evidence: lead.messages.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])),
       dark: outages.some((o) => distanceM(o.node, lead.node) <= o.radiusM),
+      heardBy112: calls.find((c) => !c.source && c.tick <= lead.tick && distanceM(c.node, lead.node) <= 200)?.id ?? null,
       incidentId: incident?.id ?? null,
       outcome,
     };

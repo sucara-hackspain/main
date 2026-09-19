@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Cpu, MessageCircle, Phone, PhoneOutgoing, Radio, ShieldQuestion, Zap } from "lucide-react";
 import { elapsed } from "../engineTrace";
 import type { ChannelView, LeadView, Message } from "./model";
@@ -28,8 +29,8 @@ function LeadCard({ lead, seconds, active, onLead }: { lead: LeadView; seconds: 
       <ul className="lead-evidence">
         {lead.evidence.map((m) => <li key={m.id}><MessageCircle size={11} /> {CHANNEL[m.channel].label}, +{elapsed(m.tick, seconds)}: «{m.text}»</li>)}
         {lead.registry && <li><ShieldQuestion size={11} /> Teleasistencia, a menos de 90 m: {lead.registry}</li>}
-        {lead.dark && <li><Zap size={11} /> Zona sin luz: por eso nadie llamó al 112</li>}
-        <li><Phone size={11} /> Ninguna llamada al 112 sobre esto cuando se abrió (+{elapsed(lead.tick, seconds)})</li>
+        {lead.dark && <li><Zap size={11} /> Zona sin luz: allí apenas se puede llamar al 112</li>}
+        <li><Phone size={11} /> {lead.heardBy112 ? `El 112 ya tenía una llamada de ese sitio (${lead.heardBy112}): la pista lo corrobora` : `Ninguna llamada al 112 desde ese sitio cuando salió la pista (+${elapsed(lead.tick, seconds)})`}</li>
       </ul>
       <footer data-tone={lead.outcome.tone}>{lead.outcome.text}</footer>
     </li>
@@ -38,6 +39,8 @@ function LeadCard({ lead, seconds, active, onLead }: { lead: LeadView; seconds: 
 
 export default function SignalsView({ view, seconds, focus, onFocus }: { view: ChannelView | null; seconds: number; focus: string | null; onFocus: (id: string | null) => void }) {
   if (!view) return <div className="app-empty signals-empty"><Radio size={22} /><strong>Esta ejecución no tiene canal ciudadano</strong><p>Se grabó sin redes ni mensajería: la sala solo oyó el 112, la radio y los drones.</p></div>;
+  const [show, setShow] = useState<"all" | "relevant" | "unread">("all");
+  const shown = view?.messages.filter((m) => (show === "all" ? true : show === "relevant" ? m.relevant : !m.read)) ?? [];
   const real = view.leads.filter((l) => l.outcome.tone === "good").length;
   const wrong = view.leads.filter((l) => l.outcome.tone === "bad").length;
   return (
@@ -58,8 +61,12 @@ export default function SignalsView({ view, seconds, focus, onFocus }: { view: C
       </div>
       <div className="signals-columns">
         <section aria-label="Lo que llega">
-          <h3>Lo que llega <span>en crudo, lo último arriba</span></h3>
-          <ul className="signal-list">{view.messages.map((m) => <Row key={m.id} m={m} seconds={seconds} active={!!m.leadId && m.leadId === focus} onLead={onFocus} />)}</ul>
+          <h3>Lo que llega <span>en crudo, lo último arriba</span>
+            <div className="signals-filter" role="group" aria-label="Filtrar mensajes">
+              {([["all", "Todo"], ["relevant", "Alguien en apuros"], ["unread", "Nadie lo leyó"]] as const).map(([key, label]) => <button key={key} aria-pressed={show === key} onClick={() => setShow(key)}>{label}</button>)}
+            </div>
+          </h3>
+          <ul className="signal-list">{shown.map((m) => <Row key={m.id} m={m} seconds={seconds} active={!!m.leadId && m.leadId === focus} onLead={onFocus} />)}</ul>
         </section>
         <section aria-label="Lo que se saca">
           <h3>Lo que se saca <span>pistas con su cadena de evidencia</span></h3>

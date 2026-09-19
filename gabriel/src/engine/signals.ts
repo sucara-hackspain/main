@@ -38,13 +38,13 @@ const FLOORS = ["el bajo", "la planta baja", "el entresuelo", "el bajo B", "el b
 // {street} {num} {name} {kin} {floor} are filled in. The ones that matter most never say "socorro".
 const TEMPLATES: Record<SignalKind, string[]> = {
   worry: [
-    "Alguien sabe algo de {name}, la de {floor} de {street} {num}? No coge el teléfono desde hace una hora",
-    "{kin} vive sola en {street} {num}, {floor}. La llamo y no da señal. Si alguien está por allí que mire por favor",
-    "No consigo hablar con {kin}. Está en {street}, en {floor}, y no puede subir escaleras",
+    "Alguien sabe algo de {name}? Vive en {floor} de {street} {num} y no coge el teléfono desde hace una hora",
+    "{kin} vive sin nadie más en {street} {num}, en {floor}. Llamo y no da señal. Si alguien está por allí que mire por favor",
+    "No consigo hablar con {kin}. Está en {street} {num}, en {floor}, y no puede subir escaleras",
     "Vecinos de {street}: en el {num} hay un señor mayor en {floor} que no ha salido. Las persianas están bajadas y hay agua en el portal",
     "{name} no contesta. {street} {num}. Tiene 80 y pico años y va en silla. Alguien puede acercarse??",
-    "Estoy fuera de Valencia y {kin} no responde, vive en {street} {num} {floor}. Por favor que alguien avise",
-    "Llevamos rato picando a la puerta de {floor} del {num} de {street} y nadie abre. Dentro se oye agua",
+    "Estoy fuera de Valencia y {kin} no responde. Vive en {street} {num}, en {floor}. Por favor que alguien avise",
+    "Llevamos rato picando a la puerta en {floor} del {num} de {street} y nadie abre. Dentro se oye agua",
   ],
   plea: [
     "Estamos subidos al techo del coche en {street}, el agua sigue subiendo. Somos tres",
