@@ -2,10 +2,10 @@ import { createReadStream, existsSync, readdirSync, readFileSync } from "node:fs
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
 
-const engineRoot = resolve(__dirname, "../../gabriel");
+const engineRoot = resolve(__dirname, "../../backend"); // runs/ y data/ del simulador
 const SAFE = /^[\w.-]+$/;
 
-/** Serves run traces straight from runs/ so the UI can follow a run while its records are being written. */
+/** Serves the backend's games straight from backend/runs/ so the UI can follow one while its records are being written. */
 export function runsApi(): Plugin {
   return {
     name: "runs-api",

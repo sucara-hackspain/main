@@ -5,6 +5,8 @@
     "test": "node --import tsx --test src/*.test.ts",
     "sim": "tsx src/cli.ts",
     "map": "tsx src/fetch-map.ts",
+    "phone": "tsx src/server.ts",
+    "webhooks": "tsx src/hr-webhooks.ts",
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
