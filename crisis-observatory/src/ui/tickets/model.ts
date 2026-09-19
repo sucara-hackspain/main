@@ -138,6 +138,7 @@ export function buildTickets(records: TickRecord[], seconds: number): Ticket[] {
           ? `Orden aceptada${event.action.type === "dispatch" ? ` · llegada estimada en ${elapsed(event.etaTicks, seconds)}` : ""}${"hospitalId" in event.action && event.action.hospitalId ? ` · destino ${event.action.hospitalId}` : ""}`
           : event.reason;
         step.reason = (index >= 0 ? record.decision?.reasons?.[index] : undefined) || "Sin justificación registrada para esta orden.";
+        step.applies = index >= 0 ? record.decision?.applies?.[index] : undefined;
         step.source = record.decision?.source === "llm" ? "Agente coordinador" : record.decision?.source === "fallback" ? "Coordinador · respaldo por reglas" : "Coordinador · reglas";
         step.kind = accepted ? "action" : "alert";
         if (accepted && event.action.type === "dispatch") {
@@ -164,6 +165,7 @@ export function buildTickets(records: TickRecord[], seconds: number): Ticket[] {
       if (ticket) ticket.steps.push({ id: `${record.tick}:a:${n}`, tick: record.tick,
         title: `Orden propuesta · ${action.unitId}`, detail: "Pendiente de confirmación de ejecución.",
         reason: record.decision?.reasons?.[n] || "Sin justificación registrada para esta orden.",
+        applies: record.decision?.applies?.[n],
         source: "Coordinador", kind: "action" });
     });
     for (const incident of record.frame.incidents) {
