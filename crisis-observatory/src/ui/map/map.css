@@ -118,3 +118,41 @@
 .operational-map [data-entity].related:not(.selected) { box-shadow:0 0 0 3px color-mix(in srgb,var(--info) 20%,transparent); }
 .operational-filter-label { color:var(--info-foreground); }
 .route-restriction { font:700 18px/1 var(--font-sans); }
+
+/* Engine model: unit kinds, incidents as the coordinator knows them, reality underneath. */
+.run-map-tools { position:absolute; z-index:2; top:12px; right:12px; display:flex; gap:6px; }
+.run-map-tools .operational-recenter { position:static; }
+.run-map-tools > button:first-child { display:flex; align-items:center; gap:6px; height:26px; padding:0 7px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--popover); font-size:12px; box-shadow:var(--dropdown-shadow); color:var(--muted-foreground); }
+.run-map-tools > button[aria-pressed="true"] { color:var(--foreground); }
+.unit-marker[data-kind="fire"] { border-color:var(--warning); color:var(--warning-foreground); }
+.unit-marker[data-kind="fire"] .unit-number { color:var(--warning-foreground); }
+.unit-marker[data-kind="rescue"] { border-color:var(--success); color:var(--success-foreground); }
+.unit-marker[data-kind="rescue"] .unit-number { color:var(--success-foreground); }
+.unit-marker[data-kind="helicopter"] { border-color:var(--foreground); color:var(--foreground); }
+.unit-marker[data-kind="helicopter"] .unit-number { color:var(--foreground); min-width:24px; }
+.unit-marker.blocked { border-color:var(--destructive); color:var(--destructive-foreground); }
+.run-incident { --tone:var(--muted-foreground); display:flex; align-items:center; gap:4px; height:22px; padding:0 7px 0 3px; border:1px solid color-mix(in srgb,var(--tone) 55%,var(--border)); border-radius:999px; background:var(--popover); color:var(--foreground); font:500 10px var(--font-mono); box-shadow:var(--dropdown-shadow); cursor:pointer; white-space:nowrap; }
+.run-incident b { display:grid; place-items:center; height:16px; padding:0 4px; border-radius:999px; background:var(--tone); color:var(--color-white); font:600 9px var(--font-mono); }
+.run-incident.p0 { --tone:var(--destructive); z-index:4; }
+.run-incident.p1 { --tone:var(--warning); z-index:3; }
+.run-incident.p2 { --tone:var(--info); }
+.run-incident.closed { opacity:.6; }
+.run-incident.cut-off { box-shadow:0 0 0 3px color-mix(in srgb,var(--info) 30%,transparent),var(--dropdown-shadow); }
+.run-incident .flag { font-style:normal; color:var(--info-foreground); font-weight:700; }
+.control-center .run-incident:hover { background:var(--popover); border-color:var(--tone); }
+.run-scene { --tone:var(--success); display:grid; place-items:center; width:18px; height:18px; padding:0; border:2px dashed var(--tone); border-radius:50%; background:color-mix(in srgb,var(--tone) 14%,var(--popover)); color:var(--foreground); font:600 9px var(--font-mono); cursor:pointer; }
+.run-scene[data-triage="red"] { --tone:var(--destructive); }
+.run-scene[data-triage="yellow"] { --tone:var(--warning); }
+.run-scene[data-triage="black"] { --tone:var(--foreground); }
+.run-scene.resolved { opacity:.45; }
+.control-center .run-scene:hover { background:color-mix(in srgb,var(--tone) 24%,var(--popover)); }
+.hospital-base > .helipad { display:grid; place-items:center; width:15px; height:15px; margin-left:2px; border-radius:50%; border:1px solid var(--foreground); font:700 9px var(--font-sans); font-style:normal; }
+/* A compact column in the bottom-right corner, over the sea: the flooded south-west stays clear. */
+.run-legend { flex-direction:column; align-items:flex-start; gap:4px; }
+.run-legend .swatch { display:inline-block; width:14px; height:0; border-radius:0; }
+.run-legend .swatch.incident { height:8px; width:8px; border-radius:50%; background:var(--destructive); }
+.run-legend .swatch.water-known { border-top:2px dashed var(--info-foreground); }
+.run-legend .swatch.cut-known { border-top:3px dashed var(--destructive); }
+.run-legend .swatch.water-real { height:9px; background:color-mix(in srgb,var(--info) 30%,transparent); }
+.run-legend .swatch.cut-unknown { border-top:2px dashed var(--muted-foreground); }
+.run-legend .swatch.scene { width:9px; height:9px; border-radius:50%; border:2px dashed var(--destructive); }

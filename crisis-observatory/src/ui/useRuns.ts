@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import {
-  assertRunRecords,
+  assertEngineRecords,
   type GraphData,
   type RunMeta,
   type TickRecord,
-} from "./runModel";
+} from "./engineTrace";
 async function json<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(path, { signal, cache: "no-store" });
   if (!response.ok)
@@ -64,7 +64,7 @@ export function useRun(id: string) {
           `/api/runs/${encodeURIComponent(id)}?from=${loaded}`,
           abort.signal,
         );
-        assertRunRecords(data.ticks);
+        assertEngineRecords(data.ticks);
         let nextLastTick = lastTick;
         for (const record of data.ticks) {
           if (record.tick <= nextLastTick)

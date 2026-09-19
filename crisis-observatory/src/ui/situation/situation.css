@@ -77,12 +77,30 @@
 .situation-linked { display:flex; flex-direction:column; border-top:1px solid var(--border); padding-top:6px; }
 .situation-linked button { display:flex; justify-content:space-between; align-items:center; gap:8px; text-align:left; padding:5px 2px; font-size:10px; color:var(--info-foreground); }
 .situation-locate { width:100%; display:flex; align-items:center; justify-content:center; gap:6px; margin-top:8px; padding:7px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--background); font-size:10px; }
-.situation-balance { padding:16px 20px; border-top:1px solid var(--border); background:var(--sidebar); margin-top:6px; }
-.situation-balance > div { display:flex; gap:28px; margin:9px 0 5px; }
-.situation-balance > div > span { display:flex; gap:7px; align-items:baseline; font-size:11px; color:var(--muted-foreground); }
+/* Balance up top, under the three figures: what the run has cost so far. */
+.situation-balance { margin-top:14px; padding-top:11px; border-top:1px dashed var(--sidebar-border); }
+.situation-balance > p { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:0; }
+.situation-balance > p small { color:var(--muted-foreground); font-size:9px; }
+.situation-balance > div { display:flex; flex-wrap:wrap; gap:6px 22px; margin-top:7px; }
+.situation-balance > div > span { display:flex; gap:6px; align-items:baseline; font-size:11px; color:var(--muted-foreground); }
 .situation-balance strong { color:var(--foreground); font:500 16px var(--font-mono); }
-.situation-balance > small { color:var(--muted-foreground); font-size:9px; }
+.situation-balance [data-tone="danger"] strong { color:var(--destructive-foreground); }
 .situation-sidebar .app-last-update { margin-top:auto; flex-shrink:0; padding-inline:20px; }
+.situation-danger { color:var(--destructive-foreground); }
+/* Incidents carry their priority where the other rows carry an icon. */
+.situation-priority { font:600 9px var(--font-mono); color:var(--tone,var(--muted-foreground)); }
+.situation-priority.p0 { --tone:var(--destructive-foreground); }
+.situation-priority.p1 { --tone:var(--warning-foreground); }
+.situation-priority.p2 { --tone:var(--info-foreground); }
+.situation-unit-icon { display:grid; place-items:center; }
+.situation-unit-icon svg { width:15px; height:15px; }
+.situation-water > p { display:flex; align-items:flex-start; gap:8px; margin:0 6px 8px; font-size:11px; }
+.situation-water > p > svg { flex-shrink:0; margin-top:2px; color:var(--info-foreground); }
+.situation-water > p strong { font-weight:550; }
+.situation-water > p small { display:block; font-size:10px; color:var(--muted-foreground); }
+.situation-water dl { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; margin:10px 6px 4px; font-size:10px; }
+.situation-water dt { color:var(--muted-foreground); }
+.situation-water dd { margin:0; text-align:right; }
 @media(max-width:800px) {
   .run-session .situation-sidebar { min-height:0; overflow:visible; }
   .situation-fixed { position:sticky; top:0; z-index:5; }
