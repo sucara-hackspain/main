@@ -1,0 +1,10 @@
+:root {
+  font-family: "Geist Variable", sans-serif;
+  font-synthesis: none;
+  font-size: 13px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { font: inherit; cursor: pointer; color: inherit; border: 0; background: none; }
+svg { flex-shrink: 0; }

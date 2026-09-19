@@ -2,3 +2,10 @@ node_modules
 state.json
 .env
 *.swp
+dist/
+tmp/
+*.tsbuildinfo
+.DS_Store
+
+test-results/
+playwright-report/
