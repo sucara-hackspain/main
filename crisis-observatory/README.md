@@ -92,11 +92,11 @@ El build estático necesita un servicio equivalente a esta API para usarse fuera
 
 ```sh
 npm run build          # TypeScript + build de producción
-npm test               # formato de registros, actividad, geometrías de rutas, situación e intervenciones
+npm test               # formato de registros, eventos, geometrías de rutas, situación e intervenciones
 npm run test:gabriel    # tests del motor
 npm run test:ui         # Chrome instalado; integración API/UI
 ```
 
 Para comprobar un worktree separado sin usar el servidor de otra rama: `PLAYWRIGHT_PORT=5180 npm run test:ui`.
 
-Los tests de navegador simulan en memoria una noche DANA con el motor de `../gabriel/` y el coordinador por reglas (`tests/support/engineRun.ts`, semillas 2 y 12), y la sirven a través del contrato incremental de la API; no escriben en `gabriel/runs/`. Comprueban snapshots, GPS, actividad, historial, filtros, navegación móvil y las intervenciones del operador. También verifican el rechazo explícito del formato anterior. Las teselas externas se sustituyen por un fondo local. Las capturas y resultados de pruebas se ignoran en Git.
+Los tests de navegador combinan una noche DANA simulada en memoria con el motor de `../gabriel/` y el coordinador por reglas (`tests/support/engineRun.ts`, semilla 2) con escenarios fijos para tickets e intervenciones (`tests/support/ticketRun.ts` y `tests/support/interventionRun.ts`). Todos se sirven a través del contrato incremental de la API, sin escribir en `gabriel/runs/`. Comprueban snapshots, GPS, historial, filtros, navegación móvil e intervenciones del operador. Los escenarios fijos mantienen las pruebas de UI independientes de la estrategia del simulador. También verifican el rechazo explícito del formato anterior. Las teselas externas se sustituyen por un fondo local. Las capturas y resultados de pruebas se ignoran en Git.

@@ -1,14 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { TickRecord } from "../src/ui/engineTrace";
 import { detectInterventions, interventionsAt } from "../src/ui/interventions/model";
-import { serve, simulate, type Run } from "./support/engineRun";
+import { serve, type Run } from "./support/engineRun";
+import { interventionGraph, interventionRun } from "./support/interventionRun";
 
-// DANA night, seed 12, simulated in memory: water cuts off two urgent incidents in succession.
-// Run long enough for both to settle and leave a supervision request for less urgent places.
+// A fixed recording keeps UI scenarios stable when the engine's strategy changes.
 let run: Run, records: TickRecord[], opened: number, title: string;
 let next: { index: number; title: string }, ending: string;
 test.beforeAll(async () => {
-  run = await simulate(12, 200);
+  run = interventionRun();
   records = run.records;
   const all = detectInterventions(records);
   const [request, after] = all.filter((x) => x.severity === "critical");
@@ -25,6 +25,7 @@ test.beforeAll(async () => {
 });
 test.beforeEach(async ({ page }) => {
   await serve(page, [run]);
+  await page.route("**/api/graph/ticket-test", (route) => route.fulfill({ json: interventionGraph }));
 });
 const history = (page: Page) =>
   page.getByLabel("Navegar por el historial", { exact: true });
