@@ -311,7 +311,12 @@ export interface Call {
   victims: number | null;
   /** The call in words, for humans and LLMs. */
   text: string;
+  /** A person really phoned this in (the HappyRobot 112 line), rather than the simulation making it up. */
+  source?: "phone";
 }
+
+/** A call taken on the real 112 line, as the operator filed it: no id or tick yet, and a street instead of a node. */
+export type PhoneCall = Omit<Call, "id" | "tick" | "node" | "source"> & { node?: number | null };
 
 /**
  * One thing an aerial observer believes it has seen. Every field can be wrong or missing: it is a

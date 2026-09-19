@@ -16,6 +16,7 @@ import { evaluate } from "./memory/evaluate";
 import { MemoryStore } from "./memory/store";
 import { HappyRobotCoordinator } from "./coordinators/happyrobot";
 import { happyRobotCallWriter, HappyRobotMaster } from "./masters/happyrobot";
+import { HappyRobotPhoneLine } from "./phone/happyrobot";
 import {
   clock,
   describe,
@@ -43,6 +44,8 @@ const { values } = parseArgs({
     master: { type: "string", default: "scripted" },
     /** Who words the 112 calls: the engine's templates, or the HappyRobot `sim-112` workflow (facts stay the engine's). */
     calls: { type: "string", default: "engine" },
+    /** Listen to the real 112 line (the HappyRobot voice workflow): whoever phones it puts a call into this session. */
+    phone: { type: "boolean", default: false },
     /** Decide without the doctrine (to measure what the memory is worth). */
     "no-memory": { type: "boolean", default: false },
     /** Skip the end-of-session dream; `--dream` forces it for a greedy run. */
@@ -123,6 +126,19 @@ saveMeta();
 writeFileSync(`${dir}/ticks.jsonl`, "");
 log(`run ${id}: ${meta.coordinator}${meta.model ? ` (${meta.model})` : ""}, seed ${seed}, ${ticks} ticks`);
 
+const phoneLine = values.phone
+  ? new HappyRobotPhoneLine({
+      onCall: (call, runId) => {
+        log(`TELÉFONO 112: entra una llamada real (${runId}) · ${call.street ?? "sin calle"} · ${call.text}`);
+        appendFileSync(`${dir}/phone.jsonl`, JSON.stringify({ at: new Date().toISOString(), runId, call }) + "\n");
+        sim.phone(call);
+      },
+      onError: (error) => log(`TELÉFONO 112: no se pudo consultar la línea [${error}]`),
+    })
+  : null;
+phoneLine?.start();
+if (phoneLine) log("TELÉFONO 112: línea abierta, las llamadas reales entran en esta sesión");
+
 let llmCalls = 0;
 let llmCost = 0;
 const records: TickRecord[] = [];
@@ -153,6 +169,7 @@ try {
   log(`FAILED: ${err instanceof Error ? err.stack : err}`);
 }
 
+phoneLine?.stop();
 meta.summary = sim.summary();
 saveMeta();
 const s = meta.summary;

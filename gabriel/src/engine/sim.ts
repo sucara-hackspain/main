@@ -5,7 +5,8 @@ import type { Master } from "./master";
 import { createBelief, recordOrders, updateBelief } from "./incidents";
 import { CallObserver, type Observer } from "./observer";
 import { Rng } from "./rng";
-import type { Action, Belief, Call, MasterAction, Report, SimConfig, World, WorldEvent } from "./types";
+import type { Action, Belief, Call, MasterAction, PhoneCall, Report, SimConfig, World, WorldEvent } from "./types";
+import { sceneFromCall } from "./victims";
 
 export interface SimulationOptions {
   graph: Graph;
@@ -45,11 +46,15 @@ export class Simulation {
   private readonly callWriter?: (call: Call) => Promise<string | null>;
   private injected: MasterAction[] = [];
   private orders: Action[] = [];
+  private phoned: PhoneCall[] = [];
+  private readonly phoneRng: Rng;
 
   constructor(options: SimulationOptions) {
     const root = new Rng(options.seed ?? 1);
     this.masterRng = root.fork();
     this.observerRng = root.fork();
+    // Forked last, and only drawn from when someone phones: a run nobody phones into is the same run as before.
+    this.phoneRng = root.fork();
     this.graph = options.graph;
     this.master = options.master;
     this.coordinator = options.coordinator;
@@ -69,6 +74,14 @@ export class Simulation {
     this.orders.push(action);
   }
 
+  /**
+   * Somebody really phoned 112. What they described becomes true: an emergency appears where they said, nobody else
+   * calls about it, and their call reaches the coordinator on the next tick like any other.
+   */
+  phone(call: PhoneCall): void {
+    this.phoned.push(call);
+  }
+
   async step(): Promise<TickResult> {
     const { world, graph } = this;
     const logStart = world.log.length;
@@ -77,15 +90,30 @@ export class Simulation {
     this.injected = [];
     for (const action of masterActions) applyMasterAction(world, graph, action);
 
+    const phoned: Omit<Report, "id">[] = [];
+    for (const heard of this.phoned.splice(0)) {
+      if (!(this.observer instanceof CallObserver)) break;
+      const placed = heard.node ?? (heard.street ? graph.findStreet(heard.street) : null);
+      // No street the map knows: somewhere in the city, and the operator's "where" is worth very little.
+      const node = placed ?? this.phoneRng.int(0, graph.nodeCount - 1);
+      const { kind, victims } = sceneFromCall(heard, this.phoneRng);
+      applyMasterAction(world, graph, { type: "spawn_scene", kind, node, victims, silent: true });
+      const call = this.observer.adopt(
+        { ...heard, node, street: heard.street ?? graph.streetAt(node), locationErrorM: placed === null ? Math.max(heard.locationErrorM, 1000) : heard.locationErrorM, source: "phone" },
+        world.scenes.at(-1)!.id,
+        world.tick,
+      );
+      phoned.push({ tick: world.tick, source: "call_112", confidence: 1, event: { type: "call_received", tick: world.tick, call } });
+    }
+
     advance(world, graph);
 
     const fresh = world.log.slice(this.observedUpTo);
     this.observedUpTo = world.log.length;
-    const reports = this.observer
-      .observe(fresh, world, graph, this.observerRng)
-      .map((report) => ({ ...report, id: this.nextReportId++ }));
+    const reports = [...this.observer.observe(fresh, world, graph, this.observerRng), ...phoned].map((report) => ({ ...report, id: this.nextReportId++ }));
     if (this.callWriter) {
-      const calls = reports.flatMap((r) => (r.event.type === "call_received" ? [r.event.call] : []));
+      // A call somebody really made already is in their own words.
+      const calls = reports.flatMap((r) => (r.event.type === "call_received" && !r.event.call.source ? [r.event.call] : []));
       const texts = await Promise.all(calls.map((call) => this.callWriter!(call).catch(() => null)));
       calls.forEach((call, n) => (call.text = texts[n] ?? call.text));
     }

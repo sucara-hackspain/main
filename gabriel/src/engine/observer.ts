@@ -113,6 +113,14 @@ export class CallObserver implements Observer {
 
   constructor(private readonly options: CallObserverOptions = {}) {}
 
+  /** A call that did not come from here (a real phone call) joins the books: numbered like the rest, and followed up like the rest. */
+  adopt(call: Omit<Call, "id" | "tick">, sceneId: string, tick: number): Call {
+    const filed: Call = { ...call, id: `L${this.nextCallNum++}`, tick };
+    this.sceneOfCall.set(filed.id, sceneId);
+    this.lastCall.set(sceneId, tick);
+    return filed;
+  }
+
   observe(events: WorldEvent[], world: Readonly<World>, graph: Graph, rng: Rng): Omit<Report, "id">[] {
     const reports: Omit<Report, "id">[] = [];
 
