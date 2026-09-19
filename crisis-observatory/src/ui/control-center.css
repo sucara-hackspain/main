@@ -9,13 +9,13 @@
 /* Low-specificity hover keeps semantic buttons and map markers in their own tone. */
 @media (hover:hover) {
   .control-center button:where(:not(:disabled):hover) { background-color:var(--accent); }
-  .control-center :is(.app-case,.app-agent-cards > button):hover { border-color:var(--ring); }
+  .control-center .app-case:hover { border-color:var(--ring); }
 }
 .control-center svg { stroke-width:2; flex-shrink:0; }
 .control-center code, .app-turn-total, .app-case-top > span:first-child, .app-unit strong { font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
 .app-layout { height:100%; display:flex; }
 .app-workspace { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--sidebar); }
-/* Map or activity, between the toolbar and the timeline. */
+/* Map or tickets, between the toolbar and the timeline. */
 .app-stage { flex:1; min-height:0; display:flex; flex-direction:column; position:relative; }
 .app-toolbar { padding:16px 24px 0; display:flex; justify-content:space-between; align-items:center; gap:12px; }
 .app-toolbar > a { display:flex; gap:4px; align-items:center; color:var(--muted-foreground); font-size:12px; text-decoration:none; white-space:nowrap; }
@@ -36,7 +36,6 @@
 .app-scope button { display:flex; align-items:center; gap:6px; min-height:24px; padding:2px 7px; border-radius:var(--radius-md); font-size:12px; }
 .app-scope .is-active { background:var(--accent); color:var(--foreground); }
 .app-filter { border:1px solid var(--border); background:var(--card); }
-.app-agent-icon { display:grid; place-items:center; height:28px; width:28px; background:var(--muted); color:var(--foreground); border:1px solid var(--border); border-radius:var(--radius-md); flex-shrink:0; }
 .control-center .app-case-list { scrollbar-width:thin; scrollbar-color:var(--ring) var(--muted); }
 .app-playback { margin:0 24px 16px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:12px; flex-shrink:0; }
 .app-playback-title { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:var(--muted-foreground); margin-bottom:10px; }
@@ -59,13 +58,6 @@
 .app-sidebar-title { display:flex; justify-content:space-between; align-items:center; padding:16px; }
 .app-sidebar-title h2 { font-size:16px; letter-spacing:-.3px; font-weight:500; margin:4px 0 0; }
 .app-sidebar-title > svg { color:var(--muted-foreground); }
-.app-agent-cards { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:0 16px 16px; }
-.app-agent-cards > button { border:1px solid var(--border); border-radius:var(--radius-lg); display:flex; align-items:center; gap:7px; padding:8px; text-align:left; }
-.app-agent-cards > button.is-active { background:var(--accent); border-color:var(--ring); }
-.app-agent-cards .app-agent-icon { height:24px; width:24px; }
-.app-agent-cards strong { font-size:12px; font-weight:500; display:block; }
-.app-agent-cards small { font-size:10px; color:var(--muted-foreground); display:block; margin-top:2px; }
-.app-agent-count { margin-left:auto; font:11px var(--font-mono); color:var(--muted-foreground); }
 .app-cases { padding:0 16px 12px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .app-section-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .app-section-title h3 { font-size:13px; font-weight:500; margin:0; }

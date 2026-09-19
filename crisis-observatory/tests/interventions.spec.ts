@@ -1,19 +1,19 @@
 import { test, expect, type Page } from "@playwright/test";
-import { isFree, type TickRecord } from "../src/ui/engineTrace";
+import type { TickRecord } from "../src/ui/engineTrace";
 import { detectInterventions, interventionsAt } from "../src/ui/interventions/model";
-import { serve, simulate, type Run } from "./support/engineRun";
+import { serve, type Run } from "./support/engineRun";
+import { interventionGraph, interventionRun } from "./support/interventionRun";
 
-// DANA night, seed 12, simulated in memory: the water cuts off an urgent place (C23) with nobody
-// able to wade or fly there, while the helicopter is free. It stays open for a while, then settles,
-// and a few minutes later the water cuts off the next one (C25). The night ends with a supervision
-// request still open: less urgent places the water has cut off.
+// A fixed recording keeps UI scenarios stable when the engine's strategy changes.
 let run: Run, records: TickRecord[], opened: number, title: string;
 let next: { index: number; title: string }, ending: string;
 test.beforeAll(async () => {
-  run = await simulate(12, 175);
+  run = interventionRun();
   records = run.records;
   const all = detectInterventions(records);
   const [request, after] = all.filter((x) => x.severity === "critical");
+  expect(request, "The run must include an urgent request").toBeDefined();
+  expect(after, "The run must include a subsequent urgent request").toBeDefined();
   opened = records.findIndex((r) => r.tick === request.openedTick);
   title = request.title;
   next = { index: records.findIndex((r) => r.tick === after.openedTick), title: after.title };
@@ -25,6 +25,7 @@ test.beforeAll(async () => {
 });
 test.beforeEach(async ({ page }) => {
   await serve(page, [run]);
+  await page.route("**/api/graph/ticket-test", (route) => route.fulfill({ json: interventionGraph }));
 });
 const history = (page: Page) =>
   page.getByLabel("Navegar por el historial", { exact: true });
@@ -54,7 +55,7 @@ test("an urgent request takes over the page until the operator approves the reco
   await open(page, opened - 1);
   await expect(room(page)).toHaveCount(0);
 
-  await history(page).fill(String(opened + 2));
+  await history(page).fill(String(opened));
   await expect(room(page).getByRole("heading")).toHaveText(title);
   await expect(room(page)).toContainText("RECOMENDACIÓN DEL SISTEMA");
   await expect(page).toHaveTitle(/^\(\d+\) Decisión pendiente/);
@@ -64,18 +65,16 @@ test("an urgent request takes over the page until the operator approves the reco
   await page.keyboard.press("Escape");
   await expect(room(page)).toBeVisible();
 
-  const approve = room(page).getByRole("button", { name: /^1 Aprobar: Enviar/ });
-  // The recommended unit is free in the record, and it can wade or fly.
-  const unitId = (await approve.textContent())!.match(/Enviar (\w+) a/)![1];
-  const unit = records[opened + 2].frame.units.find((u) => u.id === unitId)!;
-  expect(isFree(unit)).toBe(true);
-  expect(["rescue", "helicopter"]).toContain(unit.kind);
+  // Water and air units are occupied in this record, so the recommendation asks for outside help.
+  const recommendation = "Pedir embarcaciones externas";
+  const approve = room(page).getByRole("button", { name: `1 Aprobar: ${recommendation}`, exact: true });
+  await expect(room(page)).toContainText("No hay ninguna unidad acuática ni el helicóptero libres");
   const before = Number((await page.title()).match(/^\((\d+)\)/)![1]);
 
   await approve.click();
   await expect(room(page)).toHaveCount(0);
   await expect(page.locator(".app-workspace")).not.toHaveAttribute("inert");
-  await expect(receipt(page)).toContainText(`Decisión registrada · Enviar ${unitId}`);
+  await expect(receipt(page)).toContainText(`Decisión registrada · ${recommendation}`);
   await expect(receipt(page)).toContainText(
     "El motor todavía no recibe órdenes del operador",
   );
@@ -84,10 +83,10 @@ test("an urgent request takes over the page until the operator approves the reco
   );
 
   // The decision stays while the timeline moves forward, and the history can undo it.
-  await history(page).fill(String(opened + 4));
+  await history(page).fill(String(next.index - 1));
   await expect(room(page)).toHaveCount(0);
   await expect((await decisions(page)).locator(".decided")).toContainText(
-    `Aprobada · Enviar ${unitId}`,
+    `Aprobada · ${recommendation}`,
   );
   await page.getByRole("button", { name: `Deshacer decisión: ${title}` }).click();
   await expect(room(page).getByRole("heading")).toHaveText(title);
@@ -110,27 +109,18 @@ test("the room carries the context to decide: incident map, facts with their sou
   await expect(thread.locator("li.now")).toContainText("Ahora · se requiere tu decisión");
   await thread.locator("li.call button").first().click();
   await expect(thread.locator(".run-call")).toBeVisible();
+  await expect(thread.getByRole("button", { name: "Abrir en Actividad de los agentes" })).toHaveCount(0);
+  await thread.locator("li.coordinator > button").first().click();
+  await expect(thread.locator(".app-event-detail")).toContainText("ÓRDENES Y RESULTADOS");
 
   // Leaving to investigate keeps the request in a bar and frees the page.
   await room(page).getByRole("button", { name: "Salir a investigar" }).click();
   await expect(room(page)).toHaveCount(0);
   const bar = page.locator(".decision-pending-bar");
-  await expect(bar).toContainText("Decisión pendiente");
+  await expect(bar).toContainText(/decisi(?:ón|ones) pendiente/i);
   await expect(page.locator(".app-workspace")).not.toHaveAttribute("inert");
   await bar.getByRole("button", { name: "Volver a la decisión" }).click();
   await expect(room(page)).toBeVisible();
-
-  // The whole thread in the activity view, filtered by the incident.
-  await room(page)
-    .getByRole("button", { name: "Abrir en Actividad de los agentes" })
-    .click();
-  await expect(room(page)).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Actividad de los agentes", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".app-scope .app-filter", { hasText: incidentId })).toBeVisible();
-  await expect(bar).toBeVisible();
-  await bar.getByRole("button", { name: "Volver a la decisión" }).click();
 
   // The sound can be silenced from the room, and the choice sticks.
   await room(page).getByRole("button", { name: "Silenciar los avisos" }).click();
@@ -233,12 +223,21 @@ test("a supervision request takes over the page the same way, in amber", async (
   await room(page).getByRole("button", { name: "1 Aprobar: Continuar con reglas" }).click();
   await expect(room(page)).toHaveCount(0);
   await expect(receipt(page)).toContainText("Decisión registrada · Continuar con reglas");
+
+  // The legacy banner also keeps the recommendation, without linking to the removed page.
+  await page.goto("/?iteracion=1");
+  await expect(history(page)).toHaveAttribute("max", String(ticks.length - 1));
+  await history(page).fill(String(quiet + 1));
+  const banner = page.getByRole("region", { name: "Decisión requerida" });
+  await expect(banner).toContainText("IA no disponible: deciden las reglas");
+  await expect(banner.getByRole("button", { name: "Ver en actividad" })).toHaveCount(0);
 });
 
 test("?iteracion=1 keeps the first iteration, a banner above the map", async ({ page }) => {
   await open(page, opened + 2, "/?iteracion=1");
   const banner = page.getByRole("region", { name: "Decisión requerida" }).first();
-  await expect(banner).toContainText("Decidir antes de");
+  await expect(banner.getByRole("heading")).toHaveText(title);
+  await expect(banner.getByRole("button", { name: /^Ver C\d+ en el mapa$/ })).toBeVisible();
   await expect(banner).not.toHaveClass(/floating/);
   await expect(room(page)).toHaveCount(0);
   await expect(page.locator(".app-workspace")).not.toHaveAttribute("inert");

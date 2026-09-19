@@ -15,7 +15,7 @@ import {
 } from "../src/ui/interventions/model";
 import type { Router } from "../src/ui/interventions/routing";
 import { incidentScene, incidentThread } from "../src/ui/interventions/scene";
-import { auditItems } from "../src/ui/thoughts/model";
+import { auditItems } from "../src/ui/audit/model";
 
 const unit = (id: string, kind: UnitKind, patch: Partial<UnitFrame> = {}): UnitFrame => ({
   id,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, BookOpen, Check, CheckCheck, ChevronRight, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
+import { BookOpen, Check, CheckCheck, ChevronRight, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
 import { elapsed, injuryLabel, priority, sceneLabel, triageLabel, unitKind, unitStatus, victimStatus, type Focus, type IncidentFrame, type RunMeta } from "../engineTrace";
 import { duration } from "../situation/model";
 import { ticketNextStep, ticketStates, type Ticket, type TicketState, type TicketStep } from "./model";
@@ -146,7 +146,7 @@ export function TicketDetail({ ticket, seconds, tick, onLocate, onClose, runs, r
           <div><dt>Avisos recibidos</dt><dd>{incident.callIds.length}</dd></div>
           {incident.splitFrom && <div><dt>Separada de</dt><dd><code>{incident.splitFrom}</code> · otro sitio</dd></div>}
         </dl>
-        <button className="ticket-locate" onClick={() => onLocate(ticket)}><MapPin size={14} />Enfocar en el mapa<ArrowUpRight size={14} /></button>
+        <button type="button" className="ticket-locate" onClick={() => onLocate(ticket)}><MapPin size={16} aria-hidden="true" />Enfocar en el mapa</button>
         {ticket.lastSeenTick < tick && <small className="ticket-archive-note">Se abrirá el último registro de esta incidencia en el mapa.</small>}
       </section>
       <section className="ticket-next" data-state={ticket.state} aria-label="Seguimiento de la incidencia"><span className="ticket-next-icon">{ticket.state === "resolved" ? <CheckCheck size={16} /> : <Clock3 size={16} />}</span><div><span className="app-eyebrow">{ticket.state === "resolved" ? "CIERRE" : "SEGUIMIENTO"}</span><h3>{next.title}</h3><p>{next.detail}</p><small>Según el estado registrado</small></div></section>

@@ -55,41 +55,22 @@ test("engine run drives units, incidents, hospital capacity, GPS, playback and h
   await expect(page.getByLabel("Tiempo transcurrido")).toHaveText(paused!);
   expect(errors).toEqual([]);
 });
-test("coordinator detail expands only centrally and records actual accepted actions", async ({
+test("navigation keeps territory and tickets available on desktop and mobile", async ({
   page,
 }) => {
   await open(page);
-  const i = records.findIndex((r) => r.actions.length > 0);
-  await page
-    .getByLabel("Navegar por el historial", { exact: true })
-    .fill(String(i));
-  await page
-    .getByRole("button", { name: "Actividad de los agentes", exact: true })
-    .click();
-  await page
-    .locator(".app-event-row.coordinator .app-event-button")
-    .last()
-    .click();
-  await expect(page.locator(".app-event-detail")).toContainText("Aceptada");
-  await expect(page.locator(".app-event-detail")).toContainText(
-    "Sin justificación registrada",
-  );
-  await expect(page.locator(".app-sidebar .app-event-detail")).toHaveCount(0);
-  await expect(page.locator(".app-event-detail")).not.toContainText("IA");
-  await page.getByRole("button", { name: "Territorio", exact: true }).click();
-  await expect(page.locator(".app-event-detail")).toHaveCount(0);
-  await expect(page.locator(".app-sidebar .app-agent-cards, .app-sidebar .app-log")).toHaveCount(0);
-  await page.getByRole("button", { name: "Actividad de los agentes", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Actividad de los agentes", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".app-event-detail")).toContainText("Aceptada");
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth > innerWidth,
-    ),
-  ).toBe(false);
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator(".app-tabs button")).toHaveText(["Territorio", "Incidencias"]);
+    await page.getByRole("button", { name: "Incidencias", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Incidencias", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("complementary", { name: "Detalle de incidencia" })).toBeVisible();
+    await page.getByRole("button", { name: "Territorio", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("complementary", { name: "Estado de la situación" })).toBeVisible();
+    await expect(page.locator(".operational-map")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  }
 });
 test("new records follow on demand, paused history stays fixed and connection errors recover", async ({
   page,
@@ -264,7 +245,6 @@ test("operational sidebar explores the map, keeps global context and respects th
   await expect(pin("incident:C7")).toBeFocused();
   await expect(row("incident:C7")).toHaveAttribute("aria-pressed", "true");
   await expect(sidebar.getByRole("region", { name: "Detalle de la selección" })).toContainText("C7");
-  await page.getByRole("button", { name: "Actividad de los agentes", exact: true }).click();
   await sidebar.getByRole("button", { name: "Ver en el mapa" }).click();
   await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
   await sidebar.getByRole("button", { name: "Cerrar detalle" }).click();
