@@ -1,0 +1,460 @@
+/* Operator decisions: request banner in the workspace, queue and history in the sidebar. */
+.decision-banner {
+  --tone: var(--destructive);
+  --tone-foreground: var(--destructive-foreground);
+  --tone-contrast: var(--color-white);
+  margin: 0 24px 12px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--tone) 45%, var(--border));
+  border-left: 3px solid var(--tone);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--tone) 4%, var(--card));
+  box-shadow: var(--dropdown-shadow);
+}
+.decision-banner.warning {
+  --tone: var(--warning);
+  --tone-foreground: var(--warning-foreground);
+  --tone-contrast: var(--color-neutral-950);
+}
+.decision-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.decision-banner > header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 18%, var(--border));
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.decision-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--tone-foreground);
+}
+.decision-banner.critical .decision-badge svg {
+  animation: decision-pulse 1.4s ease-in-out infinite;
+}
+@keyframes decision-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.decision-pager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.decision-pager button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-md);
+}
+.decision-held {
+  color: var(--foreground);
+}
+.decision-deadline {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.decision-deadline b {
+  font: 500 11px var(--font-mono);
+  color: var(--foreground);
+}
+.decision-deadline.urgent b {
+  color: var(--destructive-foreground);
+}
+.decision-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 12px;
+}
+.decision-body h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+}
+.decision-body p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+.decision-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 0 -5px;
+}
+.decision-links button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 5px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.decision-prescription {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+}
+.decision-prescription label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--muted-foreground);
+}
+.decision-prescription strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.decision-prescription > span {
+  margin-left: 8px;
+  font: 11px var(--font-mono);
+  color: var(--muted-foreground);
+}
+.decision-prescription p {
+  margin-top: 4px;
+}
+.decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+.decision-actions button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 9px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  box-shadow: var(--input-shadow);
+  font-size: 12px;
+  font-weight: 500;
+}
+.decision-actions button small {
+  font: 400 10px var(--font-mono);
+  color: var(--muted-foreground);
+}
+.decision-actions kbd {
+  display: grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font: 10px var(--font-mono);
+  color: var(--muted-foreground);
+}
+.control-center .decision-actions .decision-approve {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.control-center .decision-actions .decision-approve:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 85%, var(--background));
+}
+.decision-approve kbd {
+  border-color: color-mix(in srgb, var(--primary-foreground) 35%, transparent);
+  color: inherit;
+}
+.decision-actions .decision-other {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+.decision-actions input {
+  flex: 1;
+  min-width: 180px;
+  height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12px;
+}
+.decision-receipt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 24px 12px;
+  padding: 8px 10px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--success) 5%, var(--card));
+  font-size: 12px;
+}
+.decision-receipt > svg {
+  color: var(--success-foreground);
+}
+.decision-receipt > span {
+  flex: 1;
+  min-width: 0;
+}
+.decision-receipt strong {
+  display: block;
+  font-weight: 500;
+}
+.decision-receipt small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.decision-receipt button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.decision-queue {
+  padding: 0 16px 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.decision-queue .app-section-title h3 > .decision-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 500;
+  color: var(--destructive-foreground);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+.decision-queue-list {
+  max-height: 96px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.decision-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+.decision-row.selected {
+  border-color: color-mix(in srgb, var(--destructive) 40%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 4%, var(--card));
+}
+.decision-row.warning.selected {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+  background: color-mix(in srgb, var(--warning) 4%, var(--card));
+}
+.decision-row > i {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--destructive);
+}
+.decision-row.warning > i {
+  background: var(--warning);
+}
+.decision-row strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+.decision-row-time {
+  font: 10px var(--font-mono);
+  color: var(--destructive-foreground);
+  white-space: nowrap;
+}
+.decision-history {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.decision-history summary {
+  padding: 4px 0;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.decision-history[open] summary {
+  color: var(--foreground);
+}
+.decision-history[open] {
+  max-height: 190px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.decision-history > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--sidebar-border);
+}
+.decision-history > div > svg {
+  margin-top: 2px;
+  color: var(--muted-foreground);
+}
+.decision-history > div.decided > svg {
+  color: var(--success-foreground);
+}
+.decision-history > div > span {
+  flex: 1;
+  min-width: 0;
+}
+.decision-history strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+}
+.decision-history small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.decision-history small button {
+  padding: 0;
+  font: 10px var(--font-mono);
+  text-decoration: underline;
+}
+.decision-history > div > button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+}
+
+/* Shared with the decision room: header tools and the bar that shows the time left to decide. */
+.decision-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.decision-timer {
+  height: 3px;
+  background: color-mix(in srgb, var(--tone) 14%, var(--card));
+}
+.decision-timer > i {
+  display: block;
+  height: 100%;
+  background: var(--tone);
+  transition: width 0.4s linear;
+}
+@media (max-width: 1150px) {
+  .decision-banner,
+  .decision-receipt {
+    margin-inline: 16px;
+  }
+  .decision-body {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+@media (max-width: 800px) {
+  .decision-banner,
+  .decision-receipt {
+    margin-inline: 12px;
+  }
+  .decision-deadline {
+    margin-left: 0;
+  }
+  .decision-actions button {
+    min-height: 34px;
+  }
+}
+
+/* The queue and the history live behind a toolbar button. */
+.decision-inbox {
+  position: relative;
+}
+.decision-inbox > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--input-shadow);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.decision-inbox > button.has-pending {
+  border-color: color-mix(in srgb, var(--destructive) 40%, var(--border));
+  color: var(--destructive-foreground);
+}
+.decision-inbox > button b {
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--destructive);
+  color: var(--color-white);
+  font: 600 10px var(--font-mono);
+}
+.decision-inbox-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--popover);
+  box-shadow: 0 20px 40px -16px #0000004d, var(--dropdown-shadow);
+}
+.decision-inbox-panel .decision-queue {
+  margin: 0;
+  padding: 12px 14px 10px;
+  border: 0;
+}
+.decision-inbox-panel .decision-queue-list,
+.decision-inbox-panel .decision-history[open] {
+  max-height: none;
+}

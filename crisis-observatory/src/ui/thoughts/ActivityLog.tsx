@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Activity, ArrowUpRight, Bot, Waves, X } from "lucide-react";
-import { elapsed } from "../runModel";
+import { ArrowUpRight, X } from "lucide-react";
+import { elapsed } from "../engineTrace";
 import { auditTitle, laneName, type AuditItem } from "./model";
+import { LaneIcon } from "./ThoughtsView";
 import "./thoughts.css";
 
 type ActivityLogProps = {
@@ -56,20 +57,14 @@ export default function ActivityLog({
             onClick={() => reveal(item)}
           >
             <span className="app-log-icon">
-              {item.lane === "coordinator" ? (
-                <Bot size={13} />
-              ) : item.lane === "world" ? (
-                <Activity size={13} />
-              ) : (
-                <Waves size={13} />
-              )}
+              <LaneIcon lane={item.lane} size={13} />
             </span>
             <span>
               <small>
                 +{elapsed(item.tick, seconds)} · {laneName[item.lane]}
               </small>
               <strong>{auditTitle(item, seconds)}</strong>
-              <span>{item.patients.join(" · ")}</span>
+              <span>{item.refs.join(" · ")}</span>
             </span>
             <ArrowUpRight size={12} />
           </button>

@@ -1,8 +1,8 @@
-import type { AmbulanceFrame, GraphData } from "../runModel";
+import type { GraphData, LonLat } from "../engineTrace";
 
 // Trim the first edge at the reported GPS position. No chord cutting across a street bend.
 export function remainingRoute(
-  a: AmbulanceFrame,
+  a: { pos: LonLat; route: [number, 0 | 1][] },
   graph: GraphData,
 ): [number, number][] {
   const coords: [number, number][] = [a.pos];
@@ -38,4 +38,18 @@ export function remainingRoute(
     coords.push(...points.slice(segment + 1));
   });
   return coords;
+}
+
+/** Ring of `meters` around a point, for water fronts and location uncertainty. */
+export function circle(
+  [lon, lat]: LonLat,
+  meters: number,
+  steps = 48,
+): [number, number][] {
+  const dLat = meters / 111320,
+    dLon = meters / (111320 * Math.cos((lat * Math.PI) / 180));
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const a = (i / steps) * 2 * Math.PI;
+    return [lon + dLon * Math.cos(a), lat + dLat * Math.sin(a)];
+  });
 }
