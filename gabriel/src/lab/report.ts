@@ -194,7 +194,7 @@ blockquote { margin:6px 0 12px; padding:8px 12px; border-left:3px solid var(--va
 
 ${status ? `<h2>${status.running ? "En marcha" : "Parado"} · ${esc(status.phase)}</h2>
 <div class="card ${status.running ? "live" : ""}">
-  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span>Partidas de esta ejecución: <strong>${status.done}</strong> de ${status.total}</span><span class="muted">${status.meanGameSeconds ? `${Math.round(status.meanGameSeconds)} s por partida con agente · ` : ""}${status.parallel} a la vez${eta !== null ? ` · quedan ~${eta} min` : ""} · ${new Date(status.updatedAt).toLocaleTimeString("es-ES")}</span></div>
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span>Partidas de esta ejecución: <strong>${status.done}</strong> de ${status.total}</span><span class="muted">${status.meanGameSeconds ? `${Math.round(status.meanGameSeconds)} s por partida con agente · ` : ""}${status.parallel} a la vez${status.platform ? ` · plataforma: ${status.platform.requests} peticiones, ${status.platform.rateLimited} frenazos, una cada ${status.platform.spacingMs} ms` : ""}${eta !== null ? ` · quedan ~${eta} min` : ""} · ${new Date(status.updatedAt).toLocaleTimeString("es-ES")}</span></div>
   <div class="bar" style="margin-top:8px"><i style="width:${status.total ? (100 * status.done) / status.total : 0}%"></i></div>
   ${status.games.length ? `<div class="games">${status.games.map((g) => `<div class="game"><strong>${esc(g.scenario)}</strong> r${g.rep} · ${esc(g.label)}<div class="muted">tick ${g.tick}/${g.ticks} · ${g.dead} muertos</div><div class="bar"><i style="width:${(100 * g.tick) / g.ticks}%"></i></div></div>`).join("")}</div>` : ""}
 </div>` : ""}

@@ -58,7 +58,7 @@ export class HappyRobotCoordinator implements Coordinator {
     this.workflowId = workflowId;
     this.nodeId = nodeId;
     this.timeoutMs = options.timeoutMs ?? 120_000;
-    this.pollIntervalMs = options.pollIntervalMs ?? 1500;
+    this.pollIntervalMs = options.pollIntervalMs ?? 4000;
     this.onTrace = options.onTrace;
     this.memory = options.memory;
     this.everyTicks = options.everyTicks ?? 3;

@@ -88,6 +88,8 @@ export interface Status {
   meanGameSeconds: number | null;
   parallel: number;
   games: RunningGame[];
+  /** The shared request queue to the platform: how often it was told to slow down, and how far apart requests go now. */
+  platform?: { requests: number; rateLimited: number; spacingMs: number };
   log: string[];
   updatedAt: string;
 }

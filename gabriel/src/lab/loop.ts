@@ -8,9 +8,10 @@
 //   pnpm lab --test                   the final exam: champion and references on the test nights. Once.
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import { pace } from "../coordinators/hr-wait";
 import { Graph, type GraphData } from "../engine";
 import { HAND_WRITTEN } from "./baselines";
-import { applyEdit, describeEdit, EMPTY, type Doctrine } from "./doctrine";
+import { applyEdit, describeEdit, diffDoctrine, EMPTY, type Doctrine } from "./doctrine";
 import { play, type Game, type Policy } from "./play";
 import { writeReport } from "./report";
 import { buildResearchInput, ClaudeResearcher, type PastTrial } from "./researcher";
@@ -20,14 +21,16 @@ import { deathsOn, deathsOver, policyKey, readGames, readLedger, readPolicies, s
 const { values } = parseArgs({
   options: {
     generations: { type: "string", default: "1" },
-    hypotheses: { type: "string", default: "6" },
+    hypotheses: { type: "string", default: "3" },
     reps: { type: "string", default: "2" },
-    parallel: { type: "string", default: "28" },
+    /** Games per night for a hypothesis. One is enough to sort the promising from the rest; the winner gets the full count. */
+    "candidate-reps": { type: "string", default: "2" },
+    parallel: { type: "string", default: "24" },
     model: { type: "string", default: "claude-opus-5" },
     /** A change must save at least this many lives per night in training to be worth a validation. */
     "min-gain": { type: "string", default: "0.5" },
     /** ...and may cost at most this many on the validation nights. */
-    "max-harm": { type: "string", default: "0" },
+    "max-harm": { type: "string", default: "0.25" },
     /** Stop after this many generations in a row with nothing accepted. */
     patience: { type: "string", default: "4" },
     "baselines-only": { type: "boolean", default: false },
@@ -67,6 +70,7 @@ function publish(force = true): void {
   if (!force && Date.now() - lastPublished < 3000) return;
   lastPublished = Date.now();
   status.updatedAt = new Date().toISOString();
+  status.platform = { requests: pace.requests, rateLimited: pace.rateLimited, spacingMs: pace.spacingMs() };
   saveStatus(status);
   writeReport();
 }
@@ -205,7 +209,7 @@ async function generation(n: number, champion: Doctrine, taken: Set<string>): Pr
   const input = buildResearchInput({
     generation: n,
     doctrine: champion,
-    trainDeaths: TRAIN.map((s) => ({ scenario: s.id, family: s.family, victims: s.stats.victims, dead: deathsOn(games, championKey, s.id) })),
+    trainDeaths: TRAIN.map((s) => ({ scenario: s.id, family: s.family, victims: s.stats.victims, dead: deathsOn(games, championKey, s.id), greedy: deathsOn(games, "greedy", s.id), informed: deathsOn(games, "informed", s.id) })),
     findings: trainGames.flatMap((g) => g.game.findings.map((finding) => ({ scenario: g.game.scenario, finding }))),
     ruleUse: [...ruleUse].map(([ruleId, times]) => ({ ruleId, times })).sort((a, b) => b.times - a.times),
     past: pastTrials(),
@@ -215,23 +219,19 @@ async function generation(n: number, champion: Doctrine, taken: Set<string>): Pr
   const research = await researcher.propose(input);
   say(`investigador (${Math.round((Date.now() - thinking) / 1000)} s): ${research.analysis}`);
 
-  // One night of each kind per generation, alternating, so no single night gets all the attention.
-  const families = [...new Set(TRAIN.map((s) => s.family))];
-  const minibatch = families.map((family) => {
-    const nights = TRAIN.filter((s) => s.family === family);
-    return nights[n % nights.length];
-  });
+  // One rule moves less than the noise, so doctrines are proposed whole and judged on every training night.
+  const minibatch = TRAIN;
 
   const trials: (Trial & { doctrine: Doctrine | null })[] = research.hypotheses.slice(0, Number(values.hypotheses)).map((h) => {
     const doctrine = applyEdit(champion, h.edit, n, taken);
     const policy = doctrine ? policyKey(agent(doctrine)) : "";
-    return { name: h.name, rationale: h.rationale, expected: h.expected, edit: h.edit, editText: describeEdit(h.edit), policy, doctrine, train: null, validation: null, verdict: "invalid", reason: doctrine ? "" : "cambio imposible sobre la doctrina actual" };
+    return { name: h.name, rationale: h.rationale, expected: h.expected, edit: h.edit, editText: doctrine ? diffDoctrine(champion, doctrine) : describeEdit(h.edit), policy, doctrine, train: null, validation: null, verdict: "invalid", reason: doctrine ? "" : "cambio imposible sobre la doctrina actual" };
   });
-  for (const t of trials) say(`hipótesis «${t.name}»: ${t.editText}`);
+  for (const t of trials) say(`doctrina «${t.name}»:\n${t.editText}`);
 
   status.phase = `G${n}: ${trials.length} hipótesis juegan ${minibatch.length} noches de entrenamiento`;
   const playable = trials.filter((t) => t.doctrine);
-  await ensure(playable.map((t) => ({ policy: agent(t.doctrine!), label: `G${n} · ${t.name}`, on: minibatch })));
+  await ensure(playable.map((t) => ({ policy: agent(t.doctrine!), label: `G${n} · ${t.name}`, on: minibatch, reps: Number(values["candidate-reps"]) })));
   for (const t of playable) {
     t.train = compare(t.policy, championKey, minibatch);
     t.verdict = t.train.delta <= -MIN_GAIN ? "outdone" : "no_gain";
@@ -244,8 +244,9 @@ async function generation(n: number, champion: Doctrine, taken: Set<string>): Pr
   // wave; the combination is preferred, the single change is the fallback if the mix does harm.
   let next = champion;
   const winners = playable.filter((t) => t.verdict === "outdone").sort((a, b) => a.train!.delta - b.train!.delta);
-  const contenders = winners.slice(0, 1);
-  if (winners.length > 1) {
+  const contenders = winners.slice(0, winners.some((t) => t.edit.op === "replace") ? 2 : 1);
+  // Whole doctrines are alternatives to each other: there is nothing to add up.
+  if (winners.length > 1 && winners.every((t) => t.edit.op !== "replace")) {
     let doctrine: Doctrine = champion;
     const members: typeof winners = [];
     for (const t of winners) {

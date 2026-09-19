@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CallObserver, Graph, GreedyCoordinator, Simulation, type Action, type Coordinator, type GraphData } from "../src/engine";
-import { applyEdit, EMPTY, renderDoctrine } from "../src/lab/doctrine";
+import { applyEdit, diffDoctrine, EMPTY, renderDoctrine } from "../src/lab/doctrine";
 import { readResearchOutput } from "../src/lab/researcher";
 import { generateScenario, ScriptedMaster, type ScenarioSpec } from "../src/lab/scenario";
 
@@ -64,8 +64,18 @@ describe("lab: a hypothesis is one edit to the doctrine", () => {
     expect(renderDoctrine(again)).toContain("H2 · c: d");
   });
 
-  it("drops a malformed hypothesis instead of playing it", () => {
-    const out = readResearchOutput({ analysis: "x", hypotheses: [{ name: "ok", op: "add", kind: "driver", title: "t", body: "b" }, { name: "sin cuerpo", op: "add" }, { name: "quitar", op: "remove", id: "H1" }] });
-    expect(out.hypotheses.map((h) => h.edit.op)).toEqual(["add", "remove"]);
+  it("takes a whole doctrine, keeping the ids of the rules it keeps", () => {
+    const one = applyEdit(EMPTY, { op: "add", kind: "heuristic", title: "a", body: "b" }, 1, [])!;
+    const next = applyEdit(one, { op: "replace", rules: [{ id: "H1", kind: "heuristic", title: "a", body: "mejor" }, { kind: "heuristic", title: "nueva", body: "x" }, { kind: "driver", title: "peso", body: "y" }] }, 2, ["H1"])!;
+    expect(next.rules.map((r) => `${r.id}@${r.since}`)).toEqual(["H1@1", "H2@2", "D1@2"]);
+    expect(diffDoctrine(one, next)).toContain("~ H1");
+    expect(diffDoctrine(next, one)).toContain("− H2");
   });
+
+  it("drops a malformed doctrine instead of playing it", () => {
+    const out = readResearchOutput({ analysis: "x", hypotheses: [{ name: "ok", rules: [{ kind: "driver", title: "t", body: "b" }, { kind: "heuristic", title: "sin cuerpo" }] }, { name: "vacía", rules: [] }] });
+    expect(out.hypotheses).toHaveLength(1);
+    expect(out.hypotheses[0].edit).toEqual({ op: "replace", rules: [{ id: undefined, kind: "driver", title: "t", body: "b" }] });
+  });
+
 });

@@ -17,8 +17,20 @@ export interface Doctrine {
 
 export const EMPTY: Doctrine = { rules: [] };
 
-/** One change at a time, so whatever the games show can be pinned on it. */
+export interface RuleDraft {
+  /** Id of the champion's rule this one keeps or rewrites; absent for a new rule. */
+  id?: string;
+  kind: RuleKind;
+  title: string;
+  body: string;
+}
+
+/**
+ * A single change can be pinned on what the games show, but one rule moves less than the noise between two games of
+ * the same night. `replace` proposes the whole doctrine at once: effects big enough to see, refined afterwards.
+ */
 export type Edit =
+  | { op: "replace"; rules: RuleDraft[] }
   | { op: "add"; kind: RuleKind; title: string; body: string }
   | { op: "rewrite"; id: string; title: string; body: string }
   | { op: "remove"; id: string };
@@ -28,6 +40,23 @@ export const MAX_RULES = 14;
 
 /** Ids are never reused, so a rule cited in an old game still means the same rule. `taken` is every id ever given. */
 export function applyEdit(doctrine: Doctrine, edit: Edit, generation: number, taken: Iterable<string>): Doctrine | null {
+  if (edit.op === "replace") {
+    if (edit.rules.length === 0 || edit.rules.length > MAX_RULES) return null;
+    const used = new Set([...taken, ...doctrine.rules.map((r) => r.id)]);
+    const kept = new Set<string>();
+    const rules = edit.rules.map((draft): Rule => {
+      const old = draft.id && !kept.has(draft.id) ? doctrine.rules.find((r) => r.id === draft.id) : undefined;
+      if (old) {
+        kept.add(old.id);
+        return { ...old, kind: draft.kind, title: draft.title, body: draft.body };
+      }
+      let n = 1;
+      while (used.has(`${PREFIX[draft.kind]}${n}`)) n++;
+      used.add(`${PREFIX[draft.kind]}${n}`);
+      return { id: `${PREFIX[draft.kind]}${n}`, kind: draft.kind, title: draft.title, body: draft.body, since: generation };
+    });
+    return { rules };
+  }
   if (edit.op === "add") {
     if (doctrine.rules.length >= MAX_RULES) return null;
     const used = new Set([...taken, ...doctrine.rules.map((r) => r.id)]);
@@ -56,7 +85,20 @@ export function renderDoctrine(doctrine: Doctrine): string {
   ].join("\n").trimEnd();
 }
 
+/** What changes between two doctrines, one line per rule. */
+export function diffDoctrine(before: Doctrine, after: Doctrine): string {
+  const lines: string[] = [];
+  for (const rule of after.rules) {
+    const old = before.rules.find((r) => r.id === rule.id);
+    if (!old) lines.push(`+ ${rule.id} ${rule.title}: ${rule.body}`);
+    else if (old.title !== rule.title || old.body !== rule.body) lines.push(`~ ${rule.id} ${rule.title}: ${rule.body}`);
+  }
+  for (const old of before.rules) if (!after.rules.some((r) => r.id === old.id)) lines.push(`− ${old.id} ${old.title}`);
+  return lines.join("\n") || "(sin cambios)";
+}
+
 export function describeEdit(edit: Edit): string {
+  if (edit.op === "replace") return edit.rules.map((r) => `${r.id ? `~ ${r.id}` : "+"} ${r.title}: ${r.body}`).join("\n");
   if (edit.op === "add") return `+ ${edit.title}: ${edit.body}`;
   if (edit.op === "remove") return `− quitar ${edit.id}`;
   return `~ ${edit.id} → ${edit.title}: ${edit.body}`;
