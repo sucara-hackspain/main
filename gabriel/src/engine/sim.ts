@@ -2,7 +2,7 @@ import type { Coordinator, Decision } from "./coordinator";
 import { advance, applyAction, applyMasterAction, createWorld, DEFAULT_CONFIG, summarize } from "./engine";
 import type { Graph } from "./graph";
 import type { Master } from "./master";
-import { createBelief, updateBelief } from "./incidents";
+import { createBelief, recordOrders, updateBelief } from "./incidents";
 import { CallObserver, type Observer } from "./observer";
 import { Rng } from "./rng";
 import type { Action, Belief, MasterAction, Report, SimConfig, World, WorldEvent } from "./types";
@@ -80,7 +80,10 @@ export class Simulation {
     const reports = this.observer
       .observe(fresh, world, graph, this.observerRng)
       .map((report) => ({ ...report, id: this.nextReportId++ }));
-    updateBelief(this.belief, reports, world, graph);
+    // What a crew is working on may turn out to belong to another incident: dispatch relabels it.
+    for (const { unitId, incidentId } of updateBelief(this.belief, reports, world, graph)) {
+      for (const fleet of [world.units, this.belief.units]) fleet.find((u) => u.id === unitId)!.incidentId = incidentId;
+    }
     // Crews drive with what dispatch knows, nothing more.
     world.knownClosedEdges = [...this.belief.closedEdges];
 
@@ -97,7 +100,9 @@ export class Simulation {
     }
     const actions = [...(decision?.actions ?? []), ...this.orders];
     this.orders = [];
+    const ordersFrom = world.log.length;
     for (const action of actions) applyAction(world, graph, action);
+    recordOrders(this.belief, world.tick, decision, actions, world.log.slice(ordersFrom));
 
     const result: TickResult = { tick: world.tick, events: world.log.slice(logStart), reports, actions, decision };
     world.tick++;

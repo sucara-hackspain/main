@@ -77,7 +77,7 @@ export function evaluate({ session, coordinator, seed, sim, records, application
 
   // Which of the coordinator's incidents were really about each scene.
   const incidentsOf = (sceneId: string): string[] =>
-    belief.incidents.filter((i) => i.sceneId === sceneId || i.callIds.some((c) => sceneOfCall.get(c) === sceneId)).map((i) => i.id);
+    belief.incidents.filter((i) => i.foci.some((f) => f.sceneId === sceneId) || i.sceneId === sceneId || i.callIds.some((c) => sceneOfCall.get(c) === sceneId)).map((i) => i.id);
   const firstCallTick = (sceneId: string): number | null => {
     const ticks = belief.calls.filter((c) => sceneOfCall.get(c.id) === sceneId).map((c) => c.tick);
     return ticks.length ? Math.min(...ticks) : null;

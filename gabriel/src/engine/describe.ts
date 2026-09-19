@@ -29,7 +29,7 @@ export function describe(e: ObservedEvent): string {
       return `[REAL] ${e.sceneId}: ${SCENES[e.kind].label} en nodo ${e.node}, ${e.victims} víctima(s)`;
     case "scene_assessed":
       return (
-        `${e.unitId} en el lugar (${e.incidentId ?? "sin incidente"}): ` +
+        `${e.unitId} en el lugar (${e.incidentId ?? "sin incidente"}), ${SCENES[e.kind].label.toLowerCase()}: ` +
         e.victims.map((v) => `${v.id} ${INJURIES[v.injury].label} [${v.triage}${v.trapped ? ", ATRAPADO" : ""}${v.status === "waiting" ? "" : `, ${v.status}`}]`).join("; ")
       );
     case "scene_not_found":

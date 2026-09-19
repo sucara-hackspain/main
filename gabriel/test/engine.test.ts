@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CallObserver,
+  createBelief,
+  createWorld,
+  DEFAULT_CONFIG,
   Graph,
   GreedyCoordinator,
   makeVictim,
@@ -12,9 +15,13 @@ import {
   type InjuryKind,
   type Master,
   type MasterAction,
+  type AssessedVictim,
+  type Call,
+  type ObservedEvent,
   type SceneKind,
   type VictimSpec,
   infoGaps,
+  updateBelief,
 } from "../src/engine";
 
 /** n x n grid, 100 m two-way streets at 36 km/h = 10 s per edge. Node id = row * n + col. */
@@ -211,6 +218,127 @@ describe("simulation", () => {
   });
 });
 
+describe("incidents: one place, one response", () => {
+  const graph = grid(9);
+  const call = (id: string, node: number, mechanism: SceneKind | null, extra: Partial<Call> = {}): Call => ({
+    id, tick: 0, caller: "family", mechanism, node, locationErrorM: 40, street: null, conscious: "yes", breathing: "normal",
+    bleeding: "no", trapped: "no", ageGroup: "adult", victims: 1, text: `aviso ${id}`, ...extra,
+  });
+  const hurt = (id: string, status: AssessedVictim["status"] = "waiting"): AssessedVictim => ({ id, injury: "fracture", triage: "yellow", status, trapped: false });
+  /** A belief fed by hand, tick by tick, with whatever the coordinator would have heard. */
+  function heard() {
+    const world = createWorld(graph, { ...DEFAULT_CONFIG, ...CONFIG });
+    const belief = createBelief(world);
+    let id = 1;
+    const hear = (tick: number, ...events: ({ type: string } & Record<string, unknown>)[]) => {
+      world.tick = tick;
+      return updateBelief(belief, events.map((e) => ({ id: id++, tick, source: "system" as const, confidence: 1, event: { ...e, tick } as ObservedEvent })), world, graph);
+    };
+    return { world, belief, hear, live: () => belief.incidents.filter((i) => !i.mergedInto) };
+  }
+
+  it("keeps different things on the same corner in one incident, as two foci", () => {
+    const { hear, live } = heard();
+    hear(0, { type: "call_received", call: call("L1", 40, "traffic") }, { type: "call_received", call: call("L2", 41, "fall", { breathing: "none" }) });
+    expect(live()).toHaveLength(1);
+    const [incident] = live();
+    expect(incident.foci.map((f) => f.mechanism?.value)).toEqual(["traffic", "fall"]);
+    // The headline follows the worst focus: that is where the next crew goes.
+    expect(incident).toMatchObject({ priority: 0, node: 41, callIds: ["L1", "L2"] });
+  });
+
+  it("opens another incident for something that is somewhere else", () => {
+    const { hear, live } = heard();
+    hear(0, { type: "call_received", call: call("L1", 40, "traffic") }, { type: "call_received", call: call("L2", 44, "traffic") });
+    expect(live()).toHaveLength(2);
+  });
+
+  it("joins a late call to the incident while it is open, and starts a new one once it is closed", () => {
+    const { hear, live, belief } = heard();
+    hear(0, { type: "call_received", call: call("L1", 40, "traffic") });
+    hear(60, { type: "call_received", call: call("L2", 40, "traffic", { tick: 60 }) });
+    expect(live()).toHaveLength(1);
+    hear(61, { type: "scene_not_found", unitId: "A1", incidentId: "C1", node: 40 });
+    expect(belief.incidents[0]).toMatchObject({ status: "closed", closedReason: "not_found" });
+    hear(70, { type: "call_received", call: call("L3", 40, "traffic", { tick: 70 }) });
+    expect(live().map((i) => i.id)).toEqual(["C1", "C2"]);
+  });
+
+  it("stays open until every focus is dealt with", () => {
+    const { world, hear, live } = heard();
+    hear(0, { type: "call_received", call: call("L1", 40, "traffic") }, { type: "call_received", call: call("L2", 41, "fall") });
+    hear(5,
+      { type: "scene_assessed", unitId: "A1", incidentId: "C1", sceneId: "S1", kind: "traffic", node: 40, inSight: false, victims: [hurt("V1")] },
+      { type: "scene_assessed", unitId: "A1", incidentId: "C1", sceneId: "S2", kind: "fall", node: 41, inSight: true, victims: [hurt("V2")] },
+    );
+    hear(6, { type: "victim_picked_up", victimId: "V1", unitId: "A1", incidentId: "C1" });
+    const [incident] = live();
+    expect(incident.foci.map((f) => f.status)).toEqual(["cleared", "located"]);
+    expect(incident).toMatchObject({ status: "open", node: 41 });
+    hear(9, { type: "victim_picked_up", victimId: "V2", unitId: "A2", incidentId: "C1" });
+    expect(incident).toMatchObject({ status: "closed", closedReason: "resolved" });
+  });
+
+  it("drops a reported focus the crew on the spot does not see", () => {
+    const { world, hear, live } = heard();
+    // Only what must be within the crew's sight: a vaguer caller could mean somewhere it cannot see from there.
+    hear(0, { type: "call_received", call: call("L1", 40, "traffic") }, { type: "call_received", call: call("L2", 41, "fall", { locationErrorM: 20 }) });
+    hear(5, { type: "scene_assessed", unitId: "A1", incidentId: "C1", sceneId: "S1", kind: "traffic", node: 40, inSight: false, victims: [hurt("V1")] });
+    expect(live()[0].foci.map((f) => f.status)).toEqual(["located", "not_found"]);
+  });
+
+  it("takes what a crew finds nearby for what a vague caller meant", () => {
+    const { hear, live } = heard();
+    hear(0, { type: "call_received", call: call("L1", 40, null, { caller: "driver", locationErrorM: 400 }) });
+    expect(hear(5, { type: "scene_assessed", unitId: "A1", incidentId: "C1", sceneId: "S7", kind: "fall", node: 43, inSight: false, victims: [hurt("V7")] })).toEqual([]);
+    expect(live()).toHaveLength(1);
+    expect(live()[0]).toMatchObject({ located: true, node: 43, foci: [{ status: "located", callIds: ["L1"] }] });
+  });
+
+  it("splits off what a crew finds somewhere else on its way round", () => {
+    const { world, hear, live, belief } = heard();
+    hear(0, { type: "call_received", call: call("L1", 40, "traffic") });
+    const retags = hear(5, { type: "scene_assessed", unitId: "A1", incidentId: "C1", sceneId: "S7", kind: "fall", node: 44, inSight: false, victims: [hurt("V7")] });
+    expect(live()).toHaveLength(2);
+    expect(belief.incidents[1]).toMatchObject({ id: "C2", splitFrom: "C1", located: true, node: 44 });
+    expect(belief.incidents[0]).toMatchObject({ status: "open", located: false });
+    expect(retags).toEqual([{ unitId: "A1", incidentId: "C2" }]);
+  });
+
+  it("merges two incidents that turn out to be the same place", () => {
+    const { world, hear, live, belief } = heard();
+    // A driver who could not say where, and a relative who could: too far apart to know they are the same.
+    hear(0, { type: "call_received", call: call("L1", 40, "traffic") });
+    hear(1, { type: "call_received", call: call("L2", 43, null, { tick: 1, locationErrorM: 100 }) });
+    expect(live()).toHaveLength(2);
+    hear(5, { type: "scene_assessed", unitId: "A1", incidentId: "C1", sceneId: "S1", kind: "traffic", node: 41, inSight: false, victims: [hurt("V1")] });
+    hear(8, { type: "scene_assessed", unitId: "A2", incidentId: "C2", sceneId: "S1", kind: "traffic", node: 41, inSight: false, victims: [hurt("V1")] });
+    expect(live().map((i) => i.id)).toEqual(["C1"]);
+    expect(belief.incidents[1]).toMatchObject({ closedReason: "merged", mergedInto: "C1" });
+    expect(live()[0].callIds).toEqual(["L1", "L2"]);
+  });
+
+  it("writes the case file as it goes: the call, the order and its reason, what the crew radioed, the closing", async () => {
+    const s = sim(grid(5), { 0: [scene(12, [victim("hemorrhage", 90)])] });
+    await s.run(30);
+    const [incident] = s.belief.incidents;
+    const kinds = incident.timeline.map((e) => e.kind);
+    for (const kind of ["call", "order", "radio", "closed"] as const) expect(kinds).toContain(kind);
+    const order = incident.timeline.find((e) => e.kind === "order")!;
+    expect(order).toMatchObject({ unitId: "A1", accepted: true, decidedBy: "rules", action: { type: "dispatch", incidentId: incident.id } });
+    expect(order.etaTicks).toBeGreaterThan(0);
+    expect(incident.timeline.map((e) => e.tick)).toEqual([...incident.timeline.map((e) => e.tick)].sort((a, b) => a - b));
+  });
+
+  it("files the supervisor's orders as the operator's", async () => {
+    const s = new Simulation({ graph: grid(5), master: scripted({ 0: [scene(12, [victim("hemorrhage", 90)])] }), coordinator: { name: "idle", decide: () => [] }, observer: new CallObserver({ callers: ["family"] }), config: CONFIG });
+    await s.run(6);
+    s.order({ type: "dispatch", unitId: "A1", incidentId: "C1", node: 12 });
+    await s.run(1);
+    expect(s.belief.incidents[0].timeline.find((e) => e.kind === "operator")).toMatchObject({ from: "operador", accepted: true, decidedBy: "operator" });
+  });
+});
+
 describe("flood", () => {
   it("spreads and makes covered streets impassable, without anyone telling the coordinator", async () => {
     const g = grid(9);
@@ -378,7 +506,7 @@ describe("reconocimiento", () => {
       // The world log holds the truth of what was in sight; the belief only ever gets the read of it.
       expect(s.world.log.some((e) => e.type === "area_surveyed")).toBe(true);
       expect(JSON.stringify(s.world.log)).not.toContain("drone_report");
-      reads.push({ seen: s.belief.incidents.length, people: s.belief.incidents.map((i) => i.peopleSeen?.value ?? null) });
+      reads.push({ seen: s.belief.incidents.length, people: s.belief.incidents.flatMap((i) => i.foci.map((f) => f.peopleSeen?.value ?? null)) });
     }
     // The same flight over the same place is not the same report twice: sometimes both scenes, sometimes one, sometimes a different count.
     expect(new Set(reads.map((r) => r.seen)).size).toBeGreaterThan(1);

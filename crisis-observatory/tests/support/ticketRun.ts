@@ -12,11 +12,11 @@ export function ticketRun() {
     hospitals: [{ id: "H1", name: "Hospital General", node: 1, capacity: 20, helipad: true }],
   };
   const incident = (id: string, extra: Partial<IncidentFrame> = {}): IncidentFrame => ({
-    id, status: "open", closedReason: null, mergedInto: null, emergencyId: null, openedTick: 1, updatedTick: 1,
+    id, status: "open", closedReason: null, mergedInto: null, splitFrom: null, emergencyId: null, openedTick: 1, updatedTick: 1,
     node: 0, locationErrorM: 120, located: false, sceneId: null, callIds: [`L${id.slice(1)}`],
     mechanism: { value: "traffic", from: "112", tick: 1 }, conscious: null, breathing: null, bleeding: null,
     trapped: null, ageGroup: null, victimsReported: { value: 1, from: "112", tick: 1 }, victims: [],
-    priority: 2, unreachable: false, history: [], line: `${id} · accidente de tráfico`, cutOffIn: null, ...extra,
+    priority: 2, unreachable: false, history: [], foci: [], timeline: [], line: `${id} · accidente de tráfico`, cutOffIn: null, ...extra,
   });
   const unit = (id: string, extra: Partial<UnitFrame> = {}): UnitFrame => ({
     id, kind: "ambulance", pos: ticketGraph.nodes[1], mission: "idle", incidentId: null,
@@ -50,7 +50,7 @@ export function ticketRun() {
   };
   const victims: IncidentFrame["victims"] = [{ id: "V1", injury: "cardiac_arrest", triage: "red", status: "waiting", trapped: false }];
   const assessed: TickRecord = { ...dispatched, tick: 4, actions: [], decision: undefined,
-    events: [{ type: "scene_assessed", tick: 4, unitId: "A1", incidentId: "C1", sceneId: "S1", node: 0, victims }],
+    events: [{ type: "scene_assessed", tick: 4, unitId: "A1", incidentId: "C1", sceneId: "S1", kind: "traffic", node: 0, inSight: false, victims }],
     frame: { ...dispatched.frame, incidents: [{ ...c1, priority: 0, updatedTick: 4, located: true, sceneId: "S1", locationErrorM: 0, victims }, ...others] },
   };
   const resolved: TickRecord = { ...assessed, tick: 6,

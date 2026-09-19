@@ -132,7 +132,7 @@ function incidentGap(incident: Incident, belief: Belief, tick: number): InfoGap 
     reasons.push(`solo sabes dónde es con ±${incident.locationErrorM} m`);
     score += Math.min(20, incident.locationErrorM / 20);
   }
-  if (!incident.victimsReported && !incident.peopleSeen) {
+  if (!incident.victimsReported && !incident.foci.some((f) => f.peopleSeen)) {
     reasons.push("nadie ha dicho cuántos heridos hay");
     score += 8;
   }
