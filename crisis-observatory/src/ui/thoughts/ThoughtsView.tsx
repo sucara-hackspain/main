@@ -1,12 +1,25 @@
 import { useEffect, useRef } from "react";
-import { Activity, Bot, ChevronRight, CircleDot, Waves } from "lucide-react";
-import { elapsed } from "../runModel";
+import {
+  Activity,
+  Bot,
+  ChevronRight,
+  CircleDot,
+  Phone,
+  Waves,
+} from "lucide-react";
+import {
+  elapsed,
+  injuryLabel,
+  triageLabel,
+  victimStatus,
+} from "../engineTrace";
 import {
   actionText,
   auditTitle,
   eventText,
   laneName,
   type AuditItem,
+  type Lane,
 } from "./model";
 import "./thoughts.css";
 
@@ -41,7 +54,7 @@ export default function ThoughtsView({
           </span>
           <div>
             <strong>Master y entorno</strong>
-            <span>Avisos y evolución del mundo</span>
+            <span>Lo que ocurre, llamadas al 112 y dotaciones</span>
           </div>
         </div>
         <div>
@@ -84,13 +97,7 @@ export default function ThoughtsView({
                 >
                   <span className="app-event-meta">
                     <span>
-                      {item.lane === "coordinator" ? (
-                        <Bot size={12} />
-                      ) : item.lane === "world" ? (
-                        <Activity size={12} />
-                      ) : (
-                        <Waves size={12} />
-                      )}{" "}
+                      <LaneIcon lane={item.lane} size={12} />{" "}
                       {laneName[item.lane]}
                     </span>
                     <span>
@@ -101,7 +108,7 @@ export default function ThoughtsView({
                   </span>
                   <strong>{auditTitle(item, seconds)}</strong>
                   <span className="app-event-tags">
-                    {[...item.patients, ...item.units].map((id) => (
+                    {item.refs.map((id) => (
                       <span key={id}>{id}</span>
                     ))}
                     <ChevronRight size={12} />
@@ -123,6 +130,13 @@ export default function ThoughtsView({
   );
 }
 
+export function LaneIcon({ lane, size }: { lane: Lane; size: number }) {
+  if (lane === "coordinator") return <Bot size={size} />;
+  if (lane === "call") return <Phone size={size} />;
+  if (lane === "world") return <Activity size={size} />;
+  return <Waves size={size} />;
+}
+
 function sourceName(source: string) {
   return source === "llm"
     ? "IA"
@@ -130,7 +144,7 @@ function sourceName(source: string) {
       ? "Respaldo por reglas"
       : "Reglas";
 }
-function AuditDetail({ item, seconds }: { item: AuditItem; seconds: number }) {
+export function AuditDetail({ item, seconds }: { item: AuditItem; seconds: number }) {
   const d = item.record.decision;
   return (
     <div className="app-event-detail">
@@ -138,12 +152,19 @@ function AuditDetail({ item, seconds }: { item: AuditItem; seconds: number }) {
         <>
           <label>EVENTO REGISTRADO</label>
           <p>{eventText(item.event, seconds)}</p>
-          {item.event.type === "patient_spawned" && (
-            <p>
-              Nodo {item.event.node} · TTL inicial{" "}
-              {elapsed(item.event.ttl, seconds)}. El registro no incluye
-              una categoría clínica de gravedad.
-            </p>
+          {item.event.type === "call_received" && (
+            <blockquote className="run-call">{item.event.call.text}</blockquote>
+          )}
+          {item.event.type === "scene_assessed" && (
+            <ul className="run-assessed">
+              {item.event.victims.map((v) => (
+                <li key={v.id} data-triage={v.triage}>
+                  <strong>{v.id}</strong> · {injuryLabel(v.injury)} · triaje{" "}
+                  {triageLabel[v.triage].toLowerCase()}
+                  {v.trapped ? " · atrapada" : ""} · {victimStatus[v.status].toLowerCase()}
+                </li>
+              ))}
+            </ul>
           )}
           <details className="run-json">
             <summary>Ver datos del evento</summary>

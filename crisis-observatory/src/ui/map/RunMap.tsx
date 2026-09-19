@@ -2,40 +2,92 @@ import { useEffect, useRef, useState } from "react";
 import * as ml from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { LocateFixed } from "lucide-react";
+import { Eye, EyeOff, LocateFixed } from "lucide-react";
 import {
+  elapsed,
+  priority,
+  sameSelection,
+  selectionPosition,
+  unitKind,
   unitStatus,
-  patientStatus,
   type GraphData,
   type RunMeta,
+  type Selection,
   type TickRecord,
-} from "../runModel";
-import { remainingRoute } from "./routes";
+} from "../engineTrace";
+import { circle, remainingRoute } from "./routes";
+import { hospitalIcon, unitIcon } from "./unitIcons";
 import "./map.css";
 ml.setWorkerUrl(workerUrl);
 const empty: GeoJSON.FeatureCollection = {
   type: "FeatureCollection",
   features: [],
 };
+const collection = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({
+  type: "FeatureCollection",
+  features,
+});
+const line = (coordinates: [number, number][], properties = {}): GeoJSON.Feature => ({
+  type: "Feature",
+  properties,
+  geometry: { type: "LineString", coordinates },
+});
+const area = (ring: [number, number][], properties = {}): GeoJSON.Feature => ({
+  type: "Feature",
+  properties,
+  geometry: { type: "Polygon", coordinates: [ring] },
+});
+const worst = ["red", "yellow", "green", "black"] as const;
+
 export default function RunMap({
   graph,
   meta,
   record,
   selected,
   onSelect,
+  focusRequest,
+  related,
+  matches,
+  filtered,
 }: {
   graph: GraphData;
   meta: RunMeta;
   record: TickRecord;
-  selected: string | null;
-  onSelect: (id: string) => void;
+  selected: Selection | null;
+  onSelect: (ref: Selection) => void;
+  focusRequest: number;
+  /** Entities tied to the selection, as `kind:id`. */
+  related: Set<string>;
+  /** Entities the situation panel's filter and search leave in, as `kind:id`. */
+  matches: Set<string>;
+  filtered: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null),
     map = useRef<ml.Map | null>(null),
     callback = useRef(onSelect),
     [ready, setReady] = useState(false),
-    [error, setError] = useState(false);
+    [error, setError] = useState(false),
+    // Reality: the real water, the real scenes and closures nobody has reported. The coordinator sees none of it.
+    [reality, setReality] = useState(true);
   callback.current = onSelect;
+  const seconds = meta.config.tickSeconds;
+  const focusPosition = useRef<[number, number] | undefined>(undefined);
+  focusPosition.current = selected
+    ? selectionPosition(selected, record, meta, graph)
+    : undefined;
+  const selectedKey = selected ? `${selected.kind}:${selected.id}` : null;
+  useEffect(() => {
+    if (ready && selectedKey && focusPosition.current)
+      map.current?.easeTo({
+        center: focusPosition.current,
+        zoom: Math.max(map.current.getZoom(), 13),
+        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 350,
+      });
+  }, [ready, selectedKey, focusRequest]);
+  useEffect(() => {
+    if (ready && focusRequest > 0 && window.matchMedia("(max-width: 800px)").matches)
+      host.current?.scrollIntoView({ block: "center", behavior: "instant" });
+  }, [ready, focusRequest]);
   const markers = useRef<ml.Marker[]>([]);
   function fit() {
     const [s, w, n, e] = graph.bbox;
@@ -60,34 +112,111 @@ export default function RunMap({
       attributionControl: { compact: true },
     });
     map.current = m;
-    m.addControl(
-      new ml.NavigationControl({ showCompass: false }),
-      "bottom-left",
-    );
+    m.addControl(new ml.NavigationControl({ showCompass: false }), "bottom-left");
     m.on("error", () => setError(true));
     m.on("load", () => {
-      for (const id of ["run-routes", "run-cuts"])
-        m.addSource(id, { type: "geojson", data: empty });
       const theme = getComputedStyle(host.current!);
+      const color = (name: string) => theme.getPropertyValue(name).trim();
+      for (const id of [
+        "water-real",
+        "water-known",
+        "incident-area",
+        "routes",
+        "cuts-unknown",
+        "cuts-known",
+        "sightings",
+      ])
+        m.addSource(id, { type: "geojson", data: empty });
       m.addLayer({
-        id: "run-routes",
-        type: "line",
-        source: "run-routes",
-        layout: { "line-cap": "round", "line-join": "round" },
+        id: "water-real",
+        type: "fill",
+        source: "water-real",
         paint: {
-          "line-color": theme.getPropertyValue("--info").trim(),
-          "line-width": 2.5,
-          "line-opacity": 0.65,
+          "fill-color": color("--info"),
+          "fill-opacity": ["case", ["==", ["get", "part"], "core"], 0.3, 0.12],
         },
       });
       m.addLayer({
-        id: "run-cuts",
+        id: "water-known",
         type: "line",
-        source: "run-cuts",
+        source: "water-known",
         paint: {
-          "line-color": theme.getPropertyValue("--destructive").trim(),
-          "line-width": 4,
+          "line-color": color("--info-foreground"),
+          "line-width": 2,
+          "line-dasharray": [2, 2],
+        },
+      });
+      const tone = [
+        "match",
+        ["get", "priority"],
+        0,
+        color("--destructive"),
+        1,
+        color("--warning"),
+        2,
+        color("--info"),
+        color("--muted-foreground"),
+      ] as ml.ExpressionSpecification;
+      m.addLayer({
+        id: "incident-area",
+        type: "fill",
+        source: "incident-area",
+        paint: { "fill-color": tone, "fill-opacity": 0.08 },
+      });
+      m.addLayer({
+        id: "incident-area-edge",
+        type: "line",
+        source: "incident-area",
+        paint: { "line-color": tone, "line-width": 1.5, "line-dasharray": [1, 1.5] },
+      });
+      m.addLayer({
+        id: "routes",
+        type: "line",
+        source: "routes",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": color("--info"),
+          "line-width": ["case", ["boolean", ["get", "related"], false], 4, 2.5],
+          "line-opacity": ["case", ["boolean", ["get", "muted"], false], 0.15, 0.7],
+        },
+      });
+      m.addLayer({
+        id: "cuts-unknown",
+        type: "line",
+        source: "cuts-unknown",
+        paint: {
+          "line-color": color("--muted-foreground"),
+          "line-width": 2,
+          "line-dasharray": [1, 1.5],
+          "line-opacity": 0.55,
+        },
+      });
+      m.addLayer({
+        id: "cuts-known",
+        type: "line",
+        source: "cuts-known",
+        paint: {
+          "line-color": color("--destructive"),
+          "line-width": 3,
           "line-dasharray": [1.5, 1.5],
+          "line-opacity": 0.85,
+        },
+      });
+      m.addLayer({
+        id: "sightings",
+        type: "circle",
+        source: "sightings",
+        paint: {
+          "circle-radius": 3.5,
+          "circle-color": [
+            "case",
+            ["==", ["get", "kind"], "blocked"],
+            color("--destructive"),
+            color("--info"),
+          ],
+          "circle-stroke-color": color("--card"),
+          "circle-stroke-width": 1,
+          "circle-opacity": ["interpolate", ["linear"], ["get", "age"], 0, 0.95, 60, 0.3],
         },
       });
       setReady(true);
@@ -100,128 +229,224 @@ export default function RunMap({
       m.remove();
     };
   }, [graph]);
+
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
+    const { frame } = record;
+    const focusedKey = host.current?.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement)?.dataset.entity
+      : undefined;
     markers.current.forEach((x) => x.remove());
     markers.current = [];
-    const routeFeatures: GeoJSON.Feature[] = [];
-    function marker(el: HTMLElement, pos: [number, number], label: string) {
+    const muted = (key: string) => filtered && !matches.has(key) && !related.has(key);
+    function marker(el: HTMLElement, pos: [number, number], label: string, ref: Selection) {
+      const key = `${ref.kind}:${ref.id}`;
+      const selectedNow = sameSelection(selected, ref);
+      el.dataset.entity = key;
+      el.classList.toggle("selected", selectedNow);
+      el.classList.toggle("related", related.has(key));
+      el.classList.toggle("is-muted", muted(key));
+      el.setAttribute("aria-pressed", String(selectedNow));
+      el.onclick = () => callback.current(ref);
       el.title = label;
       el.setAttribute("aria-label", label);
       markers.current.push(
-        new ml.Marker({ element: el, anchor: "center" })
-          .setLngLat(pos)
-          .addTo(m!),
+        new ml.Marker({ element: el, anchor: "center" }).setLngLat(pos).addTo(m!),
       );
+      if (focusedKey === key) el.focus({ preventScroll: true });
     }
+
     for (const h of meta.hospitals) {
+      const occupied = frame.hospitals.find((x) => x.id === h.id)?.occupied ?? 0;
       const el = document.createElement("button");
       el.className = "hospital-base run-hospital";
-      el.innerHTML =
-        '<span class="hospital-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18M2 22h20M12 6v4M10 8h4M10 14h4M10 18h4"/></svg></span>';
+      el.innerHTML = hospitalIcon;
       const text = document.createElement("strong");
       text.textContent = h.id;
-      el.append(text);
-      const occupied =
-        record.frame.hospitals.find((x) => x.id === h.id)?.occupied ?? 0;
       const badge = document.createElement("em");
       badge.textContent = String(h.capacity - occupied);
-      el.append(badge);
-      const label = `${h.name} · ${h.capacity - occupied}/${h.capacity} camas libres`;
-      marker(el, graph.nodes[h.node], label);
-      const content = document.createElement("div");
-      content.className = "fleet-popup";
-      const strong = document.createElement("strong");
-      strong.textContent = h.name;
-      const span = document.createElement("span");
-      span.textContent = `${h.capacity - occupied} camas libres de ${h.capacity}`;
-      content.append(strong, span);
-      markers.current
-        .at(-1)!
-        .setPopup(new ml.Popup({ offset: 16 }).setDOMContent(content));
+      el.append(text, badge);
+      if (h.helipad) {
+        const pad = document.createElement("i");
+        pad.className = "helipad";
+        pad.textContent = "H";
+        el.append(pad);
+      }
+      marker(
+        el,
+        graph.nodes[h.node],
+        `${h.name} · ${h.capacity - occupied}/${h.capacity} camas libres${h.helipad ? " · helipuerto" : ""}`,
+        { kind: "hospital", id: h.id },
+      );
     }
-    for (const p of record.frame.patients) {
-      if (
-        p.status === "delivered" ||
-        (p.status === "dead" && selected !== p.id)
-      )
+
+    if (reality)
+      for (const scene of frame.scenes) {
+        const waiting = scene.victims.filter(
+          (v) => v.status === "waiting" || v.status === "in_ambulance",
+        );
+        const triage =
+          worst.find((t) => waiting.some((v) => v.triage === t)) ?? "green";
+        const el = document.createElement("button");
+        el.className = `run-scene ${waiting.length ? "" : "resolved"}`;
+        el.dataset.triage = triage;
+        el.textContent = String(waiting.length);
+        marker(
+          el,
+          graph.nodes[scene.node],
+          `${scene.id} (realidad) · ${waiting.length} de ${scene.victims.length} víctimas esperando`,
+          { kind: "scene", id: scene.id },
+        );
+      }
+
+    for (const incident of frame.incidents) {
+      if (incident.status !== "open" && !sameSelection(selected, { kind: "incident", id: incident.id }))
         continue;
       const el = document.createElement("button");
-      el.className = `run-patient ${p.status === "dead" ? "deceased" : ""} ${selected === p.id ? "selected" : ""}`;
-      el.textContent = p.id;
-      el.dataset.patient = p.id;
-      el.onclick = () => callback.current(p.id);
-      const pos =
-        p.status === "in_ambulance"
-          ? (record.frame.ambulances.find((a) => a.patientId === p.id)?.pos ??
-            graph.nodes[p.node])
-          : graph.nodes[p.node];
-      marker(el, pos, `${p.id} · ${patientStatus[p.status]}`);
+      el.className = `run-incident p${incident.priority} ${incident.status === "open" ? "" : "closed"}`;
+      el.dataset.priority = String(incident.priority);
+      el.innerHTML = `<b>P${incident.priority}</b>`;
+      el.append(incident.id);
+      const notes: string[] = [];
+      if (incident.unreachable) {
+        el.insertAdjacentHTML("beforeend", '<i class="flag">≈</i>');
+        notes.push("sin acceso por carretera");
+      }
+      if (incident.cutOffIn !== null) {
+        el.classList.add("cut-off");
+        notes.push(`el agua lo aísla en ${elapsed(incident.cutOffIn, seconds)}`);
+      }
+      marker(
+        el,
+        graph.nodes[incident.node],
+        `${incident.id} · P${incident.priority} ${priority[incident.priority].label.toLowerCase()}${notes.length ? ` · ${notes.join(" · ")}` : ""}`,
+        { kind: "incident", id: incident.id },
+      );
     }
-    for (const a of record.frame.ambulances) {
+
+    const routes: GeoJSON.Feature[] = [];
+    for (const u of frame.units) {
       const el = document.createElement("button");
-      el.className = `ambulance-marker ${a.broken || a.stranded ? "blocked" : ""}`;
-      el.dataset.unit = a.id;
-      el.dataset.position = a.pos.join(",");
-      el.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h11v12H3zM14 10h4l3 4v3h-7M7 8v6m-3-3h6"/><circle cx="7" cy="18" r="2" fill="white"/><circle cx="18" cy="18" r="2" fill="white"/></svg>';
+      el.className = `ambulance-marker unit-marker ${u.broken || u.stranded ? "blocked" : ""}`;
+      el.dataset.kind = u.kind;
+      el.dataset.unit = u.id;
+      el.dataset.position = u.pos.join(",");
+      el.innerHTML = unitIcon[u.kind];
       const label = document.createElement("span");
       label.className = "unit-number";
-      label.textContent = a.id;
+      label.textContent = u.id;
       el.append(label);
-      const patient = a.patientId || a.targetPatientId;
-      el.onclick = () => {
-        if (patient) callback.current(patient);
-      };
-      marker(el, a.pos, `${a.id} · ${unitStatus(a)}`);
-      if (a.route.length)
-        routeFeatures.push({
-          type: "Feature",
-          properties: {},
-          geometry: {
-            type: "LineString",
-            coordinates: remainingRoute(a, graph),
-          },
-        });
+      marker(el, u.pos, `${u.id} · ${unitKind[u.kind].label} · ${unitStatus(u)}`, {
+        kind: "unit",
+        id: u.id,
+      });
+      if (u.route.length)
+        routes.push(
+          line(remainingRoute(u, graph), {
+            related: related.has(`unit:${u.id}`),
+            muted: muted(`unit:${u.id}`),
+          }),
+        );
     }
-    (m.getSource("run-routes") as ml.GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features: routeFeatures,
-    });
-    (m.getSource("run-cuts") as ml.GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features: record.frame.closedEdges
-        .filter((e) => graph.edges[e])
-        .map((e) => ({
+
+    const known = new Set(frame.knownClosedEdges);
+    const edge = (e: number) => graph.edges[e]?.geom;
+    (m.getSource("routes") as ml.GeoJSONSource).setData(collection(routes));
+    (m.getSource("cuts-known") as ml.GeoJSONSource).setData(
+      collection(frame.knownClosedEdges.filter(edge).map((e) => line(edge(e)!))),
+    );
+    (m.getSource("cuts-unknown") as ml.GeoJSONSource).setData(
+      collection(
+        reality
+          ? frame.closedEdges.filter((e) => !known.has(e) && edge(e)).map((e) => line(edge(e)!))
+          : [],
+      ),
+    );
+    (m.getSource("water-real") as ml.GeoJSONSource).setData(
+      collection(
+        reality
+          ? frame.floods.flatMap((f) => [
+              area(circle(graph.nodes[f.node], f.fringeM), { part: "fringe" }),
+              area(circle(graph.nodes[f.node], f.radiusM), { part: "core" }),
+            ])
+          : [],
+      ),
+    );
+    (m.getSource("water-known") as ml.GeoJSONSource).setData(
+      collection(frame.knownWater.zones.map((z) => line(circle(graph.nodes[z.node], z.radiusM)))),
+    );
+    (m.getSource("sightings") as ml.GeoJSONSource).setData(
+      collection(
+        frame.knownWater.sightings.map((w) => ({
           type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: graph.edges[e].geom },
+          properties: { kind: w.kind, age: w.ageTicks },
+          geometry: { type: "Point", coordinates: graph.nodes[w.node] },
         })),
-    });
-  }, [ready, record, graph, meta, selected]);
+      ),
+    );
+    (m.getSource("incident-area") as ml.GeoJSONSource).setData(
+      collection(
+        frame.incidents
+          .filter((i) => i.status === "open" && !i.located && i.locationErrorM > 0)
+          .map((i) => area(circle(graph.nodes[i.node], i.locationErrorM), { priority: i.priority })),
+      ),
+    );
+  }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered]);
+
   return (
     <div className="app-map-wrap operational-map">
       <div ref={host} className="operational-map-canvas" />
       <div className="operational-map-heading">
         <strong>Valencia</strong>
-        <small>Posiciones registradas · cada {meta.config.tickSeconds} s</small>
+        <small>Posiciones registradas · cada {seconds} s</small>
       </div>
-      <button className="operational-recenter" onClick={fit}>
-        <LocateFixed size={14} />
-        Centrar mapa
-      </button>
-      <div className="operational-legend">
+      <div className="run-map-tools">
+        <button
+          aria-pressed={reality}
+          onClick={() => setReality(!reality)}
+          title="La realidad de la simulación: el agua real, las escenas y los cortes que nadie ha comunicado. El coordinador no la ve."
+        >
+          {reality ? <Eye size={14} /> : <EyeOff size={14} />}
+          Realidad
+        </button>
+        <button className="operational-recenter" onClick={fit}>
+          <LocateFixed size={14} />
+          Centrar mapa
+        </button>
+      </div>
+      <div className="operational-legend run-legend">
+        {filtered && <span className="operational-filter-label">Filtro activo</span>}
         <span>
-          <i className="critical" />
-          Pacientes
+          <i className="swatch incident" />
+          Incidentes P0–P3
         </span>
-        <span>Azul · rutas</span>
-        <span>Rojo · cortes</span>
+        <span>
+          <i className="swatch water-known" />
+          Agua conocida
+        </span>
+        <span>
+          <i className="swatch cut-known" />
+          Cortes conocidos
+        </span>
+        {reality && (
+          <>
+            <span>
+              <i className="swatch water-real" />
+              Agua real
+            </span>
+            <span>
+              <i className="swatch cut-unknown" />
+              Cortes sin comunicar
+            </span>
+            <span>
+              <i className="swatch scene" />
+              Escenas reales
+            </span>
+          </>
+        )}
       </div>
-      {!ready && (
-        <div className="operational-loading">Cargando cartografía…</div>
-      )}
+      {!ready && <div className="operational-loading">Cargando cartografía…</div>}
       {error && (
         <div className="app-map-error">
           No se ha podido cargar parte de la cartografía. El registro sigue

@@ -1,25 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  assertRunRecords,
-  unitStatus,
-  type AmbulanceFrame,
-  type GraphData,
-  type TickRecord,
-} from "../src/ui/runModel";
 import { auditItems } from "../src/ui/thoughts/model";
+import type { GraphData, TickRecord } from "../src/ui/engineTrace";
 import { remainingRoute } from "../src/ui/map/routes";
-const unit: AmbulanceFrame = {
-  id: "A1",
-  pos: [0.5, 0],
-  mission: "to_patient",
-  patientId: null,
-  targetPatientId: "P1",
-  hospitalId: "H1",
-  broken: false,
-  stranded: false,
-  route: [[0, 1]],
-};
+const unit = { pos: [0.5, 0] as [number, number], route: [[0, 1]] as [number, 0 | 1][] };
 const graph = {
   nodes: [
     [0, 0],
@@ -43,36 +27,6 @@ const graph = {
   name: "test",
   bbox: [0, 0, 1, 1],
 } as GraphData;
-const record: TickRecord = {
-  tick: 2,
-  frame: {
-    ambulances: [unit],
-    patients: [],
-    hospitals: [],
-    closedEdges: [],
-    summary: {
-      ticks: 3,
-      patients: 0,
-      saved: 0,
-      dead: 0,
-      waiting: 0,
-      inAmbulance: 0,
-      survivalRate: 0,
-      meanResponseTicks: 0,
-    },
-  },
-  events: [
-    { type: "patient_spawned", tick: 2, patientId: "P1", node: 0, ttl: 10 },
-    {
-      type: "action_rejected",
-      tick: 2,
-      action: { type: "dispatch", ambulanceId: "A1", patientId: "P1" },
-      reason: "No route",
-    },
-  ],
-  actions: [{ type: "dispatch", ambulanceId: "A1", patientId: "P1" }],
-  decision: { source: "fallback", error: "timeout" },
-};
 test("route starts at GPS and preserves bends, in either traversal direction", () => {
   assert.deepEqual(remainingRoute(unit, graph), [
     [0.5, 0],
@@ -88,37 +42,36 @@ test("route starts at GPS and preserves bends, in either traversal direction", (
     ],
   );
 });
-test("audit separates master from coordinator without claiming engine outcomes as master reasoning", () => {
-  const items = auditItems([record]);
-  assert.equal(items.length, 2);
-  assert.equal(items[0].lane, "master");
-  assert.equal(items[1].lane, "coordinator");
-  assert.equal(items[1].record.events[1].type, "action_rejected");
-  assert.deepEqual(items[1].patients, ["P1"]);
-  assert.equal(items[1].record.decision?.source, "fallback");
-  assert.equal(items[1].record.decision?.reasons, undefined);
-  const arrived = {
-    ...record,
-    decision: undefined,
-    actions: [],
+test("activity reads the engine model: calls, crews and the coordinator, each tied to its incident", () => {
+  const order = { type: "dispatch", unitId: "A1", incidentId: "C1", node: 3, hospitalId: "H1" } as const;
+  const call = {
+    id: "L1", tick: 2, caller: "family", mechanism: "flooded_home", node: 3, locationErrorM: 150,
+    street: "Carrer Major", conscious: "yes", breathing: "normal", bleeding: "no", trapped: "yes",
+    ageGroup: "elderly", victims: 2, text: "Un familiar: «Se inunda la planta baja.»",
+  } as const;
+  const engineRecord = {
+    tick: 2,
+    frame: { units: [], scenes: [], incidents: [{ id: "C1", callIds: ["L1"] }], floods: [], knownWater: { zones: [], sightings: [] }, knownClosedEdges: [], hospitals: [], closedEdges: [], summary: {} },
     events: [
-      { type: "ambulance_arrived", tick: 2, ambulanceId: "A1", node: 1 },
+      { type: "call_received", tick: 2, call },
+      { type: "scene_created", tick: 2, sceneId: "S1", kind: "flooded_home", node: 3, victims: 2 },
+      { type: "action_rejected", tick: 2, action: order, reason: "unit is broken down" },
+      { type: "road_blocked_found", tick: 2, unitId: "B1", node: 4, edges: [7], flooded: true },
     ],
-  } as TickRecord;
-  assert.equal(auditItems([arrived])[0].lane, "world");
-});
-test("idle without busyUntil is not presented as available", () =>
-  assert.equal(
-    unitStatus({ ...unit, mission: "idle", targetPatientId: null }),
-    "Sin misión",
-  ));
-test("invalid activity records fail explicitly instead of silently showing an empty fleet", () => {
-  assert.doesNotThrow(() => assertRunRecords([record]));
-  assert.throws(
-    () =>
-      assertRunRecords([
-        { ...record, frame: { units: [unit] } } as unknown as TickRecord,
-      ]),
-    /Formato de registros de actividad no válido/,
+    calls: [call],
+    actions: [order],
+    decision: { source: "fallback", error: "timeout" },
+  } as unknown as TickRecord;
+  const items = auditItems([engineRecord]);
+  assert.deepEqual(
+    items.map((x) => [x.lane, x.event?.type ?? "decision", x.refs]),
+    [
+      ["call", "call_received", ["L1", "C1"]],
+      ["master", "scene_created", ["S1"]],
+      // The order's rejection belongs to the decision card; the crew's report is the engine's.
+      ["world", "road_blocked_found", ["B1"]],
+      ["coordinator", "decision", ["A1", "C1"]],
+    ],
   );
+  assert.equal(items[3].record.decision?.source, "fallback");
 });

@@ -1,0 +1,614 @@
+/* Decision room: a critical request takes over the page until the operator decides or leaves. */
+.decision-room-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--color-neutral-950) 58%, transparent);
+  backdrop-filter: blur(3px);
+  animation: decision-scrim 0.25s ease-out both;
+}
+@keyframes decision-scrim {
+  from {
+    opacity: 0;
+  }
+}
+.decision-room {
+  --tone: var(--destructive);
+  --tone-contrast: var(--color-white);
+  width: min(1440px, 100%);
+  height: min(920px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  outline: none;
+  border-radius: var(--radius-2xl);
+  background: var(--background);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tone) 55%, transparent),
+    0 0 0 6px color-mix(in srgb, var(--tone) 18%, transparent),
+    0 32px 80px -24px #000000a6;
+  animation: decision-room-in 0.35s var(--ease-out-expo) both;
+}
+/* Supervision requests take over the page the same way, in amber. */
+.decision-room.warning {
+  --tone: var(--warning);
+  --tone-contrast: var(--color-neutral-950);
+}
+@keyframes decision-room-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+}
+.decision-room > header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 12px 10px 18px;
+  background: var(--tone);
+  color: var(--tone-contrast);
+}
+.decision-room > header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.decision-room .decision-badge {
+  font-size: 11px;
+  color: inherit;
+  white-space: nowrap;
+}
+.decision-room .decision-badge svg {
+  animation: decision-pulse 1.4s ease-in-out infinite;
+}
+.decision-room .decision-pager {
+  white-space: nowrap;
+  color: inherit;
+}
+.decision-room .decision-tools {
+  gap: 6px;
+}
+.decision-room-held {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone-contrast) 16%, transparent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.decision-room .decision-deadline {
+  margin: 0 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: inherit;
+}
+.decision-room .decision-deadline b {
+  font: 600 14px var(--font-mono);
+  color: inherit;
+}
+.decision-room .decision-deadline.urgent b {
+  animation: decision-pulse 1s ease-in-out infinite;
+}
+.decision-room > header button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: inherit;
+}
+.decision-room .decision-pager button {
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+}
+.control-center .decision-room > header button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone-contrast) 16%, transparent);
+}
+.decision-room > header .decision-leave {
+  border: 1px solid color-mix(in srgb, var(--tone-contrast) 50%, transparent);
+  font-weight: 500;
+}
+.decision-room .decision-timer {
+  height: 4px;
+}
+.decision-room-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(380px, 36%, 520px);
+}
+.decision-room-map {
+  position: relative;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+}
+.decision-room-panel {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 20px;
+  background: var(--card);
+  scrollbar-width: thin;
+}
+.decision-room-panel label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--muted-foreground);
+}
+.decision-room-panel > section > p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.decision-room-panel .decision-prescription {
+  padding: 10px 12px;
+}
+.decision-room-panel .decision-prescription strong {
+  font-size: 14px;
+}
+.decision-room-panel .decision-actions {
+  padding: 0;
+}
+.decision-room-panel .decision-actions .decision-approve {
+  flex-basis: 100%;
+  justify-content: center;
+  min-height: 40px;
+  font-size: 14px;
+}
+.decision-room-panel .decision-actions > button:not(.decision-approve, .decision-other) {
+  flex: 1 1 auto;
+  min-height: 34px;
+}
+
+/* What the coordinator knows, where each piece came from, and what is really there. */
+.decision-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.decision-facts label:not(:first-child) {
+  margin-top: 8px;
+}
+.decision-facts dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.decision-facts dt {
+  color: var(--muted-foreground);
+}
+.decision-facts dd {
+  margin: 0;
+}
+.decision-facts code {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font: 10px var(--font-mono);
+  color: var(--muted-foreground);
+}
+.decision-facts .danger {
+  color: var(--destructive-foreground);
+}
+.decision-facts-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+.decision-truth,
+.decision-queue-facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.decision-truth li::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.decision-truth li[data-triage="red"]::before {
+  background: var(--destructive);
+}
+.decision-truth li[data-triage="yellow"]::before {
+  background: var(--warning);
+}
+.decision-truth li[data-triage="black"]::before {
+  background: var(--foreground);
+}
+.decision-queue-facts li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--sidebar-border);
+  font: 11px/1.5 var(--font-mono);
+}
+
+/* Chain of thoughts behind the request. */
+.decision-thread {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.decision-thread-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.decision-thread-title label {
+  margin: 0;
+}
+.decision-thread-title button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.decision-thread ol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 0 5px;
+  padding: 0 0 0 12px;
+  list-style: none;
+  border-left: 2px solid var(--border);
+}
+.decision-thread li {
+  position: relative;
+}
+.decision-thread li::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 12px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--ring);
+  border-radius: 50%;
+  background: var(--card);
+}
+.decision-thread li.coordinator::before {
+  border-color: var(--info);
+}
+.decision-thread li.opened::before {
+  border-color: var(--destructive);
+}
+.decision-thread li.cause::before,
+.decision-thread li.now::before {
+  border-color: var(--destructive);
+  background: var(--destructive);
+}
+.decision-thread li.now::before {
+  animation: incident-focus 1.6s ease-out infinite;
+}
+.decision-thread li > button,
+.decision-thread li.now > span {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  column-gap: 8px;
+  row-gap: 1px;
+  width: 100%;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+.decision-thread time {
+  grid-row: span 2;
+  padding-top: 1px;
+  font: 11px var(--font-mono);
+  color: var(--muted-foreground);
+}
+.decision-thread-lane {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.decision-thread li strong {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.decision-thread li strong em {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+  white-space: nowrap;
+  color: var(--destructive-foreground);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+}
+.decision-thread li.now strong {
+  color: var(--destructive-foreground);
+}
+/* In a supervision room, "now" takes the room's amber. */
+.decision-room.warning .decision-thread li.now::before {
+  border-color: var(--warning);
+  background: var(--warning);
+}
+.decision-room.warning .decision-thread li.now strong {
+  color: var(--warning-foreground);
+}
+.decision-thread .app-event-detail {
+  margin: 2px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Left the room to investigate: the request keeps a bar above the page. */
+.decision-pending-bar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 8px 12px 8px 24px;
+  background: var(--destructive);
+  color: var(--color-white);
+  font-size: 12px;
+}
+.decision-pending-bar > svg {
+  animation: decision-pulse 1.4s ease-in-out infinite;
+}
+.decision-pending-bar strong {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.decision-pending-bar b {
+  font: 600 12px var(--font-mono);
+}
+.decision-pending-bar.urgent b {
+  animation: decision-pulse 1s ease-in-out infinite;
+}
+.decision-pending-bar button {
+  margin-left: auto;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  color: var(--destructive-foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+.decision-pending-bar.warning {
+  background: var(--warning);
+  color: var(--color-neutral-950);
+}
+.decision-pending-bar.warning button {
+  color: var(--warning-foreground);
+}
+.control-center .decision-pending-bar button:hover {
+  background: color-mix(in srgb, var(--color-white) 88%, var(--destructive));
+}
+
+/* Receipt with undo, above everything, the room included. Bottom right, over the sidebar footer:
+ * the playback controls stay free to pause right after a decision. */
+.decision-receipt.snackbar {
+  position: fixed;
+  z-index: 120;
+  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  width: min(360px, calc(100vw - 48px));
+  margin: 0;
+  background: var(--card);
+  box-shadow: 0 20px 40px -16px #00000059, var(--dropdown-shadow);
+  animation: decision-up 0.35s var(--ease-out-expo) both;
+}
+@keyframes decision-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Incident map. */
+.incident-map {
+  position: absolute;
+  inset: 0;
+}
+.incident-map .operational-map-canvas {
+  height: 100%;
+}
+.incident-legend {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  max-width: calc(100% - 120px);
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  box-shadow: var(--dropdown-shadow);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.incident-legend:empty {
+  display: none;
+}
+.incident-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.incident-legend i {
+  display: inline-block;
+  width: 18px;
+  border-top: 4px solid var(--success);
+  border-radius: 2px;
+}
+.incident-legend i.alternative {
+  border-top: 3px dashed var(--info);
+}
+.incident-legend i.before {
+  border-top: 3px dashed var(--muted-foreground);
+}
+.incident-legend i.mission {
+  border-top: 3px solid color-mix(in srgb, var(--info) 60%, transparent);
+}
+.incident-legend i.cause {
+  border-top: 5px solid var(--destructive);
+}
+.incident-legend i.cut {
+  border-top: 3px dashed var(--destructive);
+}
+.incident-legend i.water {
+  border-top: 2px dashed var(--info-foreground);
+}
+.incident-dim {
+  opacity: 0.38;
+}
+.control-center .incident-dim:hover {
+  opacity: 1;
+}
+.run-incident.incident-focus {
+  z-index: 5;
+  animation: incident-focus 1.6s ease-out infinite;
+}
+@keyframes incident-focus {
+  0% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--destructive) 55%, transparent),
+      var(--dropdown-shadow);
+  }
+  70%,
+  100% {
+    box-shadow:
+      0 0 0 14px color-mix(in srgb, var(--destructive) 0%, transparent),
+      var(--dropdown-shadow);
+  }
+}
+.ambulance-marker.incident-unit {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--info) 18%, transparent),
+    var(--dropdown-shadow);
+}
+.ambulance-marker.blocked.incident-unit {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--destructive) 22%, transparent),
+    var(--dropdown-shadow);
+}
+.hospital-base.incident-destination {
+  border-color: var(--success);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent),
+    var(--dropdown-shadow);
+}
+.incident-eta {
+  position: absolute;
+  left: calc(100% + 5px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--info);
+  color: var(--color-white);
+  font: 500 10px var(--font-mono);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--dropdown-shadow);
+}
+.incident-eta.prescribed {
+  background: var(--success-foreground);
+}
+
+@media (max-width: 1150px) {
+  .decision-room-body {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 44%);
+  }
+}
+@media (max-width: 800px) {
+  .decision-room-scrim {
+    padding: 0;
+  }
+  .decision-room {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+  .decision-room > header {
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px 12px;
+  }
+  .decision-room > header h2 {
+    order: 3;
+    flex-basis: 100%;
+    font-size: 15px;
+  }
+  .decision-room-body {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .decision-room-map {
+    flex: none;
+    height: 36vh;
+    min-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .decision-room-panel {
+    overflow: visible;
+  }
+  .incident-legend {
+    left: 8px;
+    bottom: 28px;
+    max-width: calc(100% - 16px);
+    gap: 3px 10px;
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+  .incident-legend i {
+    width: 12px;
+  }
+  .decision-receipt.snackbar {
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 24px);
+  }
+  .decision-pending-bar {
+    padding-left: 12px;
+  }
+}
