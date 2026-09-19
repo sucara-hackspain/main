@@ -38,8 +38,8 @@ function LeadCard({ lead, seconds, active, onLead }: { lead: LeadView; seconds: 
 }
 
 export default function SignalsView({ view, seconds, focus, onFocus }: { view: ChannelView | null; seconds: number; focus: string | null; onFocus: (id: string | null) => void }) {
-  if (!view) return <div className="app-empty signals-empty"><Radio size={22} /><strong>Esta ejecución no tiene canal ciudadano</strong><p>Se grabó sin redes ni mensajería: la sala solo oyó el 112, la radio y los drones.</p></div>;
   const [show, setShow] = useState<"all" | "relevant" | "unread">("all");
+  if (!view) return <div className="app-empty signals-empty"><Radio size={22} /><strong>Esta ejecución no tiene canal ciudadano</strong><p>Se grabó sin redes ni mensajería: la sala solo oyó el 112, la radio y los drones.</p></div>;
   const shown = view?.messages.filter((m) => (show === "all" ? true : show === "relevant" ? m.relevant : !m.read)) ?? [];
   const real = view.leads.filter((l) => l.outcome.tone === "good").length;
   const wrong = view.leads.filter((l) => l.outcome.tone === "bad").length;

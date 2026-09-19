@@ -122,7 +122,7 @@ export default function DecisionBanner({
               {item.incidentId && (
                 <button onClick={() => onLocate(item.incidentId!)}>
                   <LocateFixed size={12} />
-                  Ver {item.incidentId} en el mapa
+                  Ver {item.incidentId} en operaciones
                 </button>
               )}
             </div>
