@@ -2,9 +2,9 @@
 // A night never changes, so neither does what it says: every later game of that night reuses the reading for free.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { Graph, type GraphData, type Signal, type Verdict } from "../engine";
+import { CallObserver, Graph, GreedyCoordinator, Simulation, type Call, type GraphData, type Signal, type Verdict } from "../engine";
 import { pool, READINGS_DIR, signalsOf } from "./play";
-import { loadScenarios } from "./scenario";
+import { loadScenarios, ScriptedMaster } from "./scenario";
 
 const MODEL = process.env.LAB_READER_MODEL ?? "claude-haiku-4-5-20251001";
 const BATCH = 140;
@@ -42,8 +42,24 @@ const SCHEMA = {
   required: ["verdicts"],
 };
 
-function ask(input: string): Promise<{ verdicts: Partial<Verdict>[] }> {
-  const args = ["-p", "--model", MODEL, "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence", "--disable-slash-commands", "--system-prompt", PROMPT, "--output-format", "json", "--json-schema", JSON.stringify(SCHEMA)];
+const CALLS_PROMPT = `Eres quien escucha las llamadas al 112 enteras. Con cuarenta llamadas en espera, el operador teclea la dirección y pasa a la siguiente: detalles de vida o muerte que el llamante SÍ dijo se quedan en el texto y nunca llegan a su campo del formulario. Para cada llamada, di qué campos se deducen de lo que se dijo: trapped ("yes" si no puede salir por sí mismo: puerta que no abre, ventanilla que no baja, algo encima), breathing ("none" si no respira, "difficult" si respira con dificultad) y ageGroup ("elderly" o "child"). Incluye un campo SOLO si el texto lo sostiene; si no dice nada, no lo pongas. Devuelve una entrada por llamada que tenga algo que añadir.`;
+const CALLS_SCHEMA = {
+  type: "object",
+  properties: {
+    calls: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { n: { type: "number" }, trapped: { type: "string", enum: ["yes"] }, breathing: { type: "string", enum: ["none", "difficult"] }, ageGroup: { type: "string", enum: ["elderly", "child"] } },
+        required: ["n"],
+      },
+    },
+  },
+  required: ["calls"],
+};
+
+function ask<T = { verdicts: Partial<Verdict>[] }>(input: string, prompt = PROMPT, schema: object = SCHEMA): Promise<T> {
+  const args = ["-p", "--model", MODEL, "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence", "--disable-slash-commands", "--system-prompt", prompt, "--output-format", "json", "--json-schema", JSON.stringify(schema)];
   const { CLAUDECODE: _nested, ...env } = process.env;
   return new Promise((resolve, reject) => {
     const child = spawn("claude", args, { env, stdio: ["pipe", "pipe", "pipe"] });
@@ -65,12 +81,31 @@ function ask(input: string): Promise<{ verdicts: Partial<Verdict>[] }> {
   });
 }
 
+/** The calls a night produces when its details get buried, as the dispatcher by rules would hear them. */
+async function callsOf(night: ReturnType<typeof loadScenarios>[number], graph: Graph): Promise<Call[]> {
+  const sim = new Simulation({ graph, seed: night.seed, master: new ScriptedMaster(night), coordinator: new GreedyCoordinator(), config: night.config, observer: new CallObserver({ buried: night.buried }) });
+  await sim.run(night.ticks);
+  return sim.belief.calls.filter((c) => c.buried);
+}
+
 const noise = (s: Signal): Verdict => ({ id: s.id, relevant: false, credible: 0.05, urgency: "baja", mechanism: null, trapped: "unknown", ageGroup: "unknown", victims: null, summary: "" });
 
 const graph = new Graph(JSON.parse(readFileSync("data/valencia.json", "utf8")) as GraphData);
 const wanted = process.argv.slice(2);
 mkdirSync(READINGS_DIR, { recursive: true });
 for (const night of loadScenarios().filter((s) => wanted.includes(s.id))) {
+  if (night.buried) {
+    const callsFile = `${READINGS_DIR}/${night.id}.calls.json`;
+    const heard: Record<string, Call["buried"]> = existsSync(callsFile) ? JSON.parse(readFileSync(callsFile, "utf8")) : {};
+    const texts = [...new Set((await callsOf(night, graph)).map((c) => c.text))].filter((text) => !(text in heard));
+    if (texts.length) {
+      const { calls } = await ask<{ calls: ({ n: number } & NonNullable<Call["buried"]>)[] }>(texts.map((text, n) => `${n} | ${text}`).join("\n"), CALLS_PROMPT, CALLS_SCHEMA);
+      for (const text of texts) heard[text] = {};
+      for (const { n, ...fields } of calls) if (texts[n]) heard[texts[n]] = fields;
+      writeFileSync(callsFile, JSON.stringify(heard, null, 1));
+      console.log(`${night.id}: ${texts.length} llamadas escuchadas enteras, ${calls.length} con detalles que el formulario perdió`);
+    }
+  }
   const file = `${READINGS_DIR}/${night.id}.json`;
   const reading: Record<string, Verdict> = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
   const todo = signalsOf(night, graph).signals.filter((s) => !reading[s.id]);

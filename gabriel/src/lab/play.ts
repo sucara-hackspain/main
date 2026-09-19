@@ -2,7 +2,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ExplainedRules } from "../coordinators/explained";
 import { HappyRobotCoordinator } from "../coordinators/happyrobot";
-import { buildSignals, CachedReader, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
+import { buildSignals, CachedReader, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type Call, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
 import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
 import { renderDoctrine, type Doctrine } from "./doctrine";
 import { ScriptedMaster, type Scenario } from "./scenario";
@@ -35,6 +35,8 @@ export interface Game {
   decisions?: { tick: number; situation: string; plan?: string; orders: string[] }[];
   /** The citizen channel over the night: what came in, what was read, and how the leads turned out. */
   channel?: { reader: string; received: number; read: number; relevant: number; leads: number; realLeads: number; silentScenes: number; silentFound: number };
+  /** 112 calls where the words carried more than the form, and how many of those somebody heard in full. */
+  buriedCalls?: { total: number; recovered: number };
 }
 
 /** The dispatcher plays the night, except for a few decisions in the middle that are the agent's. */
@@ -89,6 +91,16 @@ export function readerFor(attention: Attention, scenario: Scenario): Reader {
   return new CachedReader(JSON.parse(readFileSync(file, "utf8")) as Record<string, Verdict>);
 }
 
+/** The agent's hearing of a night's 112 calls, by the words of each call: the fields the words carried. */
+function callReaderFor(attention: Attention, scenario: Scenario): ((call: Call) => Call["buried"] | null) | undefined {
+  if (attention === "perfecto") return (call) => call.buried ?? null;
+  if (attention !== "agente") return undefined;
+  const file = `${READINGS_DIR}/${scenario.handover?.night ?? scenario.id}.calls.json`;
+  if (!existsSync(file)) return undefined;
+  const heard = JSON.parse(readFileSync(file, "utf8")) as Record<string, Call["buried"]>;
+  return (call) => heard[call.text] ?? null;
+}
+
 export interface PlayOptions {
   /** The citizen channel is on, read by this; `outbound` also lets the dispatcher phone round silent zones. */
   channel?: { attention: Attention; outbound?: boolean };
@@ -122,7 +134,8 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     master: new ScriptedMaster(scenario),
     coordinator,
     config: scenario.config,
-    observer: policy.kind === "informed" ? new CallObserver({ perfect: true }) : undefined,
+    observer: policy.kind === "informed" ? new CallObserver({ perfect: true }) : scenario.buried ? new CallObserver({ buried: scenario.buried }) : undefined,
+    callReader: options.channel ? callReaderFor(options.channel.attention, scenario) : undefined,
     signals: options.channel ? { night: signalsOf(scenario, graph), reader: readerFor(options.channel.attention, scenario) } : undefined,
   });
 
@@ -205,6 +218,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     findings: evaluation.findings.filter((f) => f.tick >= from),
     decisions: scenario.handover ? decisions : undefined,
     channel: sim.desk ? channelSummary(sim, scenario) : undefined,
+    buriedCalls: scenario.buried ? sim.buriedCalls : undefined,
   };
 }
 

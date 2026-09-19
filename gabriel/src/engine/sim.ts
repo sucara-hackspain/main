@@ -21,6 +21,8 @@ export interface SimulationOptions {
   callWriter?: (call: Call) => Promise<string | null>;
   /** The night's citizen channel and whoever reads it. What the reader makes out reaches dispatch as one more call. */
   signals?: { night: NightSignals; reader: Reader };
+  /** Somebody who listens to the whole call, not just the form: gives back the fields the words carry. */
+  callReader?: (call: Call) => Call["buried"] | null;
 }
 
 export interface TickResult {
@@ -53,6 +55,9 @@ export class Simulation {
   private phoned: PhoneCall[] = [];
   private readonly phoneRng: Rng;
   readonly desk: LeadDesk | null;
+  private readonly callReader?: (call: Call) => Call["buried"] | null;
+  /** Calls where the words carried more than the form, and whether anybody picked it up. */
+  readonly buriedCalls = { total: 0, recovered: 0 };
 
   constructor(options: SimulationOptions) {
     const root = new Rng(options.seed ?? 1);
@@ -67,6 +72,7 @@ export class Simulation {
     this.callWriter = options.callWriter;
     this.world = createWorld(options.graph, { ...DEFAULT_CONFIG, ...options.config });
     this.belief = createBelief(this.world);
+    this.callReader = options.callReader;
     this.desk = options.signals ? new LeadDesk(options.graph, options.signals.night.signals, options.signals.night.registry, options.signals.reader) : null;
   }
 
@@ -131,6 +137,14 @@ export class Simulation {
       const calls = reports.flatMap((r) => (r.event.type === "call_received" && !r.event.call.source ? [r.event.call] : []));
       const texts = await Promise.all(calls.map((call) => this.callWriter!(call).catch(() => null)));
       calls.forEach((call, n) => (call.text = texts[n] ?? call.text));
+    }
+    for (const r of reports) {
+      if (r.event.type !== "call_received" || !r.event.call.buried) continue;
+      this.buriedCalls.total++;
+      const heard = this.callReader?.(r.event.call);
+      if (!heard) continue;
+      Object.assign(r.event.call, heard);
+      if (Object.keys(heard).length >= Object.keys(r.event.call.buried).length) this.buriedCalls.recovered++;
     }
     // What a crew is working on may turn out to belong to another incident: dispatch relabels it.
     for (const { unitId, incidentId } of updateBelief(this.belief, reports, world, graph)) {

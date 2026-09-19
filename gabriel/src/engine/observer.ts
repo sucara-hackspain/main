@@ -110,7 +110,21 @@ export interface CallObserverOptions {
    * No real night is like this: it is the reference for how much of the damage comes from not knowing.
    */
   perfect?: boolean;
+  /**
+   * Chance that a life-or-death detail the caller gives stays in the words and never reaches its field. 0 is a calm
+   * shift; 0.5 is a control room with forty calls waiting.
+   */
+  buried?: number;
 }
+
+// How people actually say it. None of these sentences contains the word the field is named after.
+const SAID = {
+  trapped: ["Dice que la puerta no abre y el agua le llega ya por la cintura.", "Está en el coche y no consigue bajar la ventanilla.", "Tiene una viga encima de las piernas."],
+  none: ["Está morado y no se le mueve el pecho.", "Le hablan y nada, y no le notan el aire."],
+  difficult: ["Hace un ruido raro al coger aire.", "Se ahoga al hablar, le cuesta mucho."],
+  elderly: ["Es su abuela, tiene noventa años.", "Es un señor muy mayor, va con andador."],
+  child: ["Es la cría de los vecinos, tendrá seis años.", "Es un niño pequeño."],
+} as const;
 
 const PERFECT_CALLER: CallerProfile = { label: "Un testigo que lo ve todo", errorM: 0, knows: 1, wrong: 0 };
 
@@ -281,6 +295,35 @@ export class CallObserver implements Observer {
     };
   }
 
+  /** The detail was said, the field stayed empty: the words keep what the form lost. */
+  private bury(call: Call, rng: Rng): void {
+    const p = this.options.buried ?? 0;
+    if (p <= 0 || this.options.perfect) return;
+    const buried: NonNullable<Call["buried"]> = {};
+    const extra: string[] = [];
+    if (call.trapped === "yes" && rng.chance(p)) {
+      buried.trapped = "yes";
+      call.trapped = "unknown";
+      extra.push(rng.pick(SAID.trapped));
+    }
+    if ((call.breathing === "none" || call.breathing === "difficult") && rng.chance(p)) {
+      buried.breathing = call.breathing;
+      extra.push(rng.pick(SAID[call.breathing]));
+      call.breathing = "unknown";
+      // Whoever did not note the breathing did not note that they do not answer either.
+      if (call.conscious === "no") call.conscious = "unknown";
+    }
+    if ((call.ageGroup === "elderly" || call.ageGroup === "child") && rng.chance(p)) {
+      buried.ageGroup = call.ageGroup;
+      extra.push(rng.pick(SAID[call.ageGroup]));
+      call.ageGroup = "unknown";
+    }
+    if (extra.length === 0) return;
+    call.buried = buried;
+    // The form-driven sentence is rebuilt from what is left in the fields, then the caller's own words follow.
+    call.text = `${callText(call).replace(/»$/, "")} ${extra.join(" ")}»`;
+  }
+
   private pickCaller(kind: SceneKind, rng: Rng): CallerKind {
     if (this.options.callers) return rng.pick(this.options.callers);
     const options = WHO_CALLS[kind];
@@ -369,6 +412,7 @@ export class CallObserver implements Observer {
       text: "",
     };
     call.text = callText(call);
+    this.bury(call, rng);
     return call;
   }
 }

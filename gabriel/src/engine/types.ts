@@ -392,6 +392,11 @@ export interface Call {
   text: string;
   /** A person really phoned this in (the HappyRobot 112 line), rather than the simulation making it up. */
   source?: "phone" | "citizen" | "outbound";
+  /**
+   * What the caller did say but nobody keyed into a field: under load the operator types the address and moves on,
+   * and the detail stays in the words. Truth kept for hindsight; a dispatcher that reads only fields never sees it.
+   */
+  buried?: Partial<Pick<Call, "trapped" | "breathing" | "ageGroup">>;
 }
 
 /** A call taken on the real 112 line, as the operator filed it: no id or tick yet, and a street instead of a node. */

@@ -35,6 +35,8 @@ export interface Scenario {
   config: Partial<SimConfig>;
   script: { tick: number; action: MasterAction }[];
   volume?: number;
+  /** Chance that a detail the caller gives never reaches its field (see CallObserver). */
+  buried?: number;
   /**
    * A moment instead of a whole night: the rule-based dispatcher plays up to `tick`, the agent takes the next
    * `decisions` decisions, and the dispatcher plays the rest. Whatever changes in the count is down to those decisions.
@@ -101,6 +103,7 @@ export interface ScenarioSpec {
   blackoutTick?: number;
   /** How loud the citizen channel is: 1 is a bad night, 5 is everyone posting at once. */
   volume?: number;
+  buried?: number;
 }
 
 const SITE_NAMES: Record<SiteKind, string[]> = {
@@ -192,6 +195,7 @@ export function generateScenario(spec: ScenarioSpec, graph: Graph): Scenario {
     config: spec.config ?? {},
     script,
     volume: spec.volume,
+    buried: spec.buried,
     stats: {
       scenes: scenes.length,
       silent: scenes.filter((s) => s.silent).length,
@@ -243,10 +247,10 @@ export const COLLECTION: ScenarioSpec[] = [
   { id: "G3", family: "G · Anticipación", split: "validation", title: "Natzaret avisa con 14 ticks; sitios en el camino", seed: 703, floods: [NATZARET, LA_TORRE], floodTicks: [14, 28], sites: 6 },
   { id: "G4", family: "G · Anticipación", split: "test", title: "Malilla avisa con 11 ticks; sitios en el camino", seed: 704, floods: [MALILLA, LA_PUNTA], floodTicks: [11, 25], sites: 6 },
 
-  { id: "H1", family: "H · Apagón y redes", split: "train", title: "La Torre a oscuras: casi nadie puede llamar", seed: 801, floods: [LA_TORRE], blackoutTick: 3, volume: 3, dana: SILENT },
-  { id: "H2", family: "H · Apagón y redes", split: "train", title: "La Punta a oscuras", seed: 802, floods: [LA_PUNTA], blackoutTick: 5, volume: 3, dana: SILENT },
-  { id: "H3", family: "H · Apagón y redes", split: "validation", title: "Malilla a oscuras", seed: 803, floods: [MALILLA], blackoutTick: 4, volume: 3, dana: SILENT },
-  { id: "H4", family: "H · Apagón y redes", split: "test", title: "Natzaret a oscuras", seed: 804, floods: [NATZARET], blackoutTick: 2, volume: 3, dana: SILENT },
+  { id: "H1", family: "H · Apagón y redes", split: "train", title: "La Torre a oscuras: casi nadie puede llamar", seed: 801, buried: 0.6, floods: [LA_TORRE], blackoutTick: 3, volume: 3, dana: SILENT },
+  { id: "H2", family: "H · Apagón y redes", split: "train", title: "La Punta a oscuras", seed: 802, buried: 0.6, floods: [LA_PUNTA], blackoutTick: 5, volume: 3, dana: SILENT },
+  { id: "H3", family: "H · Apagón y redes", split: "validation", title: "Malilla a oscuras", seed: 803, buried: 0.6, floods: [MALILLA], blackoutTick: 4, volume: 3, dana: SILENT },
+  { id: "H4", family: "H · Apagón y redes", split: "test", title: "Natzaret a oscuras", seed: 804, buried: 0.6, floods: [NATZARET], blackoutTick: 2, volume: 3, dana: SILENT },
 
   { id: "E1", family: "E · Dos focos y hospitales saturados", split: "test", title: "La Torre y Natzaret a la vez", seed: 501, floods: [LA_TORRE, NATZARET], config: SATURATED },
   { id: "E2", family: "E · Dos focos y hospitales saturados", split: "test", title: "Sant Isidre y La Punta a la vez", seed: 502, floods: [SANT_ISIDRE, LA_PUNTA], config: SATURATED },
