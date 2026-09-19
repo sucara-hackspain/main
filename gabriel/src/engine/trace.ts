@@ -3,6 +3,7 @@ import { unitLonLat, summarize, type Summary } from "./engine";
 import type { Graph } from "./graph";
 import { FLOOD_FRINGE_M } from "./engine";
 import { incidentLine } from "./incidents";
+import { PRESS_EVERY_TICKS, pressNote, type PressNote } from "./press";
 import type { LeadDesk, ReadMessage } from "./reading";
 import { infoGaps } from "./recon";
 import { waterArrivalTicks } from "./sites";
@@ -117,6 +118,8 @@ export interface TickRecord {
   calls: Call[];
   actions: Action[];
   decision?: Omit<Decision, "actions">;
+  /** The public statement put out this tick, if it was time for one. */
+  press?: PressNote;
 }
 
 const RECENT_TICKS = 20;
@@ -204,6 +207,7 @@ export function makeTickRecord(result: TickResult, world: World, belief: Belief,
     calls,
     actions: result.actions,
   };
+  if (result.tick > 0 && result.tick % PRESS_EVERY_TICKS === 0) record.press = pressNote(belief, graph, world.config, desk ? { received: desk.stats.received, leads: desk.leads.length } : null);
   if (result.decision) {
     const { actions: _actions, ...why } = result.decision;
     record.decision = why;

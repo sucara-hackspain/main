@@ -155,7 +155,7 @@ const records: TickRecord[] = [];
 try {
   for (let i = 0; i < ticks; i++) {
     const result = await sim.step();
-    const record = makeTickRecord(result, sim.world, sim.belief, graph);
+    const record = makeTickRecord(result, sim.world, sim.belief, graph, sim.desk);
     appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
     records.push(record);
     result.decision?.applies?.forEach((ids, i) => {
