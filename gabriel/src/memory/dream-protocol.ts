@@ -5,7 +5,7 @@ import type { MemoryStore } from "./store";
 // The dream's contract with whatever model runs it (a HappyRobot workflow, or Claude as a stand-in).
 // Kept in git next to the coordinator's protocol; `pnpm hr:sync --dream` pushes it to the platform.
 
-export const MAX_RULES = 28;
+export const MAX_RULES = 34;
 const MAX_FINDINGS = 30;
 
 export const DREAM_PROMPT = `Eres la memoria a largo plazo de un coordinador de emergencias. La sesión ha terminado. Ahora, sin prisa y con toda la información —incluida la que el coordinador no tenía cuando decidía—, repasas lo ocurrido y reorganizas su doctrina para que la próxima noche decida mejor.

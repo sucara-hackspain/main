@@ -21,6 +21,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   fireUnits: 3,
   rescueUnits: 2,
   helicopters: 1,
+  drones: 2,
   hospitals: 6,
   hospitalCapacity: 14,
   ambulanceSpeedFactor: 1.3,
@@ -29,6 +30,8 @@ export const DEFAULT_CONFIG: SimConfig = {
   treatTicks: 2,
   extricateTicks: 3,
   searchRadiusM: 600,
+  scoutRadiusM: 500,
+  scoutTicks: 2,
 };
 
 /** Hospitals a helicopter can land at. */
@@ -39,14 +42,17 @@ const STATIONS: [number, number][] = [
   [-0.3644, 39.4905],
   [-0.401, 39.4795],
 ];
-const HELICOPTER_MPS = 50;
+/** Metres per second in a straight line, for the units that fly. */
+const FLIGHT_MPS: Partial<Record<UnitKind, number>> = { helicopter: 50, drone: 22 };
+export const flightMps = (kind: UnitKind): number => FLIGHT_MPS[kind] ?? 50;
 
-/** What each kind of unit can do. */
-export const UNIT_KINDS: Record<UnitKind, { label: string; carries: boolean; extricates: boolean; wades: boolean; flies: boolean }> = {
-  ambulance: { label: "ambulancia", carries: true, extricates: false, wades: false, flies: false },
-  fire: { label: "bomberos", carries: false, extricates: true, wades: false, flies: false },
-  rescue: { label: "rescate acuático", carries: true, extricates: true, wades: true, flies: false },
-  helicopter: { label: "helicóptero", carries: true, extricates: false, wades: false, flies: true },
+/** What each kind of unit can do. `observes` = it can be sent to look at a place and report back. */
+export const UNIT_KINDS: Record<UnitKind, { label: string; carries: boolean; extricates: boolean; wades: boolean; flies: boolean; observes: boolean }> = {
+  ambulance: { label: "ambulancia", carries: true, extricates: false, wades: false, flies: false, observes: false },
+  fire: { label: "bomberos", carries: false, extricates: true, wades: false, flies: false, observes: false },
+  rescue: { label: "rescate acuático", carries: true, extricates: true, wades: true, flies: false, observes: false },
+  helicopter: { label: "helicóptero", carries: true, extricates: false, wades: false, flies: true, observes: true },
+  drone: { label: "dron", carries: false, extricates: false, wades: false, flies: true, observes: true },
 };
 
 export function createWorld(graph: Graph, config: SimConfig): World {
@@ -92,6 +98,8 @@ export function createWorld(graph: Graph, config: SimConfig): World {
   park("fire", "B", config.fireUnits, station);
   park("rescue", "R", config.rescueUnits, (i) => station(i + 1));
   park("helicopter", "HEL", config.helicopters, () => (hospitals.find((h) => h.helipad) ?? hospitals[0]).node);
+  // Drones live at the stations they launch from.
+  park("drone", "D", config.drones, station);
 
   return {
     tick: 0,
@@ -157,7 +165,7 @@ function setRoute(world: World, graph: Graph, amb: Unit, destNode: number): numb
     amb.flight = { from, toNode: destNode, distM, doneM: 0 };
     amb.route = [];
     amb.destNode = destNode;
-    return Math.ceil(distM / HELICOPTER_MPS / world.config.tickSeconds);
+    return Math.ceil(distM / flightMps(amb.kind) / world.config.tickSeconds);
   }
   const inProgress = amb.progressS > 0 ? [amb.route[0]] : [];
   const { closed, slow } = closuresFor(amb.kind, world.knownClosedEdges, world.floodedEdges);
@@ -206,6 +214,7 @@ export function applyMasterAction(world: World, graph: Graph, action: MasterActi
         tick: world.tick,
         victimIds: [],
         resolved: false,
+        silent: action.silent ?? false,
       };
       for (const spec of action.victims) {
         const victim: Victim = {
@@ -355,6 +364,18 @@ export function applyAction(world: World, graph: Graph, action: Action): boolean
       amb.hospitalId = null;
       break;
     }
+    case "scout": {
+      if (!UNIT_KINDS[amb.kind].observes) return reject(`${UNIT_KINDS[amb.kind].label} cannot scout`);
+      if (amb.victimId) return reject("unit already carries a victim");
+      if (!(action.node >= 0 && action.node < graph.nodeCount)) return reject("unknown node");
+      eta = setRoute(world, graph, amb, action.node);
+      if (eta === null) return reject("no open route to node");
+      amb.mission = "to_observe";
+      amb.incidentId = action.incidentId ?? null;
+      amb.sceneId = null;
+      amb.hospitalId = null;
+      break;
+    }
   }
   emit(world, { type: "action_applied", action, etaTicks: eta });
   return true;
@@ -378,7 +399,7 @@ function moveUnit(world: World, graph: Graph, amb: Unit, closed: ReadonlySet<num
   if (world.tick < amb.busyUntil) return;
 
   if (amb.flight) {
-    amb.flight.doneM += HELICOPTER_MPS * world.config.tickSeconds;
+    amb.flight.doneM += flightMps(amb.kind) * world.config.tickSeconds;
     if (amb.flight.doneM < amb.flight.distM) return;
     amb.node = amb.flight.toNode;
     amb.flight = null;
@@ -431,7 +452,7 @@ function moveUnit(world: World, graph: Graph, amb: Unit, closed: ReadonlySet<num
 
 /** Ticks left on the ambulance's current route. */
 export function remainingTicks(amb: Unit, graph: Graph, config: SimConfig): number {
-  if (amb.flight) return Math.ceil((amb.flight.distM - amb.flight.doneM) / HELICOPTER_MPS / config.tickSeconds);
+  if (amb.flight) return Math.ceil((amb.flight.distM - amb.flight.doneM) / flightMps(amb.kind) / config.tickSeconds);
   let seconds = -amb.progressS;
   for (const step of amb.route) seconds += graph.stepSeconds(step);
   return Math.ceil(seconds / config.ambulanceSpeedFactor / config.tickSeconds);
@@ -446,6 +467,7 @@ function arrive(world: World, graph: Graph, amb: Unit): void {
     emit(world, { type: "unit_arrived", unitId: amb.id, node: amb.node });
     return;
   }
+  if (mission === "to_observe") return survey(world, graph, amb);
   if (mission === "to_scene") return arriveAtScene(world, graph, amb);
 
   if (mission === "to_hospital") {
@@ -465,6 +487,29 @@ function arrive(world: World, graph: Graph, amb: Unit): void {
     amb.busyUntil = world.tick + world.config.dropoffTicks;
     emit(world, { type: "victim_delivered", victimId: victim.id, unitId: amb.id, hospitalId: hospital.id });
   }
+}
+
+/**
+ * An observer is over the area: this is everything that is really within sight of it. What the
+ * coordinator gets to hear is the observer's read of it, which is built (and degraded) in the observer.
+ */
+function survey(world: World, graph: Graph, unit: Unit): void {
+  const radiusM = world.config.scoutRadiusM;
+  const sceneIds = world.scenes
+    .filter((s) => graph.distanceM(unit.node, s.node) <= radiusM)
+    .filter((s) => world.victims.some((v) => v.sceneId === s.id && (v.status === "waiting" || v.status === "in_ambulance")))
+    .map((s) => s.id);
+  const water = new Set(world.floodedEdges);
+  const closedEdges: number[] = [];
+  const floodedEdges: number[] = [];
+  for (const edge of world.closedEdges) {
+    const e = graph.data.edges[edge];
+    if (graph.distanceM(unit.node, e.a) > radiusM && graph.distanceM(unit.node, e.b) > radiusM) continue;
+    (water.has(edge) ? floodedEdges : closedEdges).push(edge);
+  }
+  unit.busyUntil = world.tick + world.config.scoutTicks;
+  unit.incidentId = null;
+  emit(world, { type: "area_surveyed", unitId: unit.id, node: unit.node, radiusM, sceneIds, closedEdges, floodedEdges });
 }
 
 /** The crew reaches the reported spot, looks for the real scene, triages whoever is there and takes the worst one. */

@@ -88,7 +88,7 @@ export function incidentScene(
       eta: router.eta(unit, target),
       ...base,
     });
-    const onward = action.type === "reposition" ? undefined : action.hospitalId;
+    const onward = action.type === "dispatch" || action.type === "transport" ? action.hospitalId : undefined;
     if (onward) hospitals.add(onward);
     const leg =
       action.type === "dispatch" && action.hospitalId

@@ -21,6 +21,8 @@ export const CONCEPTS: Record<string, string> = {
   fire: "Bomberos",
   rescue: "Rescate acuático",
   helicopter: "Helicóptero",
+  drone: "Drones y reconocimiento",
+  silence: "Zonas en silencio",
   trapped: "Víctimas atrapadas",
   minor: "Heridos leves",
   water: "Agua e inundación",
@@ -38,6 +40,7 @@ export const SEED_RULES: SeedRule[] = [
   { id: "D2", kind: "driver", title: "Lo que el agua va a aislar va antes", body: "A igual prioridad, atiende primero el incidente que el agua va a dejar sin acceso: después ya no se podrá.", about: ["water", "cut_off", "priority"] },
   { id: "D3", kind: "driver", title: "Decide por tiempo real, no por cercanía", body: "Elige la unidad por su ETA del parte, no por lo cerca que parezca.", about: ["priority"] },
   { id: "D4", kind: "driver", title: "Lo escaso, solo donde nadie más llega", body: "Helicóptero y rescate acuático se reservan para lo que una ambulancia no puede resolver.", about: ["helicopter", "rescue"] },
+  { id: "D6", kind: "driver", title: "Si te falta información, ve a buscarla", body: "Decidir a ciegas es una elección, no una fatalidad: un dron es barato y no le quita una unidad a nadie. Pero mirar no salva a nadie por sí solo: sirve para que la siguiente orden sea la buena, no para retrasarla.", about: ["drone", "uncertainty"] },
   { id: "D5", kind: "driver", title: "Proteger la flota y no olvidar a nadie", body: "Una unidad perdida son muchas víctimas futuras. Y nadie espera para siempre: un P3 con más de 40 minutos abierto sube de prioridad.", about: ["fleet", "waiting"] },
 
   // Doubtful information.
@@ -53,6 +56,11 @@ export const SEED_RULES: SeedRule[] = [
   { id: "H8", kind: "heuristic", title: "Leves confirmados: una sola dotación", body: "Para heridos leves confirmados basta una dotación, y los bomberos valen. No gastes ambulancias.", about: ["minor", "fire", "ambulance"] },
   { id: "H9", kind: "heuristic", title: "No desvíes a quien está a punto de llegar", body: "No desvíes una unidad a menos de 3 ticks de su destino salvo para un P0.", about: ["diversion"] },
 
+  // Going to look, and reading silence.
+  { id: "H14", kind: "heuristic", title: "Antes de gastar media flota a ciegas, manda el dron", body: "Con ubicación de ±300 m o más y número de heridos desconocido, manda primero un dron y ajusta con lo que traiga: evita mandar dos ambulancias a un cruce vacío.", about: ["drone", "uncertainty", "calls"] },
+  { id: "H15", kind: "heuristic", title: "El silencio de un barrio es un aviso, no una buena noticia", body: "Una zona que llamaba y ha dejado de llamar, o a la que llega el agua sin que nadie llame, es el sitio más probable donde hay gente que nadie ha contado: sin cobertura, sin batería o sin nadie consciente. Mándale un dron.", about: ["silence", "drone", "water"] },
+  { id: "H16", kind: "heuristic", title: "Un dron informa, no confirma", body: "Lo que ve es aproximado y lo de dentro de las casas casi no lo ve. Que no vea a nadie NO cierra un incidente: solo una dotación en el lugar confirma. Lo que sí puedes creerle es el agua y las calles cortadas.", about: ["drone", "uncertainty", "crew_report"] },
+
   // Water and hospitals.
   { id: "H10", kind: "heuristic", title: "No entres donde el agua cierra la salida", body: "No mandes unidades de carretera a un sitio que el agua aísla en menos de su ETA + 8 ticks, y saca con reposition las que estén paradas en zonas en riesgo.", about: ["water", "cut_off", "fleet"] },
   { id: "H11", kind: "heuristic", title: "El agua real va por delante de lo que sabes", body: "Un parte oficial viejo significa un frente más avanzado (edad del parte por velocidad). Los ETA hacia zonas con avistamientos recientes son optimistas.", about: ["water", "uncertainty"] },
@@ -64,4 +72,6 @@ export const SEED_RULES: SeedRule[] = [
   { id: "A2", kind: "antipattern", title: "Dos unidades al mismo leve", body: "La segunda llega y no tiene nada que hacer.", about: ["minor"] },
   { id: "A3", kind: "antipattern", title: "Saturar La Fe por ser la más cercana al agua", body: "Se queda sin camas y empieza a rechazar ambulancias con el herido dentro.", about: ["la_fe", "hospitals"] },
   { id: "A4", kind: "antipattern", title: "Unidades aparcadas al sur del nuevo cauce", body: "Cuando el agua cubre los puentes quedan fuera de juego.", about: ["fleet", "water", "cut_off"] },
+  { id: "A5", kind: "antipattern", title: "Dar por vacía una zona porque el dron no vio nada", body: "Una pasada de calidad baja no ve a la gente dentro de las casas; se descarta el barrio y se muere ahí.", about: ["drone", "silence", "uncertainty"] },
+  { id: "A6", kind: "antipattern", title: "Drones parados mientras hay huecos en el parte", body: "No pueden rescatar a nadie: si no están mirando, no sirven para nada.", about: ["drone"] },
 ];

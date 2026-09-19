@@ -69,6 +69,10 @@ export function unitActivity(u: UnitFrame, tick: number, seconds: number, busy?:
   if (u.mission === "to_hospital") return { label: `Traslado a ${u.hospitalId}`, tone: "info" as Tone, detail: `${u.victimId} a bordo` };
   if (u.victimId) return { label: "Víctima a bordo", tone: "warning" as Tone, detail: `${u.victimId} pendiente de hospital` };
   if (u.mission === "reposition") return { label: "Reubicándose", tone: "info" as Tone, detail: "En camino a una nueva posición" };
+  if (u.mission === "to_observe") return {
+    label: "Reconociendo", tone: "info" as Tone,
+    detail: `Va a mirar ${u.incidentId ?? "una zona de la que no sabes nada"}: volverá con un informe, no con una confirmación`,
+  };
   return { label: "Disponible", tone: "success" as Tone, detail: "Lista para una nueva misión" };
 }
 

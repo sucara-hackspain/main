@@ -1,6 +1,7 @@
-import { closuresFor, effectiveNode, UNIT_KINDS } from "./engine";
+import { closuresFor, effectiveNode, flightMps, UNIT_KINDS } from "./engine";
 import type { Graph } from "./graph";
 import { resolve, unitsNeeded } from "./incidents";
+import { infoGaps } from "./recon";
 import { believedWater, cutOffForecast } from "./water";
 import type { Action, Belief, Report, SimConfig, Unit, UnitKind } from "./types";
 
@@ -37,7 +38,8 @@ export interface Coordinator {
 /**
  * Baseline to beat: highest-priority incident first, nearest free unit of the right kind, nearest hospital with a bed.
  *  - firefighters go where someone is trapped;
- *  - ambulances go where a road gets them; rescue crews where only water does; the helicopter to the worst far-away case.
+ *  - ambulances go where a road gets them; rescue crews where only water does; the helicopter to the worst far-away case;
+ *  - idle drones go and look at whatever the coordinator is most blind about, silence included.
  * Never reconsiders a unit that is already on its way to an open incident.
  */
 export class GreedyCoordinator implements Coordinator {
@@ -54,7 +56,7 @@ export class GreedyCoordinator implements Coordinator {
       if (!eta) {
         if (UNIT_KINDS[unit.kind].flies) {
           const from = effectiveNode(unit, graph);
-          eta = (node) => graph.distanceM(from, node) / 50 / config.tickSeconds;
+          eta = (node) => graph.distanceM(from, node) / flightMps(unit.kind) / config.tickSeconds;
         } else {
           const { closed, slow } = closuresFor(unit.kind, belief.closedEdges, belief.floodedEdges);
           const times = graph.timesFrom(effectiveNode(unit, graph), closed, slow);
@@ -96,7 +98,12 @@ export class GreedyCoordinator implements Coordinator {
 
     // Free = empty and idle, or heading somewhere pointless (an incident already closed).
     const isOpen = (incidentId: string | null) => resolve(belief, incidentId)?.status === "open";
-    const free = belief.units.filter((u) => !u.victimId && u.brokenUntil === null && (u.mission !== "to_scene" || !isOpen(u.incidentId)));
+    // A drone can do nothing else, so it never competes for rescue work; and a unit already looking
+    // at something is left alone until its report comes in.
+    const canRescue = (u: Unit) => UNIT_KINDS[u.kind].carries || UNIT_KINDS[u.kind].extricates;
+    const free = belief.units.filter(
+      (u) => canRescue(u) && !u.victimId && u.brokenUntil === null && u.mission !== "to_observe" && (u.mission !== "to_scene" || !isOpen(u.incidentId)),
+    );
     const take = (unit: Unit) => free.splice(free.indexOf(unit), 1);
     const nearest = (kinds: UnitKind[], node: number): Unit | null => {
       let best: Unit | null = null;
@@ -150,6 +157,26 @@ export class GreedyCoordinator implements Coordinator {
         if (!unit) break;
         actions.push({ type: "dispatch", unitId: unit.id, incidentId: incident.id, node: incident.node, hospitalId: nearestHospital(unit, incident.node) ?? undefined });
         take(unit);
+      }
+    }
+
+    // What we do not know. Only units with nothing better to do go looking: a drone always, the
+    // helicopter only while no incident is waiting for a crew that can actually carry someone.
+    const carrierWanted = open.some((i) => unitsNeeded(i, belief.units).carriers > 0);
+    const observers = belief.units.filter(
+      (u) => UNIT_KINDS[u.kind].observes && u.brokenUntil === null && !u.victimId && u.mission === "idle" && (!carrierWanted || !UNIT_KINDS[u.kind].carries),
+    );
+    if (observers.length > 0) {
+      const gaps = infoGaps(belief, graph, belief.tick, observers.length * 2);
+      const taken = new Set<number>();
+      for (const gap of gaps) {
+        if (taken.has(gap.node)) continue;
+        const unit = observers
+          .filter((u) => !actions.some((a) => a.unitId === u.id))
+          .sort((a, b) => etaOf(a)(gap.node) - etaOf(b)(gap.node))[0];
+        if (!unit || etaOf(unit)(gap.node) === Infinity) break;
+        actions.push({ type: "scout", unitId: unit.id, node: gap.node, incidentId: gap.kind === "incident" ? gap.id : undefined });
+        taken.add(gap.node);
       }
     }
 

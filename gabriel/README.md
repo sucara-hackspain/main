@@ -20,8 +20,24 @@ The world holds **scenes** (a crash, a collapse, a fire) with **victims** that h
 1. **112 calls** (`observer.ts`): answers to the operator's protocol questions - where (roughly), what happened, conscious?, breathing?, bleeding?, how many. Quality depends on who calls: a relative is precise, a driver passing by barely knows anything and can be wrong. No diagnosis, no time to live.
 2. **Incidents** (`incidents.ts`): calls about the same place/time/kind are attached to one incident. Priority P0-P3 is *deduced* from the signs by protocol. Every field remembers which call or radio message it came from.
 3. **Crew radio**: the ambulance drives to the reported spot, looks for the real scene nearby, triages everyone (red/yellow/green/black) and reports. That overrides the calls. It loads the worst victim; minor ones are treated on the spot.
+4. **Aerial reports** (`scout`): what a drone or the helicopter thinks it saw over a place. See below.
 
 Orders go to an incident, not to a victim. If nobody comes, someone calls again.
+
+### Going to look for what nobody told you
+
+Not every scene calls. Some are **silent**: nobody saw it, the line is down, the phone is gone, nobody is left conscious. Inside the water most of them are (`pSilentInWater`). Dispatch never hears about them at all, so the only way they are ever known is an order to go and look.
+
+`scout {unitId, node}` sends an observer (drone, or the helicopter when it is not needed to carry anyone) over a place. The engine records the truth in sight (`area_surveyed`); the observer degrades it into what gets radioed back (`drone_report`), and only that reaches the belief:
+
+- one roll per flight sets how good the look was, and everything else degrades from there;
+- whole scenes are missed - what happens on a flooded street is obvious from above, what happens inside a ground floor is not (`VISIBLE_FROM_AIR`);
+- counts come back off by one, or as "cannot count"; "not moving" is the hardest call and the one that matters most;
+- water and closed streets, on the other hand, read very well from the air.
+
+A sighting with no matching incident **opens one**, without ever confirming it: a scouted incident is never `located`, keeps a location error and holds no triage. Only a crew on the ground confirms.
+
+**Silence as information** (`recon.ts`). The city is cut into ~700 m zones. A zone that was calling and went quiet, or that never called while its neighbours did, or that the water is reaching without a word from it, is ranked as a hole in the picture: either there is nobody there, or there is nobody left who can call. `infoGaps()` ranks those holes together with the incidents being decided blind (±400 m, number of victims unknown, no road access), the briefing prints them under **LO QUE NO SABES** with an ETA per observer, and the greedy baseline sends idle drones to the top one.
 
 ### The DANA and what is known about the water
 
@@ -40,7 +56,8 @@ Nobody tells the coordinator where the water is (`water.ts`):
 | Ambulance (A) | Carries one victim to hospital by road | Stops at the water |
 | Firefighters (B) | Free trapped victims, treat minor ones | Carry nobody; stop at the water |
 | Water rescue (R) | Drives through flooded streets (4x slower), frees and carries | Few and slow |
-| Helicopter (HEL) | Flies straight at 180 km/h, ignores streets and water | One; one victim; only hospitals with a helipad |
+| Helicopter (HEL) | Flies straight at 180 km/h, ignores streets and water; can also scout | One; one victim; only hospitals with a helipad |
+| Drone (D) | Flies at 80 km/h and looks: the only way to learn about a place nobody has called from | Rescues nobody; never confirms anything |
 
 A trapped victim (car, rubble) cannot be loaded by anyone until firefighters or a rescue crew free them: callers are asked "can they get out?", so the coordinator may know before anyone arrives.
 
@@ -69,7 +86,7 @@ The starting doctrine is `src/memory/seed.ts`; delete `memory/memory.db` to go b
 1. **Master** acts: spawn scene, close/open road, puncture ambulance (`MasterAction`).
 2. **World advances**: ambulances drive, victims deteriorate (each injury at its own pace), crews assess, load, treat, deliver.
 3. **Observer** turns what happened into `Report`s (calls, radio, hospital, traffic) and they are folded into the coordinator's `Belief`.
-4. **Coordinator** is woken only if there are new reports, and answers with `Action`s: `dispatch` (to an incident), `transport`, `reposition`.
+4. **Coordinator** is woken only if there are new reports, and answers with `Action`s: `dispatch` (to an incident), `transport`, `reposition`, `scout` (go and look).
 
 ## Where things are
 
@@ -82,7 +99,8 @@ The starting doctrine is `src/memory/seed.ts`; delete `memory/memory.db` to go b
 | `src/engine/victims.ts` | Clinical model: injuries, how fast each kills, triage, victim generation. |
 | `src/engine/observer.ts` | Who calls 112, what they know and how wrong they are; which world events get reported at all. |
 | `src/engine/water.ts` | The coordinator's picture of the flood: sightings, stale official maps, extrapolation, cut-off forecast. |
-| `src/engine/incidents.ts` | Coordinator side: attach calls to incidents, deduce priority, merge, close. Reads reports only. |
+| `src/engine/incidents.ts` | Coordinator side: attach calls and aerial sightings to incidents, deduce priority, merge, close. Reads reports only. |
+| `src/engine/recon.ts` | What the coordinator does not know: zones, the silence heuristic, and the ranked list of places worth looking at. |
 | `src/engine/coordinator.ts` | `Coordinator` interface + `GreedyCoordinator` baseline. |
 | `src/engine/sim.ts` | The loop. `inject()` / `order()` let a human play master or override the coordinator. |
 | `src/engine/briefing.ts` | Situation report for an LLM, with every ETA precomputed. Skips the call when nothing is decidable. |
