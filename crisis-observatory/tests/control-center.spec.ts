@@ -217,6 +217,8 @@ test("operational sidebar explores the map, keeps global context and respects th
   const sidebar = page.getByRole("complementary", { name: "Estado de la situación" });
   const row = (ref: string) => sidebar.locator(`.situation-row[data-entity="${ref}"]`);
   const pin = (ref: string) => page.locator(`.operational-map [data-entity="${ref}"]`);
+  // The selection's detail opens on the map, next to what was picked.
+  const detail = page.getByRole("dialog", { name: "Detalle de la selección" });
   await expect(sidebar.getByTestId("available-units")).toHaveText("3/3");
   await page.getByLabel("Navegar por el historial", { exact: true }).fill("1");
   await expect(sidebar).toContainText("3 incidentes abiertos");
@@ -224,7 +226,14 @@ test("operational sidebar explores the map, keeps global context and respects th
   await expect(sidebar).toContainText("Revisando el pasado");
   await expect(sidebar).not.toContainText("Master");
   await expect(sidebar).not.toContainText("Coordinador");
-  await expect(row(`hospital:${hospitals[0].id}`)).toContainText("Margen previsto: 0");
+  // Units and hospitals start folded to a summary line.
+  const unitsSection = sidebar.getByRole("button", { name: /^Unidades/ });
+  await expect(unitsSection).toHaveAttribute("aria-expanded", "false");
+  await expect(unitsSection).toContainText("0 disponibles · 2 ocupadas · 1 averiada");
+  await expect(row("unit:A3")).toHaveCount(0);
+  await unitsSection.click();
+  await sidebar.getByRole("button", { name: /^Hospitales/ }).click();
+  await expect(row(`hospital:${hospitals[0].id}`)).toContainText("margen 0");
   await expect(row("unit:A3")).toContainText("Reparación prevista en 2 min");
   await expect(pin("incident:C8")).toBeAttached();
   await sidebar.getByRole("button", { name: "Sin unidad 1", exact: true }).click();
@@ -232,7 +241,7 @@ test("operational sidebar explores the map, keeps global context and respects th
   await expect(pin("incident:C8")).not.toHaveClass(/is-muted/);
   await expect(pin("unit:A1")).toHaveClass(/is-muted/);
   await row("incident:C8").click();
-  await expect(sidebar.getByRole("region", { name: "Detalle de la selección" })).toContainText("1 min 30 s");
+  await expect(detail).toContainText("1 min 30 s");
   await expect(sidebar).toContainText("3 incidentes abiertos");
   await expect(sidebar.getByTestId("available-units")).toHaveText("0/3");
   await sidebar.getByRole("button", { name: "Todos", exact: true }).click();
@@ -244,10 +253,9 @@ test("operational sidebar explores the map, keeps global context and respects th
   await page.keyboard.press("Enter");
   await expect(pin("incident:C7")).toBeFocused();
   await expect(row("incident:C7")).toHaveAttribute("aria-pressed", "true");
-  await expect(sidebar.getByRole("region", { name: "Detalle de la selección" })).toContainText("C7");
-  await sidebar.getByRole("button", { name: "Ver en el mapa" }).click();
-  await expect(page.getByRole("button", { name: "Territorio", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await sidebar.getByRole("button", { name: "Cerrar detalle" }).click();
+  await expect(detail).toContainText("C7");
+  await detail.getByRole("button", { name: "Cerrar detalle" }).click();
+  await expect(detail).toHaveCount(0);
   await sidebar.getByLabel("Buscar entidades").fill("c8");
   await expect(sidebar.locator(".situation-row")).toHaveCount(1);
   await sidebar.getByLabel("Buscar entidades").fill("sin-coincidencias");
@@ -268,7 +276,7 @@ test("operational sidebar explores the map, keeps global context and respects th
   await row("incident:C8").click();
   await page.screenshot({ path: "test-results/operational-sidebar-desktop.png", fullPage: true });
   await page.getByLabel("Navegar por el historial", { exact: true }).fill("0");
-  await expect(sidebar.getByRole("region", { name: "Detalle de la selección" })).toHaveCount(0);
+  await expect(detail).toHaveCount(0);
   await expect(sidebar.getByTestId("saved-count")).toHaveText("0");
   await expect(sidebar.locator('.situation-row[data-entity^="incident:"]')).toHaveCount(0);
   await page.getByLabel("Navegar por el historial", { exact: true }).fill("1");
@@ -277,7 +285,6 @@ test("operational sidebar explores the map, keeps global context and respects th
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: "test-results/operational-sidebar-mobile.png", fullPage: true });
   await row("incident:C8").click();
-  await expect(sidebar.getByRole("region", { name: "Detalle de la selección" })).toBeInViewport();
-  await sidebar.getByRole("button", { name: "Ver en el mapa" }).click();
   await expect(page.locator(".operational-map")).toBeInViewport();
+  await expect(detail).toBeInViewport();
 });

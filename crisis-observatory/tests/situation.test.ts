@@ -131,3 +131,16 @@ test("water and closures set what the coordinator knows against what is real", (
   const { water } = buildSituation(r, meta, [r], null);
   assert.deepEqual([water.zones.length, water.sightings, water.blocked, water.closed, water.real, water.unreported], [1, 2, 1, 1, 3, 2]);
 });
+
+test("an incident is waiting while nobody who can reach it is on it, whatever its ticket says", () => {
+  const state = (incidents: IncidentFrame[], units: UnitFrame[] = []) => {
+    const r = record(9, { incidents, units });
+    return buildSituation(r, meta, [r], null).incidents.map((i) => i.attention);
+  };
+  assert.deepEqual(state([incident("C1")]), ["waiting"]);
+  assert.deepEqual(state([incident("C1")], [unit("A1", "ambulance", { mission: "to_scene", incidentId: "C1" })]), ["attended"]);
+  // Cut off by the water: an ambulance on its way does not count, a boat does.
+  assert.deepEqual(state([incident("C2", { cutOffIn: 0 })], [unit("A1", "ambulance", { mission: "to_scene", incidentId: "C2" })]), ["waiting"]);
+  assert.deepEqual(state([incident("C2", { unreachable: true })], [unit("R1", "rescue", { mission: "to_scene", incidentId: "C2" })]), ["attended"]);
+  assert.deepEqual(state([incident("C3", { status: "closed", closedReason: "resolved" })]), ["resolved"]);
+});

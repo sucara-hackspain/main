@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import * as ml from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -49,18 +50,22 @@ export default function RunMap({
   related,
   matches,
   filtered,
+  detail,
 }: {
   graph: GraphData;
   meta: RunMeta;
   record: TickRecord;
   selected: Selection | null;
-  onSelect: (ref: Selection) => void;
+  /** A marker was picked; null closes the selection. */
+  onSelect: (ref: Selection | null) => void;
   focusRequest: number;
   /** Entities tied to the selection, as `kind:id`. */
   related: Set<string>;
   /** Entities the situation panel's filter and search leave in, as `kind:id`. */
   matches: Set<string>;
   filtered: boolean;
+  /** The selection's detail, in a modal anchored to it on the map. */
+  detail?: ReactNode;
 }) {
   const host = useRef<HTMLDivElement>(null),
     map = useRef<ml.Map | null>(null),
@@ -114,6 +119,11 @@ export default function RunMap({
     map.current = m;
     m.addControl(new ml.NavigationControl({ showCompass: false }), "bottom-left");
     m.on("error", () => setError(true));
+    // A click on the map itself, not on a marker, closes the detail.
+    m.on("click", (e) => {
+      if ((e.originalEvent.target as HTMLElement).classList.contains("maplibregl-canvas"))
+        callback.current(null);
+    });
     m.on("load", () => {
       const theme = getComputedStyle(host.current!);
       const color = (name: string) => theme.getPropertyValue(name).trim();
@@ -248,7 +258,10 @@ export default function RunMap({
       el.classList.toggle("related", related.has(key));
       el.classList.toggle("is-muted", muted(key));
       el.setAttribute("aria-pressed", String(selectedNow));
-      el.onclick = () => callback.current(ref);
+      el.onclick = (e) => {
+        e.stopPropagation();
+        callback.current(ref);
+      };
       el.title = label;
       el.setAttribute("aria-label", label);
       markers.current.push(
@@ -394,9 +407,54 @@ export default function RunMap({
     );
   }, [ready, record, graph, meta, selected, reality, seconds, related, matches, filtered]);
 
+  // The detail opens where the selection is and follows it as it moves. The selection is centred on
+  // the map, so it fits beside it, to its left; on a phone it is a sheet at the bottom of the map.
+  const popupNode = useMemo(() => document.createElement("div"), []);
+  const popup = useRef<ml.Popup | null>(null);
+  const showing = Boolean(detail);
+  useEffect(() => {
+    const m = map.current,
+      at = focusPosition.current;
+    if (!m || !ready || !showing || !at) {
+      popup.current?.remove();
+      return;
+    }
+    popup.current ??= new ml.Popup({
+      anchor: "right",
+      closeButton: false,
+      closeOnClick: false,
+      closeOnMove: false,
+      focusAfterOpen: false,
+      maxWidth: "none",
+      offset: 30,
+      className: "entity-popover",
+    }).setDOMContent(popupNode);
+    popup.current.setLngLat(at);
+    if (!popup.current.isOpen()) popup.current.addTo(m);
+  }, [ready, showing, selectedKey, record, popupNode]);
+  useEffect(() => () => void popup.current?.remove(), []);
+  // MapLibre places the popup before React has filled it: place it again once it has a size.
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      const p = popup.current;
+      if (p?.isOpen()) p.setLngLat(p.getLngLat());
+    });
+    observer.observe(popupNode);
+    return () => observer.disconnect();
+  }, [popupNode]);
+  useEffect(() => {
+    if (!showing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector('[role="alertdialog"]')) callback.current(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showing]);
+
   return (
     <div className="app-map-wrap operational-map">
       <div ref={host} className="operational-map-canvas" />
+      {showing && createPortal(detail, popupNode)}
       <div className="operational-map-heading">
         <strong>Valencia</strong>
         <small>Posiciones registradas · cada {seconds} s</small>

@@ -26,6 +26,7 @@ import "../theme.css";
 import "./control-center.css";
 import "./session.css";
 import SituationSidebar from "./situation/SituationSidebar";
+import EntityCard from "./situation/EntityCard";
 import {
   buildSituation,
   matchingEntities,
@@ -402,12 +403,32 @@ function RunSession({
                   record={current}
                   selected={selection}
                   onSelect={(ref) =>
-                    chooseEntity(sameSelection(selection, ref) ? null : ref)
+                    chooseEntity(ref && sameSelection(selection, ref) ? null : ref)
                   }
                   focusRequest={focusRequest}
                   related={related}
                   matches={matches}
                   filtered={filtered}
+                  detail={
+                    selection &&
+                    situation && (
+                      <EntityCard
+                        s={situation}
+                        selection={selection}
+                        graph={graph}
+                        ticket={
+                          selection.kind === "incident"
+                            ? (tickets.find((t) => t.id === selection.id) ?? null)
+                            : null
+                        }
+                        onSelect={chooseEntity}
+                        onOpenTicket={(incidentId) => {
+                          setTicketId(incidentId);
+                          setView("tickets");
+                        }}
+                      />
+                    )
+                  }
                 />
               </Suspense>
             )
@@ -510,10 +531,10 @@ function RunSession({
           onRun={onRun}
           situation={situation}
           selection={selection}
-          onSelect={chooseEntity}
-          onLocate={() => {
-            setView("map");
-            setFocusRequest((n) => n + 1);
+          onSelect={(ref) => {
+            chooseEntity(ref);
+            // On a phone the map is above the list: bring it into view, where the detail opens.
+            if (ref && view === "map") setFocusRequest((n) => n + 1);
           }}
           related={related}
           matches={matches}
