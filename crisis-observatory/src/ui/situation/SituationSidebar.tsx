@@ -27,8 +27,7 @@ type Props = {
   running: boolean;
   records: number;
   error: boolean;
-  /** What the coordinator is trying to do right now, in its own words: shown above everything else. */
-  planCard?: React.ReactNode;
+
 };
 
 const can = { carries: "Traslada víctimas", extricates: "Excarcela", wades: "Cruza el agua", flies: "Vuela" };
@@ -139,7 +138,6 @@ export default function SituationSidebar(props: Props) {
   return <aside className="app-sidebar situation-sidebar" aria-label="Estado de la situación">
     <div className="situation-fixed" ref={fixed}>
       <div className="situation-heading"><div><span className="app-eyebrow">PANORAMA OPERATIVO</span><h2>Estado de la situación</h2></div><span className="situation-clock">{s ? snapshotTime(s) : "—"}</span></div>
-      {props.planCard}
       <label className="run-picker"><span>Ejecución</span><select aria-label="Seleccionar ejecución" value={id} onChange={(e) => onRun(e.target.value)}>
         {runs.map((r) => <option key={r.id} value={r.id}>{new Date(r.startedAt).toLocaleString("es-ES")} · {r.id}</option>)}
       </select></label>

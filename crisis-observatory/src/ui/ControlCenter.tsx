@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ClipboardList,
   GitBranch,
+  Route,
   Megaphone,
   Scale,
   Layers,
@@ -40,6 +41,7 @@ import DecisionPanel, { DecisionStrip } from "./decisions/DecisionPanel";
 import { decisionCards } from "./decisions/model";
 import SignalsView from "./signals/SignalsView";
 import PressView from "./press/PressView";
+import PlanView from "./plan/PlanView";
 import "./press/press.css";
 import { channelView } from "./signals/model";
 import { auditItems, laneName } from "./thoughts/model";
@@ -115,7 +117,7 @@ function RunSession({
     [playing, setPlaying] = useState(false),
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
-    [view, setView] = useState<"map" | "flow" | "tickets" | "decisions" | "signals" | "press">("map"),
+    [view, setView] = useState<"map" | "flow" | "tickets" | "decisions" | "signals" | "press" | "plan">("map"),
     [leadFocus, setLeadFocus] = useState<string | null>(null),
     [orderFocus, setOrderFocus] = useState<string | null>(null),
     [ticketId, setTicketId] = useState<string | null>(null),
@@ -211,15 +213,6 @@ function RunSession({
     return channelView(visible, distanceM);
   }, [visible, graph]);
   const notes = useMemo(() => visible.flatMap((r) => (r.press ? [r.press] : [])), [visible]);
-  // The plan in force: the last one written, since when it has read the same, and the units held back under it.
-  const planNow = useMemo(() => {
-    const written = cards.filter((c) => c.tick <= (current?.tick ?? 0) && c.plan);
-    const last = written.at(-1);
-    if (!last) return null;
-    let since = last;
-    for (let i = written.length - 1; i >= 0 && written[i].plan === last.plan; i--) since = written[i];
-    return { plan: last.plan, watch: last.watch, sinceTick: since.tick, holds: last.holds, agent: last.source === "llm" };
-  }, [cards, current]);
   const card = useMemo(() => [...cards].reverse().find((c) => c.tick <= (current?.tick ?? 0)) ?? cards[0] ?? null, [cards, current]);
   const selectedTicket = tickets.find((ticket) => ticket.id === ticketId) ?? null;
   const selection =
@@ -400,6 +393,10 @@ function RunSession({
               <Scale size={14} />
               Decisiones
             </button>
+            <button aria-pressed={view === "plan"} className={view === "plan" ? "is-active" : ""} onClick={() => setView("plan")}>
+              <Route size={14} />
+              Plan
+            </button>
             <button aria-pressed={view === "press"} className={view === "press" ? "is-active" : ""} onClick={() => setView("press")}>
               <Megaphone size={14} />
               Prensa{notes.length ? ` · ${notes.length}` : ""}
@@ -489,6 +486,8 @@ function RunSession({
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
+          ) : view === "plan" ? (
+            <PlanView cards={cards} tick={current.tick} lastTick={ticks.at(-1)?.tick ?? 0} seconds={seconds} onDecision={(c) => { setView("decisions"); seekTick(c.tick); }} />
           ) : view === "press" ? (
             <PressView notes={notes} seconds={seconds} every={10} />
           ) : view === "signals" ? (
@@ -627,14 +626,6 @@ function RunSession({
           id={id}
           runs={runs}
           onRun={onRun}
-          planCard={planNow && (
-            <section className="plan-now" aria-label="Plan actual">
-              <header><b>Plan actual · {planNow.agent ? "agente" : "reglas"}</b><span>{planNow.sinceTick === current?.tick ? "recién escrito" : `vigente desde hace ${(current?.tick ?? 0) - planNow.sinceTick} ticks`}</span></header>
-              <p>{planNow.plan}</p>
-              {planNow.watch && <small><b>Vigila:</b> {planNow.watch}</small>}
-              {planNow.holds.length > 0 && <ul>{planNow.holds.map((h) => <li key={h.unitId}>🔒 {h.unitId} · solo {h.onlyFor} · hasta t{h.untilTick}</li>)}</ul>}
-            </section>
-          )}
           situation={situation}
           selection={selection}
           onSelect={chooseEntity}
