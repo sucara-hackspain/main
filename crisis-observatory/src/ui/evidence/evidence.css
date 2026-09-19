@@ -1,0 +1,9 @@
+.evidence-links { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.control-center .evidence-citation { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 24px; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--muted-foreground); background: var(--card); text-decoration: none; }
+.control-center .evidence-citation:hover { color: var(--foreground); background: var(--muted); border-color: var(--ring); }
+.control-center .evidence-citation:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.evidence-links.inline { margin-left: 5px; vertical-align: middle; }
+.control-center .inline .evidence-citation { min-height: 18px; min-width: 18px; padding: 0 4px; font: 10px var(--font-mono); background: var(--muted); border-color: transparent; }
+.ticket-evidence { margin-top: 8px; }
+.ticket-evidence-note { display: block; margin-top: 6px; color: var(--muted-foreground); font-size: 10px; }
+@media (pointer: coarse) { .control-center .evidence-citation { min-height: 28px; } }

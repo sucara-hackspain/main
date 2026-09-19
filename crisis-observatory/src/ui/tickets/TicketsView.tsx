@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Check, CheckCheck, ChevronRight, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
+import { Check, CheckCheck, ChevronRight, CircleDot, ClipboardList, Clock3, HelpCircle, Layers, MapPin, MessageSquare, Phone, Search, ShieldAlert, Truck, X } from "lucide-react";
 import { elapsed, injuryLabel, priority, sceneLabel, triageLabel, unitKind, unitStatus, victimStatus, type Focus, type IncidentFrame, type RunMeta } from "../engineTrace";
 import { duration } from "../situation/model";
 import { ticketNextStep, ticketStates, type Ticket, type TicketState, type TicketStep } from "./model";
 import "./tickets.css";
+import EvidenceLinks from "../evidence/EvidenceLinks";
+import { stepReferences } from "../evidence/model";
 
 export function TicketStatus({ state }: { state: TicketState }) {
   return <span className="ticket-status" data-state={state}>
@@ -104,13 +106,15 @@ const stepGroups = { all: "Todo", call: "Avisos", decision: "Decisiones", radio:
 const stepIcons = { call: Phone, action: Truck, assessment: ClipboardList, update: CircleDot, alert: ShieldAlert, resolved: Check };
 function TimelineStep({ step, seconds }: { step: TicketStep; seconds: number }) {
   const Icon = stepIcons[step.kind];
+  const refs = stepReferences(step);
   return <li className="ticket-step" data-kind={step.kind}>
     <span className="ticket-step-icon"><Icon size={13} /></span>
     <div><div className="ticket-step-meta"><span>{step.source}</span><time>+{elapsed(step.tick, seconds)}</time></div>
       <h4>{step.title}{step.focusId && <code className="ticket-step-focus">{step.focusId}</code>}</h4>{step.detail && <p>{step.detail}</p>}
       {step.facts && <ul className="ticket-step-facts">{step.facts.map((fact) => <li key={fact}>{fact}</li>)}</ul>}
-      {step.reason && <div className="ticket-reason"><MessageSquare size={12} /><div><strong>Motivo de la decisión</strong><p>{step.reason}</p>
-        {step.applies && <p className="ticket-rules"><BookOpen size={11} />Doctrina citada{step.applies.map((rule) => <code key={rule}>{rule}</code>)}</p>}</div></div>}
+      {step.reason && <div className="ticket-reason"><MessageSquare size={12} /><div><strong>Motivo de la decisión</strong><p>{step.reason}<EvidenceLinks refs={refs} inline /></p>
+        {!step.applies?.length && <small className="ticket-evidence-note">Sin políticas citadas en este registro.</small>}</div></div>}
+      {refs.length > 0 && <div className="ticket-evidence"><EvidenceLinks refs={refs} /></div>}
     </div>
   </li>;
 }
