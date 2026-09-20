@@ -26,6 +26,7 @@ import "../theme.css";
 import "./control-center.css";
 import "./session.css";
 import LiveControl from "./live/LiveControl";
+import { useLive } from "./live/useLive";
 import SituationSidebar from "./situation/SituationSidebar";
 import EntityCard from "./situation/EntityCard";
 import {
@@ -50,6 +51,7 @@ const RunMap = lazy(() => import("./map/RunMap"));
 const pageTitle = document.title;
 // ?iteracion=1 keeps the first iteration, a banner above the map, to compare with the second:
 // every request takes over the page in a decision room, with the map and the thread to decide.
+const NO_PENDING: ReturnType<typeof useInterventions>["pending"] = [];
 const iteration =
   new URLSearchParams(window.location.search).get("iteracion") === "1" ? 1 : 2;
 export default function ControlCenter() {
@@ -126,7 +128,13 @@ function RunSession({
   const current = ticks[Math.min(index, ticks.length - 1)],
     seconds = meta?.config.tickSeconds ?? 30;
   const interventions = useInterventions({ ticks, current, graph, meta });
-  const { pending, router } = interventions;
+  const { router } = interventions;
+  // Only the live session asks the operator: it is stopped, waiting, on exactly these requests. A recording, or a
+  // session played any other way, shows what happened and asks for nothing.
+  const live = useLive();
+  const liveSession = live.state?.live?.id === id ? live.state.live : null;
+  const awaited = useMemo(() => new Set((liveSession?.awaiting ?? []).map((r) => r.id)), [liveSession]);
+  const pending = useMemo(() => (awaited.size ? interventions.pending.filter((p) => awaited.has(p.item.id)) : NO_PENDING), [interventions.pending, awaited]);
   const sound = useAlertSound();
   const { chime } = sound;
   // A new request brings the operator back to the room. If it opens while time moves on its own
@@ -221,6 +229,8 @@ function RunSession({
   }
   function decide(item: InterventionView, option: Option, prescribed: Option) {
     interventions.decide(item, option, prescribed);
+    // The engine is waiting for this: the chosen order is given in the session, and the night goes on.
+    if (awaited.has(item.id)) void live.decide({ id: item.id, optionId: option.id, label: option.label, approved: option.id === prescribed.id, action: option.action });
     if (iteration === 2)
       setReceipt({ id: item.id, label: option.label, key: Date.now() });
     const others = pending.filter((x) => x.item.id !== item.id);
@@ -328,7 +338,7 @@ function RunSession({
               Territorio
             </button>
           </div>
-          <LiveControl runId={id} seconds={seconds} onWatch={onRun} />
+          <LiveControl live={live} runId={id} seconds={seconds} onWatch={onRun} />
           {current && (
             <InterventionInbox
               pending={pending}

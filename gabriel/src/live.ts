@@ -4,12 +4,13 @@
 //                           points here). The call goes into the live session; with none running it waits for the next.
 //   :8113  GET  /           what is live now, the nights that can be played, the calls that came in
 //          POST /start      { night, coordinator: "hr" | "reglas", tickMs, attention } — refused while one is running
+//          POST /decision   { id, optionId, label, action? } — what the operator decided on a request the session is waiting on
 //          POST /stop       ends the running session at its next tick
 //
 // The Control Center reaches :8113 through its own /api/live, so the button that starts a session lives there.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { Graph, type GraphData, type PhoneCall, type Simulation } from "./engine";
+import { Graph, type Action, type EscalationRequest, type GraphData, type PhoneCall, type Simulation } from "./engine";
 import { play, READINGS_DIR, type Attention, type Policy } from "./lab/play";
 import { loadScenarios } from "./lab/scenario";
 import { HappyRobotPhoneLine } from "./phone/happyrobot";
@@ -36,6 +37,11 @@ interface Live {
   startedAt: string;
   sim: Simulation | null;
   abort: AbortController;
+  /** In the live mode an escalation stops the night until the operator has decided on it. */
+  approvals: boolean;
+  awaiting: (EscalationRequest & { since: string })[];
+  decided: Action[];
+  resume: (() => void) | null;
 }
 let live: Live | null = null;
 let last: { id: string; endedAt: string; dead: number; victims: number; stopped: boolean; error: string | null } | null = null;
@@ -81,7 +87,7 @@ startPhoneWebhook({
   onError: (error) => log(`112: ${error}`),
 });
 
-function start(body: { night?: string; coordinator?: string; tickMs?: number; attention?: string }): { status: number; body: unknown } {
+function start(body: { night?: string; coordinator?: string; tickMs?: number; attention?: string; approvals?: boolean }): { status: number; body: unknown } {
   if (live) return { status: 409, body: { error: `Ya hay una sesión en vivo (${live.id}). Párala antes de empezar otra.`, live: view() } };
   const night = nights.find((n) => n.id === (body.night ?? "H1"));
   if (!night) return { status: 400, body: { error: `No existe la noche ${body.night}` } };
@@ -95,7 +101,10 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
   const session: Live = {
     id: `live-${stamp}-${night.id}-${coordinator}`, night: night.id, title: night.title, coordinator, attention, tickMs,
     ticks: night.ticks, tick: 0, dead: 0, startedAt: new Date().toISOString(), sim: null, abort: new AbortController(),
+    approvals: body.approvals !== false, awaiting: [], decided: [], resume: null,
   };
+  // Stopping the session also ends any wait for the operator.
+  session.abort.signal.addEventListener("abort", () => session.resume?.(), { once: true });
   live = session;
   const policy: Policy = coordinator === "hr" ? { kind: "agent", doctrine: { rules: [] }, harness: "plan" } : { kind: "registry" };
   log(`EN VIVO: empieza ${session.id} (${night.title}) · ${coordinator === "hr" ? "coordina el agente de HappyRobot" : "coordinan las reglas"} · ${tickMs / 1000} s por tick`);
@@ -105,6 +114,18 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
     tickMs,
     signal: session.abort.signal,
     onTick: (tick, dead) => { session.tick = tick; session.dead = dead; },
+    onEscalations: session.approvals ? (raised, tick) => {
+      session.tick = tick;
+      session.awaiting.push(...raised.map((r) => ({ ...r, since: new Date().toISOString() })));
+      for (const r of raised) log(`OPERADOR: ${session.id} espera una decisión · ${r.policyId} · ${r.title}${r.incidentId ? ` · ${r.incidentId}` : ""}`);
+      return new Promise<Action[]>((resolve) => {
+        session.resume = () => {
+          session.resume = null;
+          session.awaiting = [];
+          resolve(session.decided.splice(0));
+        };
+      });
+    } : undefined,
     onSim: (sim) => {
       session.sim = sim;
       const fresh = waiting.filter((w) => Date.now() - w.at <= CALL_WAITS_MS);
@@ -126,9 +147,22 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
   return { status: 200, body: view() };
 }
 
+function decide(body: { id?: string; optionId?: string; label?: string; action?: Action; approved?: boolean }): { status: number; body: unknown } {
+  const session = live;
+  const request = session?.awaiting.find((r) => r.id === body.id);
+  if (!session || !request) return { status: 409, body: { error: "La sesión en vivo no está esperando esa decisión.", ...view() } };
+  session.awaiting = session.awaiting.filter((r) => r !== request);
+  if (body.action) session.decided.push(body.action);
+  const decision = { at: new Date().toISOString(), tick: session.tick, requestId: request.id, policyId: request.policyId, kind: request.kind, incidentId: request.incidentId, optionId: body.optionId ?? null, label: body.label ?? null, approved: body.approved ?? null, action: body.action ?? null, waitedMs: Date.now() - Date.parse(request.since) };
+  appendFileSync(`runs/${session.id}/operator.jsonl`, JSON.stringify(decision) + "\n");
+  log(`OPERADOR: decide «${body.label ?? "continuar"}» sobre ${request.policyId}${request.incidentId ? ` · ${request.incidentId}` : ""}${body.action ? ` → ${JSON.stringify(body.action)}` : ""}`);
+  if (session.awaiting.length === 0) session.resume?.();
+  return { status: 200, body: view() };
+}
+
 function view() {
   return {
-    live: live && { id: live.id, night: live.night, title: live.title, coordinator: live.coordinator, attention: live.attention, tickMs: live.tickMs, tick: live.tick, ticks: live.ticks, dead: live.dead, startedAt: live.startedAt, stopping: live.abort.signal.aborted },
+    live: live && { id: live.id, night: live.night, title: live.title, coordinator: live.coordinator, attention: live.attention, tickMs: live.tickMs, tick: live.tick, ticks: live.ticks, dead: live.dead, startedAt: live.startedAt, stopping: live.abort.signal.aborted, approvals: live.approvals, awaiting: live.awaiting },
     last,
     nights: nights.map((n) => ({ id: n.id, title: n.title, family: n.family, ticks: n.ticks, victims: n.stats.victims, read: existsSync(`${READINGS_DIR}/${n.id}.json`) })),
     agent: Boolean(process.env.HAPPYROBOT_API_KEY),
@@ -152,6 +186,12 @@ createServer((req, res) => {
       live.abort.abort();
       log(`EN VIVO: se pide parar ${live.id}`);
       return reply(200, view());
+    }
+    if (path === "/decision") {
+      let body = {};
+      try { body = raw ? JSON.parse(raw) : {}; } catch { return reply(400, { error: "cuerpo no válido" }); }
+      const out = decide(body);
+      return reply(out.status, out.body);
     }
     if (path === "/start") {
       let body = {};
