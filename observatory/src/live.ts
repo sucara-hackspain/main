@@ -116,6 +116,9 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
   // Stopping the session also ends any wait for the operator.
   session.abort.signal.addEventListener("abort", () => release(session, true), { once: true });
   live = session;
+  // The voice workflow may post its calls somewhere else (the VPS, another laptop): while a session runs, the platform
+  // is also asked every few seconds for the calls that have just ended, so a real call gets here either way.
+  phoneLine?.start();
   const policy: Policy = coordinator === "hr" ? { kind: "agent", doctrine: { rules: [] }, harness: "plan" } : { kind: "registry" };
   log(`EN VIVO: empieza ${session.id} (${night.title}) · ${coordinator === "hr" ? "coordina el agente de HappyRobot" : "coordinan las reglas"} · ${tickMs / 1000} s por tick`);
   play(night, policy, graph, {
@@ -153,7 +156,7 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
       if (existsSync(file)) writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), status: "failed" }, null, 2));
       log(`EN VIVO: ${session.id} ha fallado · ${last.error}`);
     })
-    .finally(() => { if (live === session) live = null; });
+    .finally(() => { if (live === session) { live = null; phoneLine?.stop(); } });
   return { status: 200, body: view() };
 }
 

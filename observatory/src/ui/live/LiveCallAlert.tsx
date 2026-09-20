@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Bot, MapPin, Pause, PhoneIncoming, PhoneOff, Radio, UserRound, Webhook } from "lucide-react";
+import { ArrowRight, Bot, MapPin, Pause, PhoneIncoming, PhoneOff, Radio, Square, UserRound, Webhook } from "lucide-react";
 import { sceneLabel, unitKind, type GraphData, type TickRecord } from "../engineTrace";
 import type { Live, LiveAwaited } from "./useLive";
 
@@ -110,6 +110,7 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing, onCl
             <div className="call-room-actions">
               <button ref={first} className="is-primary" onClick={() => answer(true)}><PhoneIncoming size={15} />{preview ? "Cerrar la vista previa" : "Dar entrada y reanudar"}</button>
               {!preview && <button onClick={() => answer(false)}><PhoneOff size={14} />Descartar</button>}
+              {!preview && <button className="is-quiet" title="Terminar la sesión en vivo" onClick={() => void live.stop()}><Square size={12} />Parar la sesión</button>}
             </div>
             {calls.length > 1 && <p className="call-room-more">Hay {calls.length - 1} {calls.length === 2 ? "llamada más" : "llamadas más"} esperando detrás de esta.</p>}
           </div>
