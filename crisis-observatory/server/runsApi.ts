@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
+import { createInterface } from "node:readline";
 import type { Plugin, PreviewServer, ViteDevServer } from "vite";
 import { DEFAULT_ESCALATION, parseEscalationPolicies } from "../../gabriel/src/engine/escalation";
 
@@ -20,6 +21,21 @@ function readBody(req: { on: (event: string, listener: (chunk?: Buffer) => void)
     req.on("end", () => done(body));
     req.on("error", () => fail(new Error("no se pudo leer la petición")));
   });
+}
+
+/** The records of a run from line `from` on; a last line still being written is left for the next call. */
+async function ticksFrom(file: string, from: number): Promise<unknown[]> {
+  const ticks: unknown[] = [];
+  let n = 0;
+  for await (const line of createInterface({ input: createReadStream(file), crlfDelay: Infinity })) {
+    if (n++ < from || !line) continue;
+    try {
+      ticks.push(JSON.parse(line));
+    } catch {
+      break;
+    }
+  }
+  return ticks;
 }
 
 /** Serves run traces straight from runs/ so the UI can follow a run while its records are being written. */
@@ -76,15 +92,10 @@ export function runsApi(): Plugin {
           const dir = resolve(engineRoot, "runs", name);
           if (!existsSync(resolve(dir, "meta.json"))) return json({ error: "unknown run" }, 404);
           const from = Number(url.searchParams.get("from") ?? 0);
-          const lines = readFileSync(resolve(dir, "ticks.jsonl"), "utf8").split("\n").filter(Boolean);
-          const ticks = lines.slice(from).flatMap((line) => {
-            try {
-              return [JSON.parse(line)];
-            } catch {
-              return []; // last line still being written
-            }
-          });
-          return json({ meta: JSON.parse(readFileSync(resolve(dir, "meta.json"), "utf8")), ticks });
+          // Line by line: a long night is hundreds of megabytes, more than one string may hold.
+          return ticksFrom(resolve(dir, "ticks.jsonl"), from)
+            .then((ticks) => json({ meta: JSON.parse(readFileSync(resolve(dir, "meta.json"), "utf8")), ticks }))
+            .catch((err: Error) => json({ error: err.message }, 500));
         }
         if (kind === "graph") {
           const file = resolve(engineRoot, "data", `${name}.json`);

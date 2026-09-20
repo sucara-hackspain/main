@@ -8,7 +8,7 @@ services:
     build: { context: ../.., dockerfile: deploy/preview/Dockerfile }
     image: hackspain-sim:latest
     working_dir: /app/gabriel
-    command: ["sh", "-c", "while true; do node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 1200 --tick-ms 2000 --no-dream; sleep 10; done"]
+    command: ["sh", "-c", "while true; do node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 180 --tick-ms 2000 --no-dream; sleep 10; done"]
     volumes:
       - /opt/hackspain/runs:/app/gabriel/runs
       - /opt/hackspain/memory:/app/gabriel/memory
