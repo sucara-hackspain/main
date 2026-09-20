@@ -59,3 +59,30 @@
 .policies-layout h2 a { font: 12px var(--font-mono); color: var(--muted-foreground); }
 .policies-layout section p { font-size: 14px; line-height: 1.8; margin: 0; }
 @media (max-width: 760px) { .policies-layout { display: block; padding: 28px 16px; } .policies-layout nav { display: none; } .policies-page > header { padding: 18px 16px; } .policies-page header span { max-width: 130px; text-align: right; } }
+
+/* Inside the Control Center the catalogue is one more view: same heading, same cards, same type sizes as the rest. */
+.policies-view.policies-page { display:flex; flex-direction:column; flex:1; min-height:0; padding:12px 24px 16px; background:none; }
+.policies-view > .tickets-heading { border:0; padding:0; }
+.policies-view .tickets-heading h1 > span { white-space:nowrap; }
+.policies-view button.policy-primary { background:var(--foreground); color:var(--background); border-color:var(--foreground); height:30px; padding:0 12px; font-weight:500; }
+.policies-view button.policy-primary:hover { background:var(--foreground); opacity:.85; }
+.policies-view .policies-layout { flex:1; min-height:0; max-width:none; margin:0; padding:0; gap:16px; grid-template-columns:250px minmax(0,1fr); grid-template-rows:minmax(0,1fr); }
+.policies-view .policies-layout nav, .policies-view .policies-layout article { min-height:0; border:1px solid var(--border); border-radius:8px; background:var(--card); overflow-y:auto; scrollbar-width:thin; max-height:none; position:static; }
+.policies-view .policies-layout nav { padding:10px; align-self:stretch; }
+.policies-view .policies-layout nav strong { margin:4px 8px 8px; font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted-foreground); }
+.policies-view .policies-layout nav a { font-size:12px; padding:7px 8px; color:var(--foreground); }
+.policies-view .policies-layout nav a code { font:10.5px var(--font-mono); color:var(--muted-foreground); min-width:44px; }
+.policies-view .policies-layout nav a[data-off="true"] { color:var(--muted-foreground); }
+.policies-view .policies-layout nav a[data-off="true"]::after { content:"apagada"; margin-left:auto; font:10px var(--font-mono); color:var(--muted-foreground); }
+.policies-view .policies-layout article { padding:16px 18px; }
+.policies-view .policy-search { background:var(--background); padding:12px; margin-bottom:12px; }
+.policies-view .policy-search input { background:none; font-size:12.5px; }
+.policies-view .policies-layout section { padding:16px 12px; scroll-margin-top:12px; }
+.policies-view .policies-layout section:first-of-type { border-top:0; }
+.policies-view .policies-layout section:target, .policies-view .policies-layout section.is-cited { background:color-mix(in srgb,var(--warning) 12%,transparent); outline:0; box-shadow:inset 3px 0 0 var(--warning); border-radius:0 6px 6px 0; }
+.policies-view .policies-layout h2 { font-size:14.5px; font-weight:600; margin:6px 0 8px; }
+.policies-view .policies-layout section p { font-size:12.5px; line-height:1.6; color:var(--muted-foreground); }
+.policies-view .policy-escalation-outcome { margin-top:10px; }
+.policy-escalation-outcome [data-severity] { background:color-mix(in srgb,var(--warning) 14%,transparent); color:var(--warning-foreground); }
+.policy-escalation-outcome [data-severity="critical"] { background:color-mix(in srgb,var(--destructive) 12%,transparent); color:var(--destructive-foreground); }
+@media (max-width: 900px) { .policies-view .policies-layout { display:block; } .policies-view .policies-layout nav { display:none; } }

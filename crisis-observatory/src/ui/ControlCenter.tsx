@@ -287,6 +287,12 @@ function RunSession({
         onActive={setDecisionId}
         onDecide={decide}
         onLeave={() => setInvestigating(true)}
+        onPolicy={(policyId) => {
+          // The policy behind the request opens in its tab, on that policy; the request waits in the bar meanwhile.
+          window.location.hash = policyId;
+          setView("policies");
+          setInvestigating(true);
+        }}
       />
     );
   const banner = iteration === 1 && current && (
@@ -419,7 +425,7 @@ function RunSession({
                 : "Esperando el primer registro de actividad…"}
             </div>
           ) : view === "policies" ? (
-            <div className="app-policies"><EscalationPoliciesPage /></div>
+            <EscalationPoliciesPage embedded />
           ) : view === "tickets" ? (
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
