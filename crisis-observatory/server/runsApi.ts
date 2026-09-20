@@ -1,4 +1,5 @@
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { timingSafeEqual } from "node:crypto";
 import { resolve } from "node:path";
 import type { Plugin, PreviewServer, ViteDevServer } from "vite";
 import { DEFAULT_ESCALATION, parseEscalationPolicies } from "../../gabriel/src/engine/escalation";
@@ -26,6 +27,18 @@ export function runsApi(): Plugin {
   // The same handler serves `vite dev` and `vite preview`: a preview deployment reads the runs the engine writes next to it.
   // A block, not an expression: whatever the hook returns Vite takes for a post-middleware installer.
   const serve = (server: ViteDevServer | PreviewServer): void => {
+    // With CONTROL_CENTER_PASSWORD set (a deployment), everything is behind HTTP basic auth; unset, nothing changes.
+    const password = process.env.CONTROL_CENTER_PASSWORD;
+    if (password) {
+      const expected = Buffer.from(`Basic ${Buffer.from(`${process.env.CONTROL_CENTER_USER || "hackspain"}:${password}`).toString("base64")}`);
+      server.middlewares.use((req, res, next) => {
+        const given = Buffer.from(req.headers.authorization ?? "");
+        if (given.length === expected.length && timingSafeEqual(given, expected)) return next();
+        res.statusCode = 401;
+        res.setHeader("WWW-Authenticate", 'Basic realm="Control Center"');
+        res.end("Unauthorized");
+      });
+    }
     server.middlewares.use("/api", (req, res) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const [kind, name] = url.pathname.split("/").filter(Boolean);

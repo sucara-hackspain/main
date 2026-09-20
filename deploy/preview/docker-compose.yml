@@ -24,6 +24,10 @@ services:
     depends_on: [engine]
     working_dir: /app/crisis-observatory
     command: ["node_modules/.bin/vite", "preview", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]
+    environment:
+      # Set in deploy/preview/.env on the host: the viewer then asks for it (user CONTROL_CENTER_USER, default hackspain).
+      CONTROL_CENTER_PASSWORD: ${CONTROL_CENTER_PASSWORD:-}
+      CONTROL_CENTER_USER: ${CONTROL_CENTER_USER:-hackspain}
     volumes:
       - /opt/hackspain/runs:/app/gabriel/runs:ro
     networks: [previews]
