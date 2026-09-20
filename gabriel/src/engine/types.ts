@@ -390,8 +390,10 @@ export interface Call {
   victims: number | null;
   /** The call in words, for humans and LLMs. */
   text: string;
-  /** A person really phoned this in (the HappyRobot 112 line), rather than the simulation making it up. */
-  source?: "phone" | "citizen" | "outbound";
+  /** A person really phoned this in (the HappyRobot 112 line), or the 112-coordinator agent invented it, rather than the engine making it up. */
+  source?: "phone" | "citizen" | "outbound" | "agent";
+  /** Where to ring back (E.164): real calls only. The agents that triage and dispatch never see it. */
+  phone?: string;
   /**
    * What the caller did say but nobody keyed into a field: under load the operator types the address and moves on,
    * and the detail stays in the words. Truth kept for hindsight; a dispatcher that reads only fields never sees it.
@@ -558,6 +560,8 @@ export interface Incident extends Signs {
   victims: AssessedVictim[];
   /** 0 = life at risk right now ... 3 = can wait. Deduced from the signs, never told. */
   priority: Priority;
+  /** A floor under the rules' priority, until a crew has seen the place: the 112 triage agent's reading, or a follow-up call gone bad. */
+  triaged: { priority: Priority; reasoning: string; tick: number; from: string } | null;
   /** No road gets there (as far as we know): it needs a boat or a helicopter, not an ambulance. */
   unreachable: boolean;
   /** Where each thing we know came from. */

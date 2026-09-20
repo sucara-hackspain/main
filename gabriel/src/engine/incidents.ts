@@ -248,6 +248,7 @@ function newIncident(belief: Belief, tick: number, node: number, errorM: number)
     ...NO_SIGNS,
     victims: [],
     priority: 2,
+    triaged: null,
     unreachable: false,
     history: [],
     timeline: [],
@@ -576,9 +577,68 @@ function refresh(incident: Incident, tick: number): void {
     incident.locationErrorM = todo[0].locationErrorM;
   }
   const before = incident.priority;
-  incident.priority = deducePriority(incident);
-  if (incident.priority !== before) note(incident, tick, "prioridad", `P${before} → P${incident.priority}`, "reglas", undefined, incident.priority < before ? "alert" : undefined);
+  const deduced = deducePriority(incident);
+  // The triage agent only ever heard the calls: once a crew is looking at the place, what it radios wins.
+  incident.priority = incident.triaged && !incident.located ? (Math.min(deduced, incident.triaged.priority) as Priority) : deduced;
+  if (incident.priority !== before) note(incident, tick, "prioridad", `P${before} → P${incident.priority}`, incident.priority === deduced ? "reglas" : incident.triaged!.from, undefined, incident.priority < before ? "alert" : undefined);
   if (incident.status === "open" && todo.length === 0 && incident.foci.length > 0) close(incident, confirmed.length > 0 ? "resolved" : "not_found", tick);
+}
+
+/** The agent's four words, worst first: the same scale as P0-P3. */
+export const TRIAGE_LEVELS = ["critical", "high", "medium", "low"] as const;
+export type TriageLevel = (typeof TRIAGE_LEVELS)[number];
+
+/** What the 112 triage agent answered about one call: where it filed it and the board as it left it, in its own terms. */
+export interface TriageVerdict {
+  callId: string;
+  matchedIncidentId: string;
+  matchedNewIncident: boolean;
+  reasoning: string;
+  incidents: { id: string; callIds: string[]; priority: TriageLevel }[];
+}
+
+/**
+ * Folds the agent's verdict into the board. The engine keeps its own grouping (one place, one response): the agent's
+ * priorities are taken, incident by incident, for whichever of ours hold the calls it filed together; its opinion on
+ * where the call belonged goes in the file when it differs from ours.
+ */
+export function applyTriage(belief: Belief, verdict: TriageVerdict, tick: number): void {
+  const holder = (callId: string) => belief.incidents.find((i) => !i.mergedInto && i.callIds.includes(callId));
+  const ours = holder(verdict.callId);
+  for (const board of verdict.incidents) {
+    const level = TRIAGE_LEVELS.indexOf(board.priority);
+    if (level < 0) continue;
+    const priority = level as Priority;
+    // The agent sometimes names the incident it matched without adding the call to its list: the name counts too.
+    const about = board.callIds.includes(verdict.callId) || board.id === verdict.matchedIncidentId;
+    const held = new Set(board.callIds.map(holder).filter((i): i is Incident => i?.status === "open"));
+    if (about && ours?.status === "open") held.add(ours);
+    for (const incident of held) {
+      if (!about && incident.triaged?.priority === priority) continue;
+      incident.triaged = { priority, reasoning: verdict.reasoning, tick, from: "triaje 112" };
+      const before = incident.priority;
+      refresh(incident, tick);
+      if (!about) continue;
+      const elsewhere = verdict.matchedNewIncident
+        ? incident.callIds.length > 1 ? " · lo habría abierto como incidente aparte" : ""
+        : ours && verdict.matchedIncidentId !== ours.id && belief.incidents.some((i) => i.id === verdict.matchedIncidentId) ? ` · lo habría adjuntado a ${verdict.matchedIncidentId}` : "";
+      const overruled = incident.located ? " (la dotación en el lugar manda)" : "";
+      log(incident, { tick, kind: "update", from: "triaje 112", callId: verdict.callId, flag: incident.priority < before ? "alert" : undefined, text: `Triaje 112 de ${verdict.callId}: ${board.priority}${overruled}${elsewhere} — ${verdict.reasoning}` });
+    }
+  }
+}
+
+/** Somebody outside the rules (a follow-up call, a supervisor) writes in the file of the incident holding `callId`, and may raise the floor under its priority. */
+export function annotate(belief: Belief, callId: string, tick: number, from: string, text: string, floor?: Priority): Incident | undefined {
+  const incident = belief.incidents.find((i) => !i.mergedInto && i.callIds.includes(callId));
+  if (!incident) return undefined;
+  const before = incident.priority;
+  if (floor !== undefined && incident.status === "open") {
+    incident.triaged = { priority: floor, reasoning: text, tick, from };
+    refresh(incident, tick);
+  }
+  log(incident, { tick, kind: "update", from, callId, flag: incident.priority < before ? "alert" : undefined, text });
+  return incident;
 }
 
 export interface Needs {

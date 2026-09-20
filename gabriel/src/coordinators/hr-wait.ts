@@ -49,10 +49,12 @@ export interface WaitOptions {
   /** Nothing answers faster than this: no point asking before. */
   firstPollMs?: number;
   pollIntervalMs?: number;
+  /** Stop waiting (the run goes on without us). */
+  signal?: AbortSignal;
 }
 
 export async function runAndReadNode(client: HappyRobotClient, options: WaitOptions): Promise<{ runId: string; nodeOutput: unknown }> {
-  const { workflowId, nodePersistentId, payload, environment = "production", timeoutMs = 120_000, firstPollMs = 9000, pollIntervalMs = 4000 } = options;
+  const { workflowId, nodePersistentId, payload, environment = "production", timeoutMs = 120_000, firstPollMs = 9000, pollIntervalMs = 4000, signal } = options;
   const deadline = Date.now() + timeoutMs;
   const triggered = (await paced(() => client.workflows.triggerRun(workflowId, { payload, environment } as never), deadline)) as { run_id?: string; queued_run_ids?: string[] };
   const runId = triggered.run_id ?? triggered.queued_run_ids?.[0];
@@ -61,6 +63,7 @@ export async function runAndReadNode(client: HappyRobotClient, options: WaitOpti
   await sleep(firstPollMs);
   let runEnded: string | null = null;
   for (let round = 0; Date.now() < deadline; round++) {
+    if (signal?.aborted) throw new Error(`run ${runId}: stopped waiting`);
     const nodes = await paced(() => client.runs.listNodes(runId, { node_persistent_id: nodePersistentId, sort: "asc" } as never), deadline);
     const node = (nodes.data as { node_persistent_id: string; output_id?: string; status?: string }[]).filter((n) => n.node_persistent_id === nodePersistentId).at(-1);
     if (node?.output_id && node.status && NODE_READY.has(node.status)) {
@@ -81,4 +84,26 @@ export async function runAndReadNode(client: HappyRobotClient, options: WaitOpti
     await sleep(pollIntervalMs);
   }
   throw new Error(`run ${runId} timed out after ${timeoutMs} ms`);
+}
+
+/** Runs the workflow to its end and returns the output of every execution of the node, in order: for a node inside a loop. */
+export async function runAndReadAll(client: HappyRobotClient, options: WaitOptions): Promise<{ runId: string; outputs: unknown[] }> {
+  const { workflowId, nodePersistentId, payload, environment = "production", timeoutMs = 120_000, firstPollMs = 9000, pollIntervalMs = 4000 } = options;
+  const deadline = Date.now() + timeoutMs;
+  const triggered = (await paced(() => client.workflows.triggerRun(workflowId, { payload, environment } as never), deadline)) as { run_id?: string; queued_run_ids?: string[] };
+  const runId = triggered.run_id ?? triggered.queued_run_ids?.[0];
+  if (!runId) throw new Error("No run_id returned from trigger");
+  await sleep(firstPollMs);
+  for (;;) {
+    const run = await paced(() => client.runs.get(runId), deadline);
+    if (RUN_TERMINAL.has(run.status)) break;
+    if (Date.now() > deadline) throw new Error(`run ${runId} timed out after ${timeoutMs} ms`);
+    await sleep(pollIntervalMs);
+  }
+  const nodes = await paced(() => client.runs.listNodes(runId, { node_persistent_id: nodePersistentId, sort: "asc" } as never), deadline);
+  const outputs: unknown[] = [];
+  for (const node of (nodes.data as { node_persistent_id: string; output_id?: string; status?: string }[]).filter((n) => n.node_persistent_id === nodePersistentId && n.output_id && n.status && NODE_READY.has(n.status))) {
+    outputs.push((await paced(() => client.runs.getOutput(runId, node.output_id!), deadline)).data);
+  }
+  return { runId, outputs };
 }

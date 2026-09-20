@@ -225,7 +225,7 @@ export function unwrap(raw: unknown, field: string): Record<string, unknown> {
     if (!body || typeof body !== "object") break;
     const record = body as Record<string, unknown>;
     if (field in record) return record;
-    const wrapper = ["data", "response", "output", "result"].find((key) => key in record);
+    const wrapper = ["data", "response", "output", "result", "call"].find((key) => key in record);
     if (!wrapper) break;
     body = record[wrapper];
   }

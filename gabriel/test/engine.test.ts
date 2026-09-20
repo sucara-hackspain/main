@@ -20,6 +20,7 @@ import {
   type ObservedEvent,
   type SceneKind,
   type VictimSpec,
+  applyTriage,
   infoGaps,
   updateBelief,
 } from "../src/engine";
@@ -251,6 +252,48 @@ describe("incidents: one place, one response", () => {
     const { hear, live } = heard();
     hear(0, { type: "call_received", call: call("L1", 40, "traffic") }, { type: "call_received", call: call("L2", 44, "traffic") });
     expect(live()).toHaveLength(2);
+  });
+
+  it("takes the 112 triage agent's priority as a floor, until a crew is on the spot", () => {
+    const { hear, live, belief } = heard();
+    hear(0, { type: "call_received", call: call("L1", 40, "fall", { ageGroup: "elderly" }) });
+    const [incident] = live();
+    expect(incident.priority).toBe(3);
+    // The agent bumps an elderly casualty a level; the engine's grouping stays (it would have opened a new incident: noted, not done).
+    applyTriage(belief, { callId: "L1", matchedIncidentId: "I1", matchedNewIncident: true, reasoning: "mayor, consciente", incidents: [{ id: "I1", callIds: ["L1"], priority: "medium" }] }, 1);
+    expect(incident).toMatchObject({ priority: 2, triaged: { priority: 2, tick: 1 } });
+    expect(incident.timeline.at(-1)).toMatchObject({ kind: "update", from: "triaje 112", callId: "L1" });
+    // A second call the rules make P1: the floor never holds anything down.
+    hear(2, { type: "call_received", call: call("L2", 40, "fall", { tick: 2, bleeding: "yes" }) });
+    expect(incident.priority).toBe(1);
+    // The crew finds one yellow: what it radios beats the agent's reading of the calls.
+    applyTriage(belief, { callId: "L2", matchedIncidentId: "C1", matchedNewIncident: false, reasoning: "sangra", incidents: [{ id: "C1", callIds: ["L1", "L2"], priority: "critical" }] }, 3);
+    expect(incident.priority).toBe(0);
+    hear(5, { type: "scene_assessed", unitId: "A1", incidentId: "C1", sceneId: "S1", kind: "fall", node: 40, inSight: false, victims: [hurt("V1")] });
+    expect(incident.priority).toBe(2);
+  });
+
+  it("runs the 112 desk without holding the tick: generated calls and verdicts land on the following ticks", async () => {
+    const graph = grid(5);
+    const s = new Simulation({
+      graph, seed: 1, master: scripted({}), coordinator: new GreedyCoordinator(), config: { ...CONFIG, ambulances: 0 },
+      desk: {
+        everyTicks: 2,
+        triageEvery: 2,
+        generate: async () => [{ caller: "family", mechanism: "fall", street: null, node: 12, locationErrorM: 30, conscious: "yes", breathing: "normal", bleeding: "no", trapped: "no", ageGroup: "elderly", victims: 1, text: "Un familiar: «se ha caído»" }],
+        triage: async ({ calls }) => calls.map((c) => ({ callId: c.id, matchedIncidentId: "I1", matchedNewIncident: true, reasoning: "mayor", incidents: [{ id: "I1", callIds: [c.id], priority: "high" as const }] })),
+      },
+    });
+    await s.step(); // t0, desk turn: the generator is set going; nothing has come in yet
+    expect(s.belief.calls).toHaveLength(0);
+    await s.step(); // t1: its call enters like a phoned one, and the rules file it
+    expect(s.belief.calls.map((c) => c.source)).toEqual(["agent"]);
+    expect(s.belief.incidents[0].priority).toBe(3);
+    await s.step(); // t2, desk turn: triage set going for L1
+    expect(s.belief.incidents[0].triaged).toBeNull();
+    await s.step(); // t3: the verdict is folded in before the coordinator decides
+    expect(s.belief.incidents[0]).toMatchObject({ priority: 1, triaged: { priority: 1, tick: 3 } });
+    await s.settle();
   });
 
   it("joins a late call to the incident while it is open, and starts a new one once it is closed", () => {

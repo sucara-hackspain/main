@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { PhoneCall } from "../engine";
 import { unwrap } from "../masters/protocol";
-import { toPhoneCall } from "./happyrobot";
+import { normalisePhone, toPhoneCall } from "./happyrobot";
 
 /**
  * Where the 112 voice workflow posts the call record the moment the caller hangs up (its `POST` node).
@@ -19,7 +19,11 @@ export function startPhoneWebhook(options: { port: number; onCall: (call: PhoneC
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
       try {
-        const call = toPhoneCall(unwrap(raw, "caller"));
+        const body = JSON.parse(raw) as Record<string, unknown>;
+        const record = unwrap(body, "caller");
+        const call = toPhoneCall(record);
+        const phone = normalisePhone(body.phone ?? record.phone);
+        if (phone) call.phone = phone;
         options.onCall(call);
         reply(200, { ok: true, street: call.street });
       } catch {

@@ -92,16 +92,31 @@ pnpm hr:sync --master                                       # push the master's 
 
 `--calls happyrobot` has the `sim-112` workflow word each 112 call. The facts stay the engine's (who calls, what they could tell, how sure of the place): the agent only gets the call as the operator filed it, and if its answer is not about that call the engine's wording is kept. It needs `sim-112` behind a webhook trigger; as a workflow-called trigger it never receives the payload.
 
+## The 112 desk: an agent that triages, an agent that calls
+
+`--desk happyrobot` puts two HappyRobot agents on the 112 desk, started inside the tick after the master has acted and before the coordinator decides. Neither holds the tick: the runs go on in the background and what comes back lands on the following ticks, so it is meant for a real-time pace (`--tick-ms`). Triage runs for every call the tick it comes in (`--triage-every` 1, a few seconds per verdict); the generator runs every `--desk-every` ticks (9).
+
+1. **`112-coordinator`** (a call generator, whatever its name) invents a batch of callers for the scenario, some of them a deliberate second report of an earlier emergency. Each call enters exactly as a real one does (`Simulation.phone`): what it describes becomes true where it says, and the call reaches the board marked `source: "agent"`.
+2. **`112-triage`** reads every new call, one run per call, against the board as the rules built it at that moment: whether it belongs to an open incident or is something new, and what priority (`critical > high > medium > low`, a child or an elderly person one level up, never down). The engine keeps its own grouping (one place, one response) and takes the agent's priority as a floor on the incident holding the call (`Incident.triaged`), until a crew is on the spot: what a crew radios beats every call. Where the agent would have filed the call somewhere else, the case file says so.
+
+Both are traced to `runs/<id>/desk.jsonl`. The ids of the two workflows default to the hackathon's (`.env.example`). The generator is handed a dozen real streets from the map each turn, so its calls land where they say; `pnpm hr:generator` republishes the workflow repair that makes it read them (its trigger keeps the payload under `data`).
+
+```
+pnpm run-sim --coordinator happyrobot --master happyrobot --desk happyrobot --tick-ms 1000
+```
+
 ## The real 112 line
 
 `--phone` opens the session to the outside: whoever phones the HappyRobot 112 number talks to its voice agent, which files the call as the engine's own `Call` record once they hang up (`Build Call Object` in the `112` workflow). The session polls that workflow's runs every few seconds (`src/phone/happyrobot.ts`; polling because a laptop has no address to post to) and every call finished since it started goes in through `Simulation.phone()`: the street the caller said is looked up on the map (`Graph.findStreet`, forgiving about accents, "calle/carrer" and Spanish or Valencian spellings), what they described becomes a real emergency there - the worst victim as bad as their answers to the protocol - and their call reaches the coordinator on the next tick like any other, numbered with the rest and marked `source: "phone"`. Nobody else calls about it, but if nobody comes they are rung back like everyone else. Use a real-time pace, e.g. `pnpm run-sim --coordinator happyrobot --phone --tick-ms 1000`; calls taken are kept in `runs/<id>/phone.jsonl`.
+
+**Ringing them back.** A real call carries the caller's number (the workflow's POST node sends it alongside the record). `--followup-after` ticks later (10), if the case is still low or medium priority, the `112-outbound` voice agent ("Seguimiento 112") rings the number, asks how it is going and files a report (`src/phone/followup.ts`, traced to `runs/<id>/followups.jsonl`). No answer: one more try. Worse, red flags, or asked for help: the open case's priority floor goes to P1, and a case already closed comes back in as a new call marked `source: "outbound"`, at the street the person says they are now. Critical and high cases are never rung: a crew is on its way. The dialler sleeps outside business hours, so out of hours the report arrives when it wakes.
 
 ## One tick (30 simulated seconds)
 
 1. **Master** acts: spawn scene, close/open road, puncture ambulance (`MasterAction`).
 2. **World advances**: ambulances drive, victims deteriorate (each injury at its own pace), crews assess, load, treat, deliver.
 3. **Observer** turns what happened into `Report`s (calls, radio, hospital, traffic) and they are folded into the coordinator's `Belief`.
-4. **Coordinator** is woken only if there are new reports, and answers with `Action`s: `dispatch` (to an incident), `transport`, `reposition`, `scout` (go and look).
+4. **Coordinator** is woken only if there are new reports, and answers with `Action`s: `dispatch` (to an incident), `transport`, `reposition`, `scout` (go and look). The HappyRobot coordinator decides every `--decide-every` ticks (6) in the background: the tick never waits for the platform, and the orders land on the tick the run comes back, checked against the board as it is by then.
 
 ## Where things are
 

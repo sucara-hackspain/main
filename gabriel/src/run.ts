@@ -18,6 +18,8 @@ import { HappyRobotCoordinator } from "./coordinators/happyrobot";
 import { happyRobotCallWriter, HappyRobotMaster } from "./masters/happyrobot";
 import { HappyRobotPhoneLine } from "./phone/happyrobot";
 import { startPhoneWebhook } from "./phone/webhook";
+import { FollowupLine } from "./phone/followup";
+import { happyRobotCallGenerator, HappyRobotTriage } from "./triage/happyrobot";
 import {
   clock,
   describe,
@@ -42,16 +44,25 @@ const { values } = parseArgs({
     ticks: { type: "string", default: "120" },
     ambulances: { type: "string", default: "5" },
     coordinator: { type: "string", default: "claude" },
+    /** Ticks between the HappyRobot coordinator's decisions (each is taken in the background, ~20 s). */
+    "decide-every": { type: "string", default: "6" },
     /** Who decides what happens to the city: the scripted night of the scenario, or the agent in the HappyRobot `master` workflow. */
     master: { type: "string", default: "scripted" },
     /** Who words the 112 calls: the engine's templates, or the HappyRobot `sim-112` workflow (facts stay the engine's). */
     calls: { type: "string", default: "engine" },
     /** Listen to the real 112 line (the HappyRobot voice workflow): whoever phones it puts a call into this session. */
     phone: { type: "boolean", default: false },
+    /** The 112 desk on HappyRobot: `112-coordinator` phones in a batch of invented calls and `112-triage` prioritises every call heard, every `--desk-every` ticks. */
+    desk: { type: "string", default: "none" },
+    "desk-every": { type: "string", default: "9" },
+    /** Ticks between triage runs: 1 = every call is triaged the tick it comes in (its verdict lands a few seconds later). */
+    "triage-every": { type: "string", default: "1" },
     /** Port for the 112 workflow's POST node to reach (through a tunnel). 0 = only poll the platform. */
     "phone-port": { type: "string", default: "8112" },
     /** Also take calls that ended up to this many minutes before the session started. */
     "phone-since": { type: "string", default: "0" },
+    /** Ticks after a real call before the `112-outbound` agent rings the caller back, if the case is low or medium priority. */
+    "followup-after": { type: "string", default: "10" },
     /** Decide without the doctrine (to measure what the memory is worth). */
     "no-memory": { type: "boolean", default: false },
     /** Skip the end-of-session dream; `--dream` forces it for a greedy run. */
@@ -66,7 +77,7 @@ const seed = Number(values.seed);
 const ticks = Number(values.ticks);
 const tickMs = Number(values["tick-ms"]);
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-const id = `${stamp}-${values.scenario}-${values.coordinator}${values.master === "happyrobot" ? "-hrmaster" : ""}-s${seed}`;
+const id = `${stamp}-${values.scenario}-${values.coordinator}${values.master === "happyrobot" ? "-hrmaster" : ""}${values.desk === "happyrobot" ? "-desk" : ""}-s${seed}`;
 const dir = `runs/${id}`;
 mkdirSync(dir, { recursive: true });
 
@@ -85,7 +96,7 @@ const coordinator: Coordinator =
   values.coordinator === "greedy"
     ? new GreedyCoordinator()
     : values.coordinator === "happyrobot"
-      ? new HappyRobotCoordinator({ onTrace, memory })
+      ? new HappyRobotCoordinator({ onTrace, memory, everyTicks: Number(values["decide-every"]), background: true })
       : new ClaudeCliCoordinator({ model: values.model, onTrace, memory });
 
 const agenticMaster = values.master === "happyrobot"
@@ -105,12 +116,47 @@ const callWriter = values.calls === "happyrobot"
   : undefined;
 
 const graph = new Graph(JSON.parse(readFileSync(`data/${values.map}.json`, "utf8")) as GraphData);
+const desk = values.desk === "happyrobot"
+  ? {
+      everyTicks: Number(values["desk-every"]),
+      triageEvery: Number(values["triage-every"]),
+      generate: happyRobotCallGenerator({
+        context: () => agenticMaster?.narration ?? "",
+        streets: () => [...new Set(Array.from({ length: 40 }, () => graph.streetAt(Math.floor(Math.random() * graph.nodeCount))).filter((s): s is string => !!s))].slice(0, 12),
+        onTrace: (trace) => {
+          appendFileSync(`${dir}/desk.jsonl`, JSON.stringify({ agent: "112-coordinator", ...trace }) + "\n");
+          log(`MESA 112 t${trace.tick}: ${trace.error ? `sin llamadas [${trace.error}]` : `${trace.calls.length} llamadas inventadas`} (${(trace.ms / 1000).toFixed(1)} s)`);
+        },
+      }),
+      triage: (input: Parameters<HappyRobotTriage["triage"]>[0]) => triageAgent.triage(input),
+    }
+  : undefined;
+const triageAgent = new HappyRobotTriage({
+  onTrace: (trace) => {
+    appendFileSync(`${dir}/desk.jsonl`, JSON.stringify({ agent: "112-triage", ...trace }) + "\n");
+    const v = trace.verdict;
+    log(`TRIAJE 112 t${trace.tick} ${trace.callId} (${(trace.ms / 1000).toFixed(1)} s): ${trace.error ? `SIN RESPUESTA [${trace.error}]` : `${v!.matchedNewIncident ? "incidente nuevo" : `→ ${v!.matchedIncidentId}`} · ${v!.incidents.find((i) => i.callIds.includes(trace.callId) || i.id === v!.matchedIncidentId)?.priority ?? "?"} · ${v!.reasoning}`}`);
+  },
+});
+
+const followupLine = values.phone
+  ? new FollowupLine({
+      afterTicks: Number(values["followup-after"]),
+      onTrace: (trace) => {
+        appendFileSync(`${dir}/followups.jsonl`, JSON.stringify(trace) + "\n");
+        const r = trace.report;
+        log(`SEGUIMIENTO 112 t${trace.tick} ${trace.callId} (${trace.phone}): ${trace.outcome}${trace.why ? ` · ${trace.why}` : ""}${r ? ` · contesta ${r.reached}, ${r.evolution}, siguiente ${r.nextAction}` : ""}${trace.ms ? ` (${(trace.ms / 1000).toFixed(0)} s)` : ""}${trace.error ? ` [${trace.error}]` : ""}`);
+      },
+    })
+  : null;
 const sim = new Simulation({
   graph,
   seed,
   master: agenticMaster ?? (values.scenario === "random" ? new RandomMaster() : new DanaMaster()),
   callWriter,
   coordinator,
+  desk,
+  followup: followupLine ? (input) => followupLine.tick(input) : undefined,
   config: { ambulances: Number(values.ambulances) },
 });
 
@@ -179,6 +225,8 @@ try {
   log(`FAILED: ${err instanceof Error ? err.stack : err}`);
 }
 
+followupLine?.stop();
+await sim.settle();
 phoneLine?.stop();
 phoneHook?.close();
 meta.summary = sim.summary();
