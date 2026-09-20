@@ -49,6 +49,8 @@ export function useLive() {
     state,
     start: (options: { night: string; coordinator: "hr" | "reglas"; tickMs: number; approvals: boolean }) => call("start", options),
     stop: () => call("stop", {}),
+    /** A made-up call into the running session, handled exactly like a real one. */
+    testCall: () => call("test-call", {}),
     decide: (decision: { id: string; optionId?: string; label: string; approved?: boolean; action?: Action; accept?: boolean }) => call("decision", decision),
   };
 }

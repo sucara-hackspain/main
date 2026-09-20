@@ -13,7 +13,7 @@ const PACES = [
   { ms: 4000, label: "Muy rápido · 4 s por registro" },
 ];
 
-export default function LiveControl({ live: api, runId, seconds, onWatch }: { live: Live; runId: string; seconds: number; onWatch: (id: string) => void }) {
+export default function LiveControl({ live: api, runId, seconds, onWatch, onPreviewCall }: { live: Live; runId: string; seconds: number; onWatch: (id: string) => void; onPreviewCall: () => void }) {
   const { state } = api;
   const [open, setOpen] = useState(false);
   const [night, setNight] = useState("H1"), [coordinator, setCoordinator] = useState<"hr" | "reglas">("hr"), [tickMs, setTickMs] = useState(30000), [approvals, setApprovals] = useState(true);
@@ -94,6 +94,8 @@ export default function LiveControl({ live: api, runId, seconds, onWatch }: { li
             <section className="live-phone">
               <h4><PhoneIncoming size={12} />Línea 112 real · puerto {state.phone.port}</h4>
               <p className="live-muted">{live ? "Las llamadas que entren van a esta sesión." : state.phone.waiting ? `${state.phone.waiting} llamada(s) esperando: entrarán en la próxima sesión.` : "Las llamadas que entren esperarán a la próxima sesión (15 min)."}</p>
+              <button className="live-rehearse" disabled={busy} onClick={() => { setOpen(false); if (live) void api.testCall(); else onPreviewCall(); }}>
+                <PhoneIncoming size={13} />{live ? "Simular una llamada ahora (para la sesión)" : "Ver cómo se ve una llamada"}</button>
               <ul>{state.phone.calls.slice(0, 4).map((c, n) => <li key={n}><time>{new Date(c.at).toLocaleTimeString("es-ES")}</time><span>{c.street ?? "sin calle"} · {c.text}</span><em>{c.session ? "entró" : "esperó"}</em></li>)}</ul>
             </section>
           )}

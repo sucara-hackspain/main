@@ -5,6 +5,7 @@
 //   :8113  GET  /           what is live now, the nights that can be played, the calls that came in
 //          POST /start      { night, coordinator: "hr" | "reglas", tickMs, attention } — refused while one is running
 //          POST /decision   { id, optionId, label, action? } — what the operator decided on a request the session is waiting on
+//          POST /test-call  a made-up call, handled exactly like a real one: to rehearse the demo without phoning
 //          POST /stop       ends the running session at its next tick
 //
 // The Control Center reaches :8113 through its own /api/live, so the button that starts a session lives there.
@@ -65,10 +66,10 @@ if (existsSync("runs"))
     if (meta.status === "running") writeFileSync(file, JSON.stringify({ ...meta, status: "failed" }, null, 2));
   }
 
-function takeCall(call: PhoneCall, via: string) {
+function takeCall(call: PhoneCall, via: string, again = false) {
   // A real call can arrive twice: posted by the workflow when it ends, and read again from the workflow's runs.
   const key = `${call.street}|${call.text}`;
-  if (heard.has(key)) return;
+  if (heard.has(key) && !again) return;
   heard.add(key);
   calls.unshift({ at: new Date().toISOString(), street: call.street, text: call.text, via, session: live?.id ?? null });
   calls.splice(30);
@@ -166,6 +167,17 @@ function release(session: Live, force = false) {
   for (const go of session.waiters.splice(0)) go();
 }
 
+/** Calls to rehearse with: what the voice agent would file, on streets the map knows. */
+const REHEARSAL: PhoneCall[] = [
+  { caller: "family", mechanism: "flooded_home", street: "Carrer de Sant Vicent Màrtir", locationErrorM: 120, conscious: "yes", breathing: "difficult", bleeding: "no", trapped: "yes", ageGroup: "elderly", victims: 1,
+    text: "Llamada real al 112: «Mi madre tiene 82 años, vive en un bajo y el agua le llega por la cintura. No puede subir las escaleras y casi no me contesta»" },
+  { caller: "driver", mechanism: "vehicle_trapped", street: "Avinguda del Cid", locationErrorM: 200, conscious: "yes", breathing: "normal", bleeding: "no", trapped: "yes", ageGroup: "adult", victims: 3,
+    text: "Llamada real al 112: «Estamos tres en el coche, el agua ha entrado hasta los asientos y las puertas no abren. La corriente nos está moviendo»" },
+  { caller: "bystander", mechanism: "collapse", street: "Carrer de Sueca", locationErrorM: 150, conscious: "no", breathing: "unknown", bleeding: "yes", trapped: "unknown", ageGroup: "adult", victims: 2,
+    text: "Llamada real al 112: «Se ha venido abajo el muro de un garaje y había dos personas delante. Una no se mueve y la otra sangra mucho de la cabeza»" },
+];
+let rehearsed = 0;
+
 function decide(body: { id?: string; optionId?: string; label?: string; action?: Action; approved?: boolean; accept?: boolean }): { status: number; body: unknown } {
   const session = live;
   const request = session?.awaiting.find((r) => r.id === body.id);
@@ -219,6 +231,11 @@ createServer((req, res) => {
       if (!live) return reply(200, view());
       live.abort.abort();
       log(`EN VIVO: se pide parar ${live.id}`);
+      return reply(200, view());
+    }
+    if (path === "/test-call") {
+      if (!live) return reply(409, { error: "Empieza una sesión en vivo para ensayar una llamada dentro de ella.", ...view() });
+      takeCall(REHEARSAL[rehearsed++ % REHEARSAL.length], "simulacro", true);
       return reply(200, view());
     }
     if (path === "/decision") {

@@ -9,6 +9,14 @@ import type { Live, LiveAwaited } from "./useLive";
 
 type Ringing = Extract<LiveAwaited, { type: "call" }>;
 
+/** What the alert looks like, with no session and no call: to look at it, or to rehearse the demo. */
+export const SAMPLE_CALL: Ringing = {
+  type: "call", id: "preview", policyId: "112", title: "Llamada real al 112 · Carrer de Sant Vicent Màrtir", incidentId: null, since: "", street: "Carrer de Sant Vicent Màrtir", via: "vista previa", at: [-0.38658, 39.446567],
+  text: "Llamada real al 112: «Mi madre tiene 82 años, vive en un bajo y el agua le llega por la cintura. No puede subir las escaleras y casi no me contesta»",
+  call: { caller: "family", mechanism: "flooded_home", street: "Carrer de Sant Vicent Màrtir", locationErrorM: 120, conscious: "yes", breathing: "difficult", bleeding: "no", trapped: "yes", ageGroup: "elderly", victims: 1,
+    text: "Llamada real al 112: «Mi madre tiene 82 años, vive en un bajo y el agua le llega por la cintura. No puede subir las escaleras y casi no me contesta»" },
+};
+
 const CALLER = { victim: "La propia víctima", family: "Un familiar", bystander: "Alguien que lo está viendo", driver: "Un conductor" } as const;
 const ANSWER = { yes: "Sí", no: "No", unknown: "No se sabe", normal: "Con normalidad", difficult: "Con dificultad", none: "No respira" } as const;
 const AGE = { child: "Menor", adult: "Adulto", elderly: "Persona mayor", unknown: "No se sabe" } as const;
@@ -37,7 +45,7 @@ function Locator({ at, graph, record }: { at: [number, number]; graph: GraphData
   );
 }
 
-export default function LiveCallAlert({ live, calls, graph, record, onRing }: { live: Live; calls: Ringing[]; graph: GraphData | null; record: TickRecord | null; onRing: () => void }) {
+export default function LiveCallAlert({ live, calls, graph, record, onRing, onClosePreview }: { live: Live; calls: Ringing[]; graph: GraphData | null; record: TickRecord | null; onRing: () => void; onClosePreview: () => void }) {
   const rung = useRef(new Set<string>());
   const first = useRef<HTMLButtonElement>(null);
   const [, beat] = useState(0);
@@ -53,7 +61,9 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing }: { 
   }, [calls.length]);
   if (!calls.length) return null;
   const ringing = calls[0], call = ringing.call;
-  const waited = Math.max(0, Math.round((Date.now() - Date.parse(ringing.since)) / 1000));
+  const preview = ringing.id === "preview", rehearsal = ringing.via === "simulacro";
+  const answer = (accept: boolean) => (preview ? onClosePreview() : void live.decide({ id: ringing.id, label: accept ? "Dar entrada a la llamada" : "Descartar la llamada", accept }));
+  const waited = ringing.since ? Math.max(0, Math.round((Date.now() - Date.parse(ringing.since)) / 1000)) : 18;
   const said = call.text.replace(/^Llamada real al 112:\s*/, "").replace(/^«|»$/g, "");
   const free = (record?.frame.units ?? []).filter((u) => u.mission === "idle" && !u.victimId && !u.broken && !u.stranded).length;
   const steps = [
@@ -68,6 +78,7 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing }: { 
       <section className="call-room" role="alertdialog" aria-modal="true" aria-labelledby="call-room-title">
         <header className="call-room-bar">
           <span className="call-room-badge"><PhoneIncoming size={15} />LLAMADA REAL AL 112</span>
+          {(preview || rehearsal) && <span className="call-room-mock">{preview ? "VISTA PREVIA · no hay ninguna sesión parada" : "SIMULACRO · la sesión sí está parada"}</span>}
           <strong id="call-room-title">{call.street ?? "Calle sin identificar"}</strong>
           <span className="call-room-paused"><Pause size={13} />Sesión en pausa · {Math.floor(waited / 60)}:{String(waited % 60).padStart(2, "0")} esperando</span>
         </header>
@@ -97,8 +108,8 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing }: { 
             <h3>Qué pasa si le das entrada</h3>
             <p className="call-room-next">La llamada entra en la noche como un aviso más: en el siguiente registro el coordinador la recibe, abre una incidencia en ese punto y decide qué unidad manda. Si la descartas, la noche sigue como si no hubiera sonado.</p>
             <div className="call-room-actions">
-              <button ref={first} className="is-primary" onClick={() => void live.decide({ id: ringing.id, label: "Dar entrada a la llamada", accept: true })}><PhoneIncoming size={15} />Dar entrada y reanudar</button>
-              <button onClick={() => void live.decide({ id: ringing.id, label: "Descartar la llamada", accept: false })}><PhoneOff size={14} />Descartar</button>
+              <button ref={first} className="is-primary" onClick={() => answer(true)}><PhoneIncoming size={15} />{preview ? "Cerrar la vista previa" : "Dar entrada y reanudar"}</button>
+              {!preview && <button onClick={() => answer(false)}><PhoneOff size={14} />Descartar</button>}
             </div>
             {calls.length > 1 && <p className="call-room-more">Hay {calls.length - 1} {calls.length === 2 ? "llamada más" : "llamadas más"} esperando detrás de esta.</p>}
           </div>

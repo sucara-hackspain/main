@@ -82,3 +82,6 @@
 .call-room-actions button:hover { opacity:.88; }
 @media (max-width: 860px) { .call-room-body { grid-template-columns:1fr; } .call-room-where { min-height:240px; border-right:0; border-bottom:1px solid var(--border); } .call-room-bar { flex-wrap:wrap; } .call-room-paused { margin-left:0; } }
 @media (prefers-reduced-motion: reduce) { .call-room, .call-room-badge svg, .call-map-ring { animation:none; } }
+.live-rehearse { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; height:28px; padding:0 10px; border:1px dashed var(--border); border-radius:var(--radius-md); background:none; color:var(--foreground); font:500 12px var(--font-sans, inherit); cursor:pointer; }
+.live-rehearse:hover { border-style:solid; }
+.call-room-mock { padding:2px 9px; border-radius:99px; background:#fff; color:var(--destructive); font:700 10.5px var(--font-mono); letter-spacing:.04em; white-space:nowrap; }
