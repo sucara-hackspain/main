@@ -8,7 +8,8 @@ import { DEFAULT_ESCALATION, parseEscalationPolicies } from "../src/engine/escal
 // Runs, maps and the escalation catalogue live next to the engine, in this package.
 const root = resolve(__dirname, "..");
 const SAFE = /^[\w.-]+$/;
-const LIVE = `http://127.0.0.1:${process.env.LIVE_CONTROL_PORT ?? 8113}`;
+// Another container in a deployment: LIVE_URL names it (deploy/preview).
+const LIVE = process.env.LIVE_URL ?? `http://127.0.0.1:${process.env.LIVE_CONTROL_PORT ?? 8113}`;
 
 /** The escalation catalogue the engine applies: the same file, whoever edits it. */
 const POLICY_FILE = resolve(root, "policies/escalation.json");

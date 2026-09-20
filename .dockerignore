@@ -5,4 +5,7 @@
 **/dist
 observatory/memory
 docs
-observatory/lab
+observatory/lab/*/ledger.jsonl
+observatory/lab/*/games.jsonl
+observatory/lab/*.jsonl
+observatory/lab/**/report.html
