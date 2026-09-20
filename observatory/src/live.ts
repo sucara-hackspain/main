@@ -14,11 +14,15 @@ import { createServer } from "node:http";
 import { Graph, type Action, type EscalationRequest, type GraphData, type PhoneCall, type Simulation } from "./engine";
 import { play, READINGS_DIR, type Attention, type Policy } from "./lab/play";
 import { loadScenarios } from "./lab/scenario";
+import { FollowupLine } from "./phone/followup";
 import { HappyRobotPhoneLine } from "./phone/happyrobot";
 import { startPhoneWebhook } from "./phone/webhook";
+import { happyRobotCallGenerator, HappyRobotTriage } from "./triage/happyrobot";
 
 const PHONE_PORT = Number(process.env.LIVE_PHONE_PORT ?? 8112);
 const CONTROL_PORT = Number(process.env.LIVE_CONTROL_PORT ?? 8113);
+/** Where the control API listens: this machine only, unless a deployment's viewer runs in another container. */
+const CONTROL_HOST = process.env.LIVE_CONTROL_HOST ?? "127.0.0.1";
 /** A call that found no session running is kept this long for the next one. */
 const CALL_WAITS_MS = 15 * 60_000;
 
@@ -97,6 +101,41 @@ startPhoneWebhook({
   onError: (error) => log(`112: ${error}`),
 });
 
+/**
+ * The 112 desk and the ring-backs of a live session, as `run.ts --desk happyrobot --phone` has them: the triage agent
+ * prioritises every call as it comes in, the call generator invents callers every 9 ticks, and whoever phoned on the
+ * real line about a low or medium case is rung back 10 ticks later. Traced next to the session (desk.jsonl, followups.jsonl).
+ */
+function liveAgents(id: string) {
+  const trace = (file: string, entry: unknown) => appendFileSync(`runs/${id}/${file}`, JSON.stringify(entry) + "\n");
+  const triage = new HappyRobotTriage({
+    onTrace: (t) => {
+      trace("desk.jsonl", { agent: "112-triage", ...t });
+      const v = t.verdict;
+      log(`TRIAJE 112 t${t.tick} ${t.callId} (${(t.ms / 1000).toFixed(1)} s): ${t.error ? `SIN RESPUESTA [${t.error}]` : `${v!.matchedNewIncident ? "incidente nuevo" : `→ ${v!.matchedIncidentId}`} · ${v!.incidents.find((i) => i.callIds.includes(t.callId) || i.id === v!.matchedIncidentId)?.priority ?? "?"}`}`);
+    },
+  });
+  const generate = happyRobotCallGenerator({
+    streets: () => [...new Set(Array.from({ length: 40 }, () => graph.streetAt(Math.floor(Math.random() * graph.nodeCount))).filter((s): s is string => !!s))].slice(0, 12),
+    onTrace: (t) => {
+      trace("desk.jsonl", { agent: "112-coordinator", ...t });
+      log(`MESA 112 t${t.tick}: ${t.error ? `sin llamadas [${t.error}]` : `${t.calls.length} llamadas inventadas`} (${(t.ms / 1000).toFixed(1)} s)`);
+    },
+  });
+  const followups = new FollowupLine({
+    afterTicks: 10,
+    onTrace: (t) => {
+      trace("followups.jsonl", t);
+      log(`SEGUIMIENTO 112 t${t.tick} ${t.callId} (${t.phone}): ${t.outcome}${t.why ? ` · ${t.why}` : ""}${t.report ? ` · contesta ${t.report.reached}, ${t.report.evolution}, siguiente ${t.report.nextAction}` : ""}${t.error ? ` [${t.error}]` : ""}`);
+    },
+  });
+  return {
+    desk: { everyTicks: 9, triageEvery: 1, generate, triage: (input: Parameters<HappyRobotTriage["triage"]>[0]) => triage.triage(input) },
+    followup: (input: Parameters<FollowupLine["tick"]>[0]) => followups.tick(input),
+    stop: () => followups.stop(),
+  };
+}
+
 function start(body: { night?: string; coordinator?: string; tickMs?: number; attention?: string; approvals?: boolean }): { status: number; body: unknown } {
   if (live) return { status: 409, body: { error: `Ya hay una sesión en vivo (${live.id}). Párala antes de empezar otra.`, live: view() } };
   const night = nights.find((n) => n.id === (body.night ?? "H1"));
@@ -117,11 +156,17 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
   session.abort.signal.addEventListener("abort", () => release(session, true), { once: true });
   live = session;
   const policy: Policy = coordinator === "hr" ? { kind: "agent", doctrine: { rules: [] }, harness: "plan" } : { kind: "registry" };
-  log(`EN VIVO: empieza ${session.id} (${night.title}) · ${coordinator === "hr" ? "coordina el agente de HappyRobot" : "coordinan las reglas"} · ${tickMs / 1000} s por tick`);
+  // With the platform's key, the 112 desk and the ring-backs come with the session, whoever coordinates.
+  const agents = process.env.HAPPYROBOT_API_KEY ? liveAgents(session.id) : null;
+  log(`EN VIVO: empieza ${session.id} (${night.title}) · ${coordinator === "hr" ? "coordina el agente de HappyRobot" : "coordinan las reglas"} · ${tickMs / 1000} s por tick${agents ? " · mesa 112 y seguimientos activos" : ""}`);
   play(night, policy, graph, {
     channel: attention === "ninguno" ? undefined : { attention, outbound: attention === "agente" || attention === "perfecto" },
     traceId: session.id,
     tickMs,
+    desk: agents?.desk,
+    followup: agents?.followup,
+    background: true,
+    everyTicks: 6,
     signal: session.abort.signal,
     onTick: (tick, dead) => { session.tick = tick; session.dead = dead; },
     gate: () => settled(session),
@@ -153,7 +198,10 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
       if (existsSync(file)) writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), status: "failed" }, null, 2));
       log(`EN VIVO: ${session.id} ha fallado · ${last.error}`);
     })
-    .finally(() => { if (live === session) live = null; });
+    .finally(() => {
+      agents?.stop();
+      if (live === session) live = null;
+    });
   return { status: 200, body: view() };
 }
 
@@ -252,6 +300,6 @@ createServer((req, res) => {
     }
     reply(404, { error: "no existe" });
   });
-}).listen(CONTROL_PORT, "127.0.0.1");
+}).listen(CONTROL_PORT, CONTROL_HOST);
 
 log(`Modo en vivo listo · control en http://127.0.0.1:${CONTROL_PORT} · llamadas del 112 en :${PHONE_PORT}/phone${phoneLine ? "" : " (sin línea de HappyRobot configurada: solo webhook)"}`);

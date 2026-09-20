@@ -4,6 +4,7 @@ import { ExplainedRules } from "../coordinators/explained";
 import { HappyRobotCoordinator } from "../coordinators/happyrobot";
 import { readEscalation } from "../escalationFile";
 import { buildSignals, CachedReader, EscalationDesk, type Action, type EscalationRequest, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type Call, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
+import type { SimulationOptions } from "../engine";
 import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
 import { renderDoctrine, type Doctrine } from "./doctrine";
 import { ScriptedMaster, type Scenario } from "./scenario";
@@ -121,6 +122,13 @@ export interface PlayOptions {
   /** Waited on before every tick: the live session holds the night here while something needs the operator first. */
   gate?: () => Promise<void>;
   onTick?: (tick: number, dead: number) => void;
+  /** The 112 desk (triage agent, call generator) and the ring-backs, as the live runner sets them up. */
+  desk?: SimulationOptions["desk"];
+  followup?: SimulationOptions["followup"];
+  /** The agent decides in the background, its orders landing when the run comes back: a paced live session, never the lab. */
+  background?: boolean;
+  /** Ticks between the agent's decisions. The lab's nights have always been played at 3. */
+  everyTicks?: number;
 }
 
 export async function play(scenario: Scenario, policy: Policy, graph: Graph, options: PlayOptions = {}): Promise<Game> {
@@ -135,6 +143,8 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
       harness: policy.harness,
       memory: doctrine ? () => doctrine : undefined,
       onTrace: dir ? (trace) => appendFileSync(`${dir}/llm.jsonl`, JSON.stringify(trace) + "\n") : undefined,
+      background: options.background,
+      everyTicks: options.everyTicks ?? 3,
     });
     coordinator = scenario.handover ? new Handover(agent, scenario.handover.tick, scenario.handover.decisions) : agent;
   } else {
@@ -150,6 +160,8 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     observer: policy.kind === "informed" ? new CallObserver({ perfect: true }) : scenario.buried ? new CallObserver({ buried: scenario.buried }) : undefined,
     callReader: options.channel ? callReaderFor(options.channel.attention, scenario) : undefined,
     signals: options.channel ? { night: signalsOf(scenario, graph), reader: readerFor(options.channel.attention, scenario) } : undefined,
+    desk: options.desk,
+    followup: options.followup,
   });
 
   // A recorded night carries what would have been escalated, under the catalogue in force.
@@ -222,6 +234,8 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     });
   }
 
+  // What the desk and the agent still have in hand: the trace ends with their last answers.
+  await sim.settle();
   const evaluation = evaluate({ session: options.traceId ?? `${scenario.id}-r${options.rep ?? 0}`, coordinator: coordinator.name, seed: scenario.seed, sim, records, applications });
   const s = evaluation.summary;
   if (dir && meta) {

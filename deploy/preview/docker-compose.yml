@@ -1,5 +1,6 @@
-# The showcase on a VPS behind caddy-docker-proxy (network `previews`): the engine runs night after night with the 112
-# desk and the real line, the Control Center follows it. https://hackspain.eighteen.sh is the viewer, /phone its webhook.
+# The showcase on a VPS behind caddy-docker-proxy (network `previews`): the engine in live mode (a night is started from
+# the Control Center; the 112 desk, the real line and the ring-backs come with it), the Control Center following it.
+# https://hackspain.eighteen.sh is the viewer, /phone and /followup the webhooks of the voice workflows.
 #   mkdir -p /opt/hackspain/{runs,memory} && cp observatory/.env /opt/hackspain/observatory.env
 #   docker compose -f deploy/preview/docker-compose.yml up -d --build
 name: hackspain
@@ -8,8 +9,14 @@ services:
     build: { context: ../.., dockerfile: deploy/preview/Dockerfile }
     image: hackspain-sim:latest
     working_dir: /app/observatory
-    # Night after night; before each one, only the twelve newest runs are kept (a night is tens of megabytes).
-    command: ["sh", "-c", "while true; do ls -td runs/*/ 2>/dev/null | tail -n +13 | xargs -r rm -rf; node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 180 --tick-ms 2000 --no-dream; sleep 10; done"]
+    # Live mode: one process that owns the only session (started from the Control Center through :8113) and the 112
+    # line's webhook on :8112. At start, only the twelve newest runs are kept (a night is tens of megabytes).
+    command: ["sh", "-c", "ls -td runs/*/ 2>/dev/null | tail -n +13 | xargs -r rm -rf; exec node_modules/.bin/tsx --env-file=.env src/live.ts"]
+    environment:
+      LIVE_PHONE_PORT: "8112"
+      LIVE_CONTROL_PORT: "8113"
+      # The viewer is another container: the control API must listen beyond localhost (the port is not published).
+      LIVE_CONTROL_HOST: "0.0.0.0"
     volumes:
       - /opt/hackspain/runs:/app/observatory/runs
       - /opt/hackspain/memory:/app/observatory/memory
@@ -31,6 +38,8 @@ services:
       # Set in deploy/preview/.env on the host: the viewer then asks for it (user CONTROL_CENTER_USER, default hackspain).
       CONTROL_CENTER_PASSWORD: ${CONTROL_CENTER_PASSWORD:-}
       CONTROL_CENTER_USER: ${CONTROL_CENTER_USER:-hackspain}
+      # The live mode lives in the engine container: the page's /api/live goes there.
+      LIVE_URL: http://engine:8113
     volumes:
       - /opt/hackspain/runs:/app/observatory/runs:ro
     networks: [previews]
