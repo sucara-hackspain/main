@@ -57,7 +57,7 @@ export function runsApi(): Plugin {
     }
     server.middlewares.use("/api", (req, res) => {
         const url = new URL(req.url ?? "/", "http://localhost");
-        const [kind, name] = url.pathname.split("/").filter(Boolean);
+        const [kind, name, part] = url.pathname.split("/").filter(Boolean);
         const json = (body: unknown, status = 200) => {
           res.statusCode = status;
           res.setHeader("Content-Type", "application/json");
@@ -91,6 +91,13 @@ export function runsApi(): Plugin {
         if (kind === "runs") {
           const dir = resolve(engineRoot, "runs", name);
           if (!existsSync(resolve(dir, "meta.json"))) return json({ error: "unknown run" }, 404);
+          // The hindsight evaluation the engine writes when the night ends: absent while it is still running.
+          if (part === "evaluation") {
+            const file = resolve(dir, "evaluation.json");
+            if (!existsSync(file)) return json({ error: "no evaluation yet" }, 404);
+            res.setHeader("Content-Type", "application/json");
+            return createReadStream(file).pipe(res);
+          }
           const from = Number(url.searchParams.get("from") ?? 0);
           // Line by line: a long night is hundreds of megabytes, more than one string may hold.
           return ticksFrom(resolve(dir, "ticks.jsonl"), from)

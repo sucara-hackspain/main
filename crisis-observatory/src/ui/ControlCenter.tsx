@@ -10,6 +10,7 @@ import {
   Play,
   Radio,
   RotateCcw,
+  ScrollText,
   X,
 } from "lucide-react";
 import { useRun, useRuns } from "./useRuns";
@@ -42,6 +43,7 @@ import { useInterventions } from "./interventions/useInterventions";
 import { useAlertSound } from "./interventions/sound";
 import type { InterventionView, Option } from "./interventions/model";
 import TicketsView, { TicketDetail } from "./tickets/TicketsView";
+import ReviewView from "./review/ReviewView";
 import { buildTickets, type Ticket, type TicketState } from "./tickets/model";
 
 const RunMap = lazy(() => import("./map/RunMap"));
@@ -104,7 +106,7 @@ function RunSession({
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
     // Incidents first: the operator starts from what is happening, then goes to the territory.
-    [view, setView] = useState<"map" | "tickets">("tickets"),
+    [view, setView] = useState<"map" | "tickets" | "review">("tickets"),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
@@ -319,6 +321,14 @@ function RunSession({
               <MapIcon size={14} />
               Territorio
             </button>
+            <button
+              aria-pressed={view === "review"}
+              className={view === "review" ? "is-active" : ""}
+              onClick={() => setView("review")}
+            >
+              <ScrollText size={14} />
+              Balance
+            </button>
           </div>
           {current && (
             <InterventionInbox
@@ -357,7 +367,7 @@ function RunSession({
             {ticks.length > 0 && "Se conserva el último registro recibido."}
           </div>
         )}
-        {view !== "tickets" && <div className="app-scope">
+        {view === "map" && <div className="app-scope">
           <div>
             <button
               className={!selection && !filtered ? "is-active" : ""}
@@ -394,6 +404,8 @@ function RunSession({
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
               seconds={seconds} tick={current.tick} />
+          ) : view === "review" ? (
+            <ReviewView runId={id} meta={meta} seconds={seconds} onIncident={(incidentId) => { setTicketId(incidentId); setView("tickets"); }} />
           ) : (
             graph &&
             meta && (
