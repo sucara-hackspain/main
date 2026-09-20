@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Search, Pencil, ArrowUpRight } from "lucide-react";
-import { loadPolicies, POLICY_KEY, type Policy } from "./policyStore";
+import { loadPolicies, type Policy } from "./policyStore";
 import PolicyEditor from "./PolicyEditor";
 import "./policies.css";
-import { escalationKinds } from "./escalationDefaults";
+import { escalationKinds, thresholdLabels, thresholdsFor } from "./escalationDefaults";
 export default function EscalationPoliciesPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [error, setError] = useState("");
@@ -16,15 +16,16 @@ export default function EscalationPoliciesPage() {
   const [retry, setRetry] = useState(0);
   const worker = useRef<Worker | null>(null), request = useRef(0);
   useEffect(() => {
+    let live = true;
     function reload() {
-      try { setPolicies(loadPolicies()); setError(""); }
-      catch(e) { setError(e instanceof Error ? e.message : "No se pudieron leer las políticas."); }
+      loadPolicies().then(
+        (list) => { if (live) { setPolicies(list); setError(""); } },
+        (e) => { if (live) setError(e instanceof Error ? e.message : "No se pudieron leer las políticas."); },
+      );
     }
-    function storage(e: StorageEvent) { if (!e.key || e.key === POLICY_KEY) reload(); }
     reload();
-    window.addEventListener("storage", storage);
     window.addEventListener("policies-changed", reload);
-    return () => { window.removeEventListener("storage", storage); window.removeEventListener("policies-changed", reload); };
+    return () => { live = false; window.removeEventListener("policies-changed", reload); };
   }, []);
   useEffect(() => {
     function locate() {
@@ -68,7 +69,7 @@ export default function EscalationPoliciesPage() {
       {policies.filter(p=>!p.deleted).map(rule=><a key={rule.id} href={`#${rule.id}`} aria-current={section===rule.id?"location":undefined}><code>{rule.id}</code>{rule.title}</a>)}
     </nav><article>
       <div className="policy-heading"><h1>Políticas de escalado</h1><button className="policy-primary" disabled={!!error} onClick={()=>setEditing(null)}><Plus size={14}/>Nueva política</button></div>
-      <p className="policies-note">Define cuándo la IA debe pedir una decisión humana y mostrar la alerta a pantalla completa. Estas reglas se guardan como borradores locales; todavía no modifican las alertas de la simulación.</p>
+      <p className="policies-note">Define cuándo la IA debe pedir una decisión humana y mostrar la alerta a pantalla completa. Es el catálogo que aplica el motor: se guarda en <code>gabriel/policies/escalation.json</code> y rige desde la siguiente ejecución. Cada ejecución grabada conserva el catálogo con el que se hizo.</p>
       {error && <p role="alert" className="policy-error">{error}</p>}
       <form className="policy-search" onSubmit={e=>{e.preventDefault();setSubmitted(query.trim());setRetry(r=>r+1);}}>
         <label htmlFor="policy-query">Buscar políticas</label><div><Search size={16}/><input id="policy-query" value={query} onChange={e=>{setQuery(e.target.value);if(!e.target.value.trim())setSubmitted("");}} placeholder="¿Cuándo debe intervenir una persona?"/><button className="policy-primary" type="submit" disabled={!query.trim()}>Buscar</button></div>
@@ -81,10 +82,12 @@ export default function EscalationPoliciesPage() {
       {!status && !searchError && !shown.length && <p>No hay políticas que mostrar. Prueba otra búsqueda o crea una política.</p>}
       {section && !policies.some(p=>p.id===section) && <section id={section}><h2>Política {section}</h2><p>Este identificador no está en el catálogo disponible.</p></section>}
       {shown.map(rule=><section id={rule.id} key={rule.id} className={rule.deleted?"policy-deleted":""}>
-        <div className="policy-row-tools"><span className="policy-type">{rule.deleted?"Eliminada":escalationKinds[rule.kind]} · Borrador local</span><button aria-label={`Editar política ${rule.id}`} onClick={()=>setEditing(rule)}><Pencil size={13}/>{rule.deleted?"Restaurar":"Editar"}</button></div>
+        <div className="policy-row-tools"><span className="policy-type">{rule.deleted?"Eliminada":escalationKinds[rule.kind]} · {rule.enabled===false?"Desactivada":"En vigor"}</span><button aria-label={`Editar política ${rule.id}`} onClick={()=>setEditing(rule)}><Pencil size={13}/>{rule.deleted?"Restaurar":"Editar"}</button></div>
         <h2><a href={`#${rule.id}`} aria-label={`Enlace al apartado ${rule.id}`}>{rule.id}<ArrowUpRight size={11}/></a>{rule.title}</h2>
         {rule.deleted?<p>Esta política fue eliminada del catálogo local. Se conserva el identificador para no romper las referencias anteriores.</p>:<p>{rule.body}</p>}
-        {!rule.deleted && <div className="policy-escalation-outcome"><span data-severity={rule.severity}>{rule.severity==="critical"?"Crítica":"Revisión necesaria"}</span><span>Decisión humana · Alerta a pantalla completa</span></div>}
+        {!rule.deleted && <div className="policy-escalation-outcome"><span data-severity={rule.severity}>{rule.severity==="critical"?"Crítica":"Revisión necesaria"}</span>
+          <span>{rule.enabled===false?"Desactivada: el motor no escalará esta situación":"Decisión humana · Alerta a pantalla completa"}</span>
+          {thresholdsFor[rule.kind].map(key=><span key={key}>{thresholdLabels[key]}: {rule[key] ?? "por defecto"}</span>)}</div>}
       </section>)}
     </article></div>
     {editing!==undefined && <PolicyEditor original={editing} onClose={()=>setEditing(undefined)}/>}

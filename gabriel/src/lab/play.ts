@@ -2,7 +2,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ExplainedRules } from "../coordinators/explained";
 import { HappyRobotCoordinator } from "../coordinators/happyrobot";
-import { buildSignals, CachedReader, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type Call, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
+import { readEscalation } from "../escalationFile";
+import { buildSignals, CachedReader, EscalationDesk, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type Call, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
 import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
 import { renderDoctrine, type Doctrine } from "./doctrine";
 import { ScriptedMaster, type Scenario } from "./scenario";
@@ -139,6 +140,10 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     signals: options.channel ? { night: signalsOf(scenario, graph), reader: readerFor(options.channel.attention, scenario) } : undefined,
   });
 
+  // A recorded night carries what would have been escalated, under the catalogue in force.
+  const escalation = readEscalation();
+  const escalations = dir ? new EscalationDesk(escalation) : null;
+
   const meta: RunMeta | null = dir
     ? {
         id: options.traceId!,
@@ -152,6 +157,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
         startedAt: new Date().toISOString(),
         status: "running",
         summary: null,
+        escalation,
       }
     : null;
   if (dir) {
@@ -184,7 +190,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
       });
       continue;
     }
-    const record = makeTickRecord(result, sim.world, sim.belief, graph, sim.desk);
+    const record = makeTickRecord(result, sim.world, sim.belief, graph, sim.desk, escalations);
     records.push(record);
     options.onTick?.(result.tick, sim.world.victims.filter((v) => v.status === "dead").length);
     if (dir) appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");

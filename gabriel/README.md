@@ -111,6 +111,24 @@ pnpm run-sim --coordinator happyrobot --master happyrobot --desk happyrobot --ti
 
 **Ringing them back.** A real call carries the caller's number (the workflow's POST node sends it alongside the record). `--followup-after` ticks later (10), if the case is still low or medium priority, the `112-outbound` voice agent ("Seguimiento 112") rings the number, asks how it is going and files a report (`src/phone/followup.ts`, traced to `runs/<id>/followups.jsonl`). No answer: one more try. Worse, red flags, or asked for help: the open case's priority floor goes to P1, and a case already closed comes back in as a new call marked `source: "outbound"`, at the street the person says they are now. Critical and high cases are never rung: a crew is on its way. The dialler sleeps outside business hours, so out of hours the report arrives when it wakes.
 
+## When a person has to decide: the escalation catalogue
+
+Some things the coordinator cannot settle on its own, and a night must never quietly leave one of them open. What counts as one is **not in the code**: it is a catalogue in `policies/escalation.json` that an operator writes (the Control Center edits it at `/escalation-policies`, through the run API). The engine's escalation desk (`src/engine/escalation.ts`) applies it at the end of every tick, on the same picture the coordinator had, and writes what it raised into the record:
+
+```jsonc
+{ "id": "ESC-02", "kind": "unassigned", "severity": "critical", "afterTicks": 3,
+  "title": "Incidencia urgente sin unidad asignada",
+  "body": "Escalar si una incidencia P0 o P1 permanece sin dotación tres registros seguidos, pese a haber unidades libres." }
+```
+
+- `kind` is one of the ten situations the engine knows how to recognise (`ESCALATION_KINDS`): a unit with no way through, a victim on board with nowhere to go, an urgent incident nobody is on, a place the water is about to cut off, saturation, the agent falling back to the rules, an order the engine refused... `severity` decides whether the alert is critical or a supervision one.
+- `afterTicks`, `withinTicks` and `minIncidents` are the thresholds the desk applies: how long a situation has to stand before it is worth a person, how close the water has to be, how many urgent incidents make it saturation. Left out, the engine's own numbers are used.
+- `enabled: false` switches that exception off: the desk never raises it again. A deleted policy keeps its id reserved so old alerts still point somewhere.
+- Each request cites the policy that asked for it (`policyId`), and the run's `meta.json` keeps the whole catalogue as it was that night: an alert can always be read against the rule in force when it happened.
+- A request the coordinator sorts out on its own is closed in the record with what happened, so nobody is asked about something that no longer needs deciding.
+
+`--policies <file>` runs a night against another catalogue, which is the way to measure what a threshold is worth: the same seed, two catalogues, and the alerts each one raises.
+
 ## One tick (30 simulated seconds)
 
 1. **Master** acts: spawn scene, close/open road, puncture ambulance (`MasterAction`).
@@ -132,6 +150,7 @@ pnpm run-sim --coordinator happyrobot --master happyrobot --desk happyrobot --ti
 | `src/engine/incidents.ts` | Coordinator side: attach calls and aerial sightings to incidents, deduce priority, merge, close. Reads reports only. |
 | `src/engine/recon.ts` | What the coordinator does not know: zones, the silence heuristic, and the ranked list of places worth looking at. |
 | `src/engine/coordinator.ts` | `Coordinator` interface + `GreedyCoordinator` baseline. |
+| `src/engine/escalation.ts` | What has to reach a person: the catalogue's shape, the desk that applies it and the requests it raises. |
 | `src/engine/sim.ts` | The loop. `inject()` / `order()` let a human play master or override the coordinator. |
 | `src/engine/briefing.ts` | Situation report for an LLM, with every ETA precomputed. Skips the call when nothing is decidable. |
 | `src/engine/trace.ts` | On-disk run format: `meta.json`, `ticks.jsonl`, `llm.jsonl` (full prompts), `run.log`. |

@@ -51,3 +51,21 @@ test("waiting summaries attach only to incidents explicitly named by the coordin
   wait.decision.situation = "C10 espera información";
   assert.equal(buildTickets([records[1], wait], 30).find((t) => t.id === "C1")!.steps.some((s) => s.detail?.includes("C10")), false);
 });
+
+test("the 112 desk reads in the case file: the triage agent and the ring-back are named", () => {
+  const { records } = ticketRun();
+  const file = [
+    { tick: 1, kind: "call" as const, from: "L1", callId: "L1", text: "Un coche ha chocado." },
+    { tick: 1, kind: "update" as const, from: "triaje 112", callId: "L1", flag: "alert" as const, text: "Triaje 112 de L1: critical — no responde y el agua sube" },
+    { tick: 2, kind: "update" as const, from: "seguimiento 112", callId: "L1", text: "Seguimiento de L1: ha empeorado, no responde" },
+    { tick: 2, kind: "update" as const, from: "reglas", text: "prioridad: P2 → P0" },
+  ];
+  const triaged = { priority: 0 as const, reasoning: "no responde y el agua sube", tick: 1, from: "triaje 112" };
+  const withDesk = records.map((r) => ({ ...r, frame: { ...r.frame,
+    incidents: r.frame.incidents.map((i) => i.id === "C1" ? { ...i, timeline: r.tick >= 2 ? file : [], triaged } : i) } }));
+  const ticket = buildTickets(withDesk.slice(0, 3), 30).find((t) => t.id === "C1")!;
+  assert.deepEqual(ticket.steps.map((s) => s.source), ["112 · llamada", "Triaje 112 · agente", "Seguimiento 112 · llamada de vuelta", "Protocolo de triaje"]);
+  assert.deepEqual(ticket.incident.triaged, triaged);
+  // Runs recorded before the desk existed carry no reading at all.
+  assert.equal(records[2].frame.incidents[0].triaged ?? null, null);
+});

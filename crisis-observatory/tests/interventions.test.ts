@@ -10,6 +10,7 @@ import type {
 } from "../src/ui/engineTrace";
 import {
   detectInterventions,
+  escalationsFrom,
   interventionsAt,
   prescribe,
 } from "../src/ui/interventions/model";
@@ -345,4 +346,26 @@ test("the thread tells the incident's story: its calls, its crew and what the co
       [5, "coordinator", "decision", null],
     ],
   );
+});
+
+test("the engine's escalations are what the operator sees, in the state its last record left them", () => {
+  const free = [unit("A1", "ambulance")];
+  const records = standing(3, free, [incident("C1")]);
+  // Older runs carry none: the records are read the way they always were.
+  assert.equal(escalationsFrom(records), null);
+
+  const raised = { id: "unassigned:C1:2", policyId: "ESC-02", kind: "unassigned" as const, severity: "critical" as const,
+    openedTick: 2, closedTick: null, outcome: null, title: "C1 (P1) sin unidad asignada", incidentId: "C1", units: [], victimId: null };
+  const withDesk = [
+    ...records.slice(0, 2),
+    { ...records[2], escalations: [raised] },
+    { ...record(3, free, [incident("C1")]), escalations: [{ ...raised, closedTick: 3, outcome: "El coordinador envió A1" }] },
+  ];
+  const all = escalationsFrom(withDesk)!;
+  assert.deepEqual(all.map((x) => [x.id, x.policyId, x.closedTick]), [["unassigned:C1:2", "ESC-02", 3]]);
+  // A prescription is built from the engine's request exactly as from a derived one.
+  assert.ok(prescribe(all[0], withDesk.at(-1)!, meta, router));
+  // Rewinding hides what later records said about how it ended.
+  assert.deepEqual(interventionsAt(escalationsFrom(withDesk.slice(0, 3))!, 2, {}).map((x) => x.status), ["pending"]);
+  assert.deepEqual(interventionsAt(all, 3, {}).map((x) => [x.status, x.outcome]), [["expired", "El coordinador envió A1"]]);
 });

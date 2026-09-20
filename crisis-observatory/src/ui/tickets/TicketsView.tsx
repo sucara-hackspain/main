@@ -187,7 +187,8 @@ export function TicketDetail({ ticket, seconds, tick, onLocate, canLocate, onClo
         {!mapContext && <div className="ticket-progress" aria-label={`Estado del ticket: ${ticketStates[ticket.state]}`}>
           {(["triage", "progress", "resolved"] as const).map((state, n) => <span key={state} className={n <= ["triage", "progress", "resolved"].indexOf(ticket.state) ? "reached" : ""}><i>{state === "resolved" ? <Check size={10} /> : n + 1}</i>{ticketStates[state]}</span>)}
         </div>}
-        <dl className="ticket-facts"><div><dt>Prioridad actual</dt><dd><span className="ticket-priority" data-priority={incident.priority}><i />P{incident.priority} · {priority[incident.priority].label}</span></dd></div>
+        <dl className="ticket-facts"><div><dt>Prioridad actual</dt><dd><span className="ticket-priority" data-priority={incident.priority}><i />P{incident.priority} · {priority[incident.priority].label}</span>
+            {incident.triaged && <small className="ticket-triage-read">{incident.located ? "El triaje del 112 la puso en" : "Suelo del triaje del 112:"} P{incident.triaged.priority} · {incident.triaged.reasoning}{incident.located ? " · manda la dotación en el lugar" : ""}</small>}</dd></div>
           {!mapContext && <div><dt>Abierta a las</dt><dd>+{elapsed(incident.openedTick, seconds)}</dd></div>}
           <div><dt>Personas afectadas</dt><dd>{incident.located ? `${incident.victims.length} confirmadas` : incident.victimsReported ? `${incident.victimsReported.value} según aviso` : "Por confirmar"}</dd></div>
           <div><dt>Ubicación</dt><dd>{incident.located ? "Confirmada por dotación" : `Aproximada · ±${incident.locationErrorM} m`}</dd></div>

@@ -3,6 +3,7 @@ import type { GraphData, RunMeta, TickRecord } from "../engineTrace";
 import {
   byUrgency,
   detectInterventions,
+  escalationsFrom,
   interventionsAt,
   prescribe,
   type InterventionView,
@@ -59,8 +60,8 @@ export function useInterventions({
   meta: RunMeta | null;
 }) {
   const { decisions, record, undo } = useDecisions(current?.tick);
-  // Stand-in for decision requests from the backend: derived from the records until the run API sends them.
-  const all = useMemo(() => detectInterventions(ticks), [ticks]);
+  // What the engine escalated, by its catalogue. Older runs carry none, and are read from the records.
+  const all = useMemo(() => escalationsFrom(ticks) ?? detectInterventions(ticks), [ticks]);
   const config = meta?.config;
   const routes = useMemo(
     () => (graph && config ? createRouter(graph, config) : null),

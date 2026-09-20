@@ -19,9 +19,20 @@ import type {
   UnitFrame,
 } from "../../../gabriel/src/engine/trace";
 import { UNIT_KINDS } from "../../../gabriel/src/engine/engine";
+import {
+  DEFAULT_ESCALATION,
+  ESCALATION_KINDS,
+  type EscalationKind,
+  type EscalationPolicy,
+  type EscalationRequest,
+} from "../../../gabriel/src/engine/escalation";
 import { INJURIES, SCENES } from "../../../gabriel/src/engine/victims";
 
 // The run format the engine in ../gabriel writes (units, scenes, incidents, water), as the UI reads it.
+
+/** When the coordinator has to stop and ask a person: the engine's catalogue, and what it raised. */
+export { DEFAULT_ESCALATION, ESCALATION_KINDS };
+export type { EscalationKind, EscalationPolicy, EscalationRequest };
 
 export type {
   Action,

@@ -489,6 +489,9 @@
   border-top: 2px dashed var(--info-foreground);
 }
 /* A filter, not opacity: MapLibre writes the markers' opacity inline and would undo it. */
+/* The policy that raised the alert, from the catalogue the engine applies. */
+.decision-policy { display:inline-flex; align-items:center; padding:2px 8px; border:1px solid currentColor; border-radius:999px; font:500 10px var(--font-mono); text-decoration:none; opacity:.85; }
+.decision-policy:hover { opacity:1; }
 .incident-dim {
   filter: opacity(0.38);
 }
