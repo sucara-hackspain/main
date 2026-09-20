@@ -108,6 +108,11 @@ export interface PlayOptions {
   rep?: number;
   /** Also leave the game where the viewers can open it (runs/<id>). */
   traceId?: string;
+  /** How long a tick lasts on the wall clock, the coordinator's thinking included: a traced game can be watched while it is played. */
+  tickMs?: number;
+  /** The live session hands real phone calls to the night being played, and can end it early. */
+  onSim?: (sim: Simulation) => void;
+  signal?: AbortSignal;
   onTick?: (tick: number, dead: number) => void;
 }
 
@@ -172,7 +177,10 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
   let calls = 0;
   let fallbacks = 0;
   let thinkingMs = 0;
+  options.onSim?.(sim);
   for (let i = 0; i < scenario.ticks; i++) {
+    if (options.signal?.aborted) break;
+    const tickStarted = Date.now();
     const result = await sim.step();
     const d = result.decision;
     if (d && d.source !== "rules") {
@@ -194,6 +202,10 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     records.push(record);
     options.onTick?.(result.tick, sim.world.victims.filter((v) => v.status === "dead").length);
     if (dir) appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
+    if (options.tickMs) await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, Math.max(0, tickStarted + options.tickMs! - Date.now()));
+      options.signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+    });
     result.decision?.applies?.forEach((ids, n) => {
       const action = result.decision!.actions[n];
       for (const ruleId of new Set(ids)) if (known.has(ruleId)) applications.push({ ruleId, incidentId: action.type === "dispatch" ? action.incidentId : null });

@@ -6,6 +6,7 @@ import { DEFAULT_ESCALATION, parseEscalationPolicies } from "../../gabriel/src/e
 
 const engineRoot = resolve(__dirname, "../../gabriel");
 const SAFE = /^[\w.-]+$/;
+const LIVE = `http://127.0.0.1:${process.env.LIVE_CONTROL_PORT ?? 8113}`;
 
 /** The escalation catalogue the engine applies: the same file, whoever edits it. */
 const POLICY_FILE = resolve(engineRoot, "policies/escalation.json");
@@ -48,6 +49,18 @@ export function runsApi(): Plugin {
           res.end(JSON.stringify(body));
         };
         if (name && !SAFE.test(name)) return json({ error: "bad name" }, 400);
+
+        // The live mode is another process (gabriel: pnpm live): the page talks to it through here.
+        if (kind === "live") {
+          const chunks: Buffer[] = [];
+          req.on("data", (chunk) => chunks.push(chunk));
+          req.on("end", () => {
+            fetch(`${LIVE}/${name ?? ""}`, { method: req.method, body: req.method === "POST" ? Buffer.concat(chunks) : undefined, headers: { "content-type": "application/json" } })
+              .then(async (r) => json(await r.json(), r.status))
+              .catch(() => json({ off: true, error: "El modo en vivo está apagado. Arráncalo con: cd gabriel && pnpm live" }, 503));
+          });
+          return;
+        }
 
         // The catalogue an operator writes and the engine applies, read and saved in place.
         if (kind === "policies") {

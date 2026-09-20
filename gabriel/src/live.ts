@@ -1,0 +1,166 @@
+// pnpm live — the live mode: one process that owns the only session that may be running, and the 112 line's webhook.
+//
+//   :8112  POST /phone      where the HappyRobot voice workflow posts a call the moment the caller hangs up (the tunnel
+//                           points here). The call goes into the live session; with none running it waits for the next.
+//   :8113  GET  /           what is live now, the nights that can be played, the calls that came in
+//          POST /start      { night, coordinator: "hr" | "reglas", tickMs, attention } — refused while one is running
+//          POST /stop       ends the running session at its next tick
+//
+// The Control Center reaches :8113 through its own /api/live, so the button that starts a session lives there.
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { Graph, type GraphData, type PhoneCall, type Simulation } from "./engine";
+import { play, READINGS_DIR, type Attention, type Policy } from "./lab/play";
+import { loadScenarios } from "./lab/scenario";
+import { HappyRobotPhoneLine } from "./phone/happyrobot";
+import { startPhoneWebhook } from "./phone/webhook";
+
+const PHONE_PORT = Number(process.env.LIVE_PHONE_PORT ?? 8112);
+const CONTROL_PORT = Number(process.env.LIVE_CONTROL_PORT ?? 8113);
+/** A call that found no session running is kept this long for the next one. */
+const CALL_WAITS_MS = 15 * 60_000;
+
+const graph = new Graph(JSON.parse(readFileSync("data/valencia.json", "utf8")) as GraphData);
+const nights = loadScenarios();
+
+interface Live {
+  id: string;
+  night: string;
+  title: string;
+  coordinator: "hr" | "reglas";
+  attention: Attention | "ninguno";
+  tickMs: number;
+  ticks: number;
+  tick: number;
+  dead: number;
+  startedAt: string;
+  sim: Simulation | null;
+  abort: AbortController;
+}
+let live: Live | null = null;
+let last: { id: string; endedAt: string; dead: number; victims: number; stopped: boolean; error: string | null } | null = null;
+const calls: { at: string; street: string | null; text: string; via: string; session: string | null }[] = [];
+let waiting: { call: PhoneCall; at: number }[] = [];
+const heard = new Set<string>();
+
+const log = (line: string) => console.log(`${new Date().toISOString().slice(11, 19)}  ${line}`);
+
+// A session whose process died still says "running" on disk, and the viewers would follow it for ever.
+if (existsSync("runs"))
+  for (const id of readdirSync("runs")) {
+    const file = `runs/${id}/meta.json`;
+    if (!id.startsWith("live-") || !existsSync(file)) continue;
+    const meta = JSON.parse(readFileSync(file, "utf8"));
+    if (meta.status === "running") writeFileSync(file, JSON.stringify({ ...meta, status: "failed" }, null, 2));
+  }
+
+function takeCall(call: PhoneCall, via: string) {
+  // A real call can arrive twice: posted by the workflow when it ends, and read again from the workflow's runs.
+  const key = `${call.street}|${call.text}`;
+  if (heard.has(key)) return;
+  heard.add(key);
+  calls.unshift({ at: new Date().toISOString(), street: call.street, text: call.text, via, session: live?.id ?? null });
+  calls.splice(30);
+  if (live?.sim) {
+    live.sim.phone(call);
+    log(`112: llamada real (${via}) → ${live.id} · ${call.street ?? "sin calle"} · ${call.text}`);
+  } else {
+    waiting.push({ call, at: Date.now() });
+    log(`112: llamada real (${via}) sin sesión en vivo: espera a la siguiente · ${call.street ?? "sin calle"}`);
+  }
+}
+
+const phoneLine = process.env.HAPPYROBOT_PHONE_WORKFLOW_ID
+  ? new HappyRobotPhoneLine({ onCall: (call, runId) => takeCall(call, `sondeo ${runId}`), onError: (error) => log(`112: ${error}`) })
+  : null;
+startPhoneWebhook({
+  port: PHONE_PORT,
+  onCall: (call) => takeCall(call, "webhook"),
+  // The post came without the record: the call has just ended, read it from the platform (it takes a moment to be there).
+  onPing: () => [0, 2000, 5000].forEach((ms) => setTimeout(() => void phoneLine?.poll(), ms)),
+  onError: (error) => log(`112: ${error}`),
+});
+
+function start(body: { night?: string; coordinator?: string; tickMs?: number; attention?: string }): { status: number; body: unknown } {
+  if (live) return { status: 409, body: { error: `Ya hay una sesión en vivo (${live.id}). Párala antes de empezar otra.`, live: view() } };
+  const night = nights.find((n) => n.id === (body.night ?? "H1"));
+  if (!night) return { status: 400, body: { error: `No existe la noche ${body.night}` } };
+  const coordinator = body.coordinator === "reglas" ? "reglas" : "hr";
+  if (coordinator === "hr" && !process.env.HAPPYROBOT_API_KEY) return { status: 400, body: { error: "Faltan las credenciales de HappyRobot en gabriel/.env" } };
+  const tickMs = Math.min(60_000, Math.max(1000, Number(body.tickMs) || 30_000));
+  // The agent's reading of a night's citizen channel is done once and kept; a night nobody has read gets a control room.
+  const asked = (body.attention ?? "agente") as Attention | "ninguno";
+  const attention = asked === "agente" && !existsSync(`${READINGS_DIR}/${night.id}.json`) ? "sala" : asked;
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+  const session: Live = {
+    id: `live-${stamp}-${night.id}-${coordinator}`, night: night.id, title: night.title, coordinator, attention, tickMs,
+    ticks: night.ticks, tick: 0, dead: 0, startedAt: new Date().toISOString(), sim: null, abort: new AbortController(),
+  };
+  live = session;
+  const policy: Policy = coordinator === "hr" ? { kind: "agent", doctrine: { rules: [] }, harness: "plan" } : { kind: "registry" };
+  log(`EN VIVO: empieza ${session.id} (${night.title}) · ${coordinator === "hr" ? "coordina el agente de HappyRobot" : "coordinan las reglas"} · ${tickMs / 1000} s por tick`);
+  play(night, policy, graph, {
+    channel: attention === "ninguno" ? undefined : { attention, outbound: attention === "agente" || attention === "perfecto" },
+    traceId: session.id,
+    tickMs,
+    signal: session.abort.signal,
+    onTick: (tick, dead) => { session.tick = tick; session.dead = dead; },
+    onSim: (sim) => {
+      session.sim = sim;
+      const fresh = waiting.filter((w) => Date.now() - w.at <= CALL_WAITS_MS);
+      waiting = [];
+      for (const w of fresh) { sim.phone(w.call); log(`112: entra en ${session.id} una llamada que estaba esperando · ${w.call.street ?? "sin calle"}`); }
+    },
+  })
+    .then((game) => {
+      last = { id: session.id, endedAt: new Date().toISOString(), dead: game.dead, victims: game.victims, stopped: session.abort.signal.aborted, error: null };
+      log(`EN VIVO: ${session.abort.signal.aborted ? "parada" : "termina"} ${session.id} · ${game.dead} muertos de ${game.victims}`);
+    })
+    .catch((error) => {
+      last = { id: session.id, endedAt: new Date().toISOString(), dead: session.dead, victims: 0, stopped: false, error: String(error?.message ?? error) };
+      const file = `runs/${session.id}/meta.json`;
+      if (existsSync(file)) writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), status: "failed" }, null, 2));
+      log(`EN VIVO: ${session.id} ha fallado · ${last.error}`);
+    })
+    .finally(() => { if (live === session) live = null; });
+  return { status: 200, body: view() };
+}
+
+function view() {
+  return {
+    live: live && { id: live.id, night: live.night, title: live.title, coordinator: live.coordinator, attention: live.attention, tickMs: live.tickMs, tick: live.tick, ticks: live.ticks, dead: live.dead, startedAt: live.startedAt, stopping: live.abort.signal.aborted },
+    last,
+    nights: nights.map((n) => ({ id: n.id, title: n.title, family: n.family, ticks: n.ticks, victims: n.stats.victims, read: existsSync(`${READINGS_DIR}/${n.id}.json`) })),
+    agent: Boolean(process.env.HAPPYROBOT_API_KEY),
+    phone: { port: PHONE_PORT, line: Boolean(phoneLine), waiting: waiting.length, calls },
+  };
+}
+
+createServer((req, res) => {
+  const reply = (status: number, body: unknown) => {
+    res.writeHead(status, { "content-type": "application/json" });
+    res.end(JSON.stringify(body));
+  };
+  const path = (req.url ?? "/").split("?")[0].replace(/\/+$/, "") || "/";
+  if (req.method === "GET") return reply(200, view());
+  if (req.method !== "POST") return reply(405, { error: "GET o POST" });
+  let raw = "";
+  req.on("data", (chunk) => (raw += chunk));
+  req.on("end", () => {
+    if (path === "/stop") {
+      if (!live) return reply(200, view());
+      live.abort.abort();
+      log(`EN VIVO: se pide parar ${live.id}`);
+      return reply(200, view());
+    }
+    if (path === "/start") {
+      let body = {};
+      try { body = raw ? JSON.parse(raw) : {}; } catch { return reply(400, { error: "cuerpo no válido" }); }
+      const out = start(body);
+      return reply(out.status, out.body);
+    }
+    reply(404, { error: "no existe" });
+  });
+}).listen(CONTROL_PORT, "127.0.0.1");
+
+log(`Modo en vivo listo · control en http://127.0.0.1:${CONTROL_PORT} · llamadas del 112 en :${PHONE_PORT}/phone${phoneLine ? "" : " (sin línea de HappyRobot configurada: solo webhook)"}`);

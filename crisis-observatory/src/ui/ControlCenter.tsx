@@ -25,6 +25,7 @@ import "@fontsource-variable/geist-mono";
 import "../theme.css";
 import "./control-center.css";
 import "./session.css";
+import LiveControl from "./live/LiveControl";
 import SituationSidebar from "./situation/SituationSidebar";
 import EntityCard from "./situation/EntityCard";
 import {
@@ -163,6 +164,13 @@ function RunSession({
       document.title = pageTitle;
     };
   }, [pending.length, urgent]);
+  // A session that is being played right now is followed from the moment it is opened.
+  const followedLive = useRef(false);
+  useEffect(() => {
+    if (followedLive.current || meta?.status !== "running" || !id.startsWith("live-")) return;
+    followedLive.current = true;
+    setFollow(true);
+  }, [meta?.status, id]);
   useEffect(() => {
     if (follow) setIndex(Math.max(0, ticks.length - 1));
   }, [follow, ticks.length]);
@@ -320,6 +328,7 @@ function RunSession({
               Territorio
             </button>
           </div>
+          <LiveControl runId={id} seconds={seconds} onWatch={onRun} />
           {current && (
             <InterventionInbox
               pending={pending}
