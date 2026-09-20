@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Action } from "../engineTrace";
+import type { PhoneCall } from "../../../../gabriel/src/engine/types";
 
 // The live mode as the page sees it: one session at a time, played by the engine's live server (gabriel: pnpm live).
 
 /** What the live session is stopped on: a request of the escalation desk, or a real call that has just come in. */
 export type LiveAwaited =
   | { type: "escalation"; id: string; policyId: string; title: string; incidentId: string | null; since: string }
-  | { type: "call"; id: string; policyId: "112"; title: string; incidentId: null; since: string; street: string | null; text: string; via: string };
+  | { type: "call"; id: string; policyId: "112"; title: string; incidentId: null; since: string; street: string | null; text: string; via: string; call: PhoneCall; at: [number, number] | null };
 
 export interface LiveSession {
   id: string; night: string; title: string; coordinator: "hr" | "reglas"; attention: string; tickMs: number;

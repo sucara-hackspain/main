@@ -188,9 +188,15 @@ function decide(body: { id?: string; optionId?: string; label?: string; action?:
   return { status: 200, body: view() };
 }
 
+/** Where on the map the caller said they were, if the map knows that street. */
+function whereIs(call: PhoneCall): [number, number] | null {
+  const node = call.node ?? (call.street ? graph.findStreet(call.street) : null);
+  return node === null || node === undefined ? null : (graph.data.nodes[node] ?? null);
+}
+
 function view() {
   return {
-    live: live && { id: live.id, night: live.night, title: live.title, coordinator: live.coordinator, attention: live.attention, tickMs: live.tickMs, tick: live.tick, ticks: live.ticks, dead: live.dead, startedAt: live.startedAt, stopping: live.abort.signal.aborted, approvals: live.approvals, awaiting: live.awaiting.map((a) => (a.type === "call" ? { type: a.type, id: a.id, policyId: a.policyId, title: a.title, incidentId: null, since: a.since, street: a.call.street, text: a.call.text, via: a.via } : a)) },
+    live: live && { id: live.id, night: live.night, title: live.title, coordinator: live.coordinator, attention: live.attention, tickMs: live.tickMs, tick: live.tick, ticks: live.ticks, dead: live.dead, startedAt: live.startedAt, stopping: live.abort.signal.aborted, approvals: live.approvals, awaiting: live.awaiting.map((a) => (a.type === "call" ? { type: a.type, id: a.id, policyId: a.policyId, title: a.title, incidentId: null, since: a.since, street: a.call.street, text: a.call.text, via: a.via, call: a.call, at: whereIs(a.call) } : a)) },
     last,
     nights: nights.map((n) => ({ id: n.id, title: n.title, family: n.family, ticks: n.ticks, victims: n.stats.victims, read: existsSync(`${READINGS_DIR}/${n.id}.json`) })),
     agent: Boolean(process.env.HAPPYROBOT_API_KEY),

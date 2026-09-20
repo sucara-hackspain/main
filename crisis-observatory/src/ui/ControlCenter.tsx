@@ -560,7 +560,7 @@ function RunSession({
           </div>
         </div>
       </section>
-      <LiveCallAlert live={live} calls={ringing} onRing={sound.chime} />
+      <LiveCallAlert live={live} calls={ringing} graph={graph} record={liveSession ? (ticks.at(-1) ?? null) : null} onRing={sound.chime} />
       {view !== "policies" && <div className="app-sidebar-slot" inert={blocked}>
         {view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
           onLocate={locateTicket} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} /> : <SituationSidebar
