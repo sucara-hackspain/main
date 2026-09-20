@@ -7,17 +7,26 @@ import { normalisePhone, toPhoneCall } from "./happyrobot";
  * Where the 112 voice workflow posts the call record the moment the caller hangs up (its `POST` node).
  * The session listens on a local port; a tunnel (ngrok, cloudflared) gives the platform an address for it.
  */
-export function startPhoneWebhook(options: { port: number; onCall: (call: PhoneCall) => void; onPing?: () => void; onError?: (error: string) => void }): Server {
+export function startPhoneWebhook(options: { port: number; onCall: (call: PhoneCall) => void; onPing?: () => void; onError?: (error: string) => void; onFollowup?: (post: Record<string, unknown>) => void }): Server {
   const server = createServer((req, res) => {
     const reply = (status: number, body: unknown) => {
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(body));
     };
-    if (req.method === "GET") return reply(200, { ok: true, listening: "POST /phone" });
+    if (req.method === "GET") return reply(200, { ok: true, listening: "POST /phone, POST /followup" });
     if (req.method !== "POST") return reply(405, { ok: false });
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
+      // The follow-up workflow's POST node: the report itself is read from its run, so this only takes note.
+      if (req.url?.startsWith("/followup")) {
+        try {
+          options.onFollowup?.(JSON.parse(raw) as Record<string, unknown>);
+          return reply(200, { ok: true });
+        } catch {
+          return reply(400, { ok: false });
+        }
+      }
       try {
         const body = JSON.parse(raw) as Record<string, unknown>;
         const record = unwrap(body, "caller");
