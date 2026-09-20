@@ -155,6 +155,9 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
   // Stopping the session also ends any wait for the operator.
   session.abort.signal.addEventListener("abort", () => release(session, true), { once: true });
   live = session;
+  // The voice workflow may post its calls somewhere else (the VPS, another laptop): while a session runs, the platform
+  // is also asked every few seconds for the calls that have just ended, so a real call gets here either way.
+  phoneLine?.start();
   const policy: Policy = coordinator === "hr" ? { kind: "agent", doctrine: { rules: [] }, harness: "plan" } : { kind: "registry" };
   // With the platform's key, the 112 desk and the ring-backs come with the session, whoever coordinates.
   const agents = process.env.HAPPYROBOT_API_KEY ? liveAgents(session.id) : null;
@@ -200,7 +203,7 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
     })
     .finally(() => {
       agents?.stop();
-      if (live === session) live = null;
+      if (live === session) { live = null; phoneLine?.stop(); }
     });
   return { status: 200, body: view() };
 }

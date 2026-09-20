@@ -293,6 +293,7 @@ function RunSession({
         onActive={setDecisionId}
         onDecide={decide}
         onLeave={() => setInvestigating(true)}
+        onStopLive={liveSession ? () => void live.stop() : undefined}
         onPolicy={(policyId) => {
           // The policy behind the request opens in its tab, on that policy; the request waits in the bar meanwhile.
           window.location.hash = policyId;

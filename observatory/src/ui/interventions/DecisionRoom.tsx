@@ -7,6 +7,7 @@ import {
   LogOut,
   Pause,
   ShieldAlert,
+  Square,
 } from "lucide-react";
 import {
   elapsed,
@@ -47,6 +48,8 @@ type DecisionRoomProps = {
   onLeave: () => void;
   /** Open the policy that asked for this request. */
   onPolicy: (policyId: string) => void;
+  /** The request belongs to the live session, which is stopped on it: the room can also end that session. */
+  onStopLive?: () => void;
 };
 
 /** A request takes over the page: critical ones in red, supervision in amber. Everything needed to
@@ -68,6 +71,7 @@ export default function DecisionRoom({
   onDecide,
   onLeave,
   onPolicy,
+  onStopLive,
 }: DecisionRoomProps) {
   const position = Math.max(
     0,
@@ -172,6 +176,12 @@ export default function DecisionRoom({
             >
               {sound.muted ? <BellOff size={14} /> : <Bell size={14} />}
             </button>
+            {onStopLive && (
+              <button className="decision-leave" title="Terminar la sesión en vivo sin decidir" onClick={onStopLive}>
+                <Square size={12} />
+                Parar la sesión
+              </button>
+            )}
             <button className="decision-leave" onClick={onLeave}>
               <LogOut size={13} />
               Salir a investigar
