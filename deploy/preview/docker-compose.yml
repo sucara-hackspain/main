@@ -1,0 +1,38 @@
+# The showcase on a VPS behind caddy-docker-proxy (network `previews`): the engine runs night after night with the 112
+# desk and the real line, the Control Center follows it. https://hackspain.eighteen.sh is the viewer, /phone its webhook.
+#   mkdir -p /opt/hackspain/{runs,memory} && cp gabriel/.env /opt/hackspain/gabriel.env
+#   docker compose -f deploy/preview/docker-compose.yml up -d --build
+name: hackspain
+services:
+  engine:
+    build: { context: ../.., dockerfile: deploy/preview/Dockerfile }
+    image: hackspain-sim:latest
+    working_dir: /app/gabriel
+    command: ["sh", "-c", "while true; do node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 1200 --tick-ms 2000 --no-dream; sleep 10; done"]
+    volumes:
+      - /opt/hackspain/runs:/app/gabriel/runs
+      - /opt/hackspain/memory:/app/gabriel/memory
+      - /opt/hackspain/gabriel.env:/app/gabriel/.env:ro
+    networks: [previews]
+    restart: unless-stopped
+    labels:
+      caddy: hackspain.eighteen.sh
+      caddy.1_handle: /phone*
+      caddy.1_handle.reverse_proxy: "{{upstreams 8112}}"
+  ui:
+    image: hackspain-sim:latest
+    depends_on: [engine]
+    working_dir: /app/crisis-observatory
+    command: ["node_modules/.bin/vite", "preview", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]
+    volumes:
+      - /opt/hackspain/runs:/app/gabriel/runs:ro
+    networks: [previews]
+    restart: unless-stopped
+    labels:
+      caddy: hackspain.eighteen.sh
+      caddy.2_handle: /*
+      caddy.2_handle.reverse_proxy: "{{upstreams 5173}}"
+      caddy.2_handle.reverse_proxy.header_up: "Host localhost"
+networks:
+  previews:
+    external: true

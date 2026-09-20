@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Plugin } from "vite";
+import type { Plugin, PreviewServer, ViteDevServer } from "vite";
 import { DEFAULT_ESCALATION, parseEscalationPolicies } from "../../gabriel/src/engine/escalation";
 
 const engineRoot = resolve(__dirname, "../../gabriel");
@@ -23,10 +23,10 @@ function readBody(req: { on: (event: string, listener: (chunk?: Buffer) => void)
 
 /** Serves run traces straight from runs/ so the UI can follow a run while its records are being written. */
 export function runsApi(): Plugin {
-  return {
-    name: "runs-api",
-    configureServer(server) {
-      server.middlewares.use("/api", (req, res) => {
+  // The same handler serves `vite dev` and `vite preview`: a preview deployment reads the runs the engine writes next to it.
+  // A block, not an expression: whatever the hook returns Vite takes for a post-middleware installer.
+  const serve = (server: ViteDevServer | PreviewServer): void => {
+    server.middlewares.use("/api", (req, res) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         const [kind, name] = url.pathname.split("/").filter(Boolean);
         const json = (body: unknown, status = 200) => {
@@ -81,6 +81,6 @@ export function runsApi(): Plugin {
         }
         json({ error: "not found" }, 404);
       });
-    },
   };
+  return { name: "runs-api", configureServer: serve, configurePreviewServer: serve };
 }

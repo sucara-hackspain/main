@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/runs
+**/.env
+**/dist
+gabriel/memory
+backend
+docs
+gabriel/lab

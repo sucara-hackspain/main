@@ -561,7 +561,7 @@ export interface Incident extends Signs {
   /** 0 = life at risk right now ... 3 = can wait. Deduced from the signs, never told. */
   priority: Priority;
   /** A floor under the rules' priority, until a crew has seen the place: the 112 triage agent's reading, or a follow-up call gone bad. */
-  triaged: { priority: Priority; reasoning: string; tick: number; from: string } | null;
+  triaged?: { priority: Priority; reasoning: string; tick: number; from: string } | null;
   /** No road gets there (as far as we know): it needs a boat or a helicopter, not an ambulance. */
   unreachable: boolean;
   /** Where each thing we know came from. */
