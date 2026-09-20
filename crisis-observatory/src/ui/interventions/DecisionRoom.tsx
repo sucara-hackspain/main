@@ -45,6 +45,8 @@ type DecisionRoomProps = {
   onDecide: (item: InterventionView, option: Option, prescribed: Option) => void;
   /** Leave without deciding: the request stays pending in a bar above the page. */
   onLeave: () => void;
+  /** Open the policy that asked for this request. */
+  onPolicy: (policyId: string) => void;
 };
 
 /** A request takes over the page: critical ones in red, supervision in amber. Everything needed to
@@ -65,6 +67,7 @@ export default function DecisionRoom({
   onActive,
   onDecide,
   onLeave,
+  onPolicy,
 }: DecisionRoomProps) {
   const position = Math.max(
     0,
@@ -119,9 +122,9 @@ export default function DecisionRoom({
           </span>
           {/* Which policy asked for this: the operator can open it and change when it happens again. */}
           {item.policyId && (
-            <a className="decision-policy" href={`/escalation-policies#${item.policyId}`} target="_blank" rel="noreferrer">
+            <button type="button" className="decision-policy" title="Ver la política que ha pedido esta decisión" onClick={() => onPolicy(item.policyId!)}>
               Política {item.policyId}
-            </a>
+            </button>
           )}
           {pending.length > 1 && (
             <span className="decision-pager">

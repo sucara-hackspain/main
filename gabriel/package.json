@@ -5,6 +5,7 @@
   "scripts": {
     "fetch-graph": "tsx scripts/fetch-graph.ts",
     "sim": "tsx src/cli.ts",
+    "live": "tsx --env-file-if-exists=.env src/live.ts",
     "run-sim": "tsx --env-file-if-exists=.env src/run.ts",
     "dream": "tsx --env-file-if-exists=.env src/dream.ts",
     "ui": "vite ui",

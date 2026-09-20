@@ -3,7 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { ExplainedRules } from "../coordinators/explained";
 import { HappyRobotCoordinator } from "../coordinators/happyrobot";
 import { readEscalation } from "../escalationFile";
-import { buildSignals, CachedReader, EscalationDesk, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type Call, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
+import { buildSignals, CachedReader, EscalationDesk, type Action, type EscalationRequest, CallObserver, GreedyCoordinator, HumanReader, KeywordReader, makeTickRecord, Simulation, type Call, type NightSignals, type Reader, type Verdict, type Coordinator, type DecideInput, type Decision, type Graph, type RunMeta, type TickRecord } from "../engine";
 import { evaluate, type Finding, type FindingKind } from "../memory/evaluate";
 import { renderDoctrine, type Doctrine } from "./doctrine";
 import { ScriptedMaster, type Scenario } from "./scenario";
@@ -108,6 +108,18 @@ export interface PlayOptions {
   rep?: number;
   /** Also leave the game where the viewers can open it (runs/<id>). */
   traceId?: string;
+  /** How long a tick lasts on the wall clock, the coordinator's thinking included: a traced game can be watched while it is played. */
+  tickMs?: number;
+  /** The live session hands real phone calls to the night being played, and can end it early. */
+  onSim?: (sim: Simulation) => void;
+  signal?: AbortSignal;
+  /**
+   * The live session stops here until an operator has decided on what the escalation desk has just raised. What
+   * comes back is ordered on the next tick, over the coordinator's own orders.
+   */
+  onEscalations?: (raised: EscalationRequest[], tick: number) => Promise<Action[]>;
+  /** Waited on before every tick: the live session holds the night here while something needs the operator first. */
+  gate?: () => Promise<void>;
   onTick?: (tick: number, dead: number) => void;
 }
 
@@ -172,7 +184,11 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
   let calls = 0;
   let fallbacks = 0;
   let thinkingMs = 0;
+  options.onSim?.(sim);
   for (let i = 0; i < scenario.ticks; i++) {
+    await options.gate?.();
+    if (options.signal?.aborted) break;
+    const tickStarted = Date.now();
     const result = await sim.step();
     const d = result.decision;
     if (d && d.source !== "rules") {
@@ -194,6 +210,12 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
     records.push(record);
     options.onTick?.(result.tick, sim.world.victims.filter((v) => v.status === "dead").length);
     if (dir) appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
+    const raised = (record.escalations ?? []).filter((r) => r.closedTick === null);
+    if (raised.length && options.onEscalations && !options.signal?.aborted) for (const order of await options.onEscalations(raised, result.tick)) sim.order(order);
+    if (options.tickMs) await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, Math.max(0, tickStarted + options.tickMs! - Date.now()));
+      options.signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+    });
     result.decision?.applies?.forEach((ids, n) => {
       const action = result.decision!.actions[n];
       for (const ruleId of new Set(ids)) if (known.has(ruleId)) applications.push({ ruleId, incidentId: action.type === "dispatch" ? action.incidentId : null });
