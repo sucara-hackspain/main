@@ -43,6 +43,8 @@ export function createScaleRun(graph: GraphData, count = 2400) {
       victims: [], seenTick: null, seenBy: null, priority: i % 19 === 0 ? 0 : i % 7 === 0 ? 1 : i % 4 === 0 ? 3 : 2,
       unreachable: i % 17 === 0, cutOffIn: i % 29 === 0 ? 0 : null, history: [], foci: [],
       timeline: callIds.map((id) => ({ tick, kind: "call", from: id, callId: id, text: descriptions[i % descriptions.length] })),
+      // Nobody triaged these by phone: the scale demo is made up, not read off the 112 desk.
+      triaged: null,
       line: `Incidencia simulada ${i + 1}`,
     };
   });

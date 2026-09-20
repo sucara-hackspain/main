@@ -22,7 +22,7 @@ const incident = (id: string, extra: Partial<IncidentFrame> = {}): IncidentFrame
   openedTick: 0, updatedTick: 0, node: 0, locationErrorM: 100, located: false, seenTick: null, seenBy: null,
   sceneId: null, callIds: ["L1"], foci: [], victims: [], priority: 0, unreachable: false, history: [], timeline: [],
   mechanism: null, conscious: null, breathing: null, bleeding: null, trapped: null, ageGroup: null, victimsReported: null,
-  line: `${id} · P0`, cutOffIn: null, ...extra,
+  triaged: null, line: `${id} · P0`, cutOffIn: null, ...extra,
 });
 const frame = (units: UnitFrame[], incidents: IncidentFrame[]): Frame => ({
   units, incidents, scenes: [], sites: [], gauges: [], outages: [], outbound: [], floods: [],

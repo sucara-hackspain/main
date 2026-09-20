@@ -152,6 +152,7 @@
 .ticket-step-facts li { padding:2px 6px; border:1px solid var(--sidebar-border); border-radius:4px; background:var(--sidebar); font-size:9px; color:var(--muted-foreground); }
 .ticket-rules { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:7px !important; }
 .ticket-rules code { padding:1px 5px; border:1px solid color-mix(in srgb,var(--info) 25%,var(--border)); border-radius:4px; font-size:9px; color:var(--info-foreground); }
+.ticket-triage-read { display:block; margin-top:5px; font-size:9px; line-height:1.5; color:var(--muted-foreground); text-align:right; }
 .ticket-detail-empty { flex:1; }
 .ticket-detail-empty > span { display:grid; place-items:center; width:56px; height:56px; border:1px solid var(--border); border-radius:14px; background:var(--sidebar); }
 @media (min-width:1600px) { .ticket-detail { width:470px; } }

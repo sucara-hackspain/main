@@ -47,6 +47,9 @@ function entrySource(e: CaseEntry) {
   if (e.from.startsWith("hospital ")) return `Hospital ${e.from.slice(9)}`;
   if (e.from === "reglas") return "Protocolo de triaje";
   if (e.from === "sistema") return "Centro de coordinación";
+  // The 112 desk: the agent that prioritises each call as it comes in, and the one that rings low cases back.
+  if (e.from === "triaje 112") return "Triaje 112 · agente";
+  if (e.from === "seguimiento 112") return "Seguimiento 112 · llamada de vuelta";
   return `Según el aviso ${e.from}`;
 }
 
