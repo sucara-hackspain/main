@@ -8,21 +8,20 @@ La idea central es que **una mejor decisión también depende de conseguir mejor
 
 ## Qué incluye
 
-| Componente | Responsabilidad |
+| Parte | Responsabilidad |
 | --- | --- |
-| [`gabriel/`](gabriel/README.md) | Motor principal: escenarios, inundaciones, víctimas, flota, observación parcial, coordinadores por reglas y por IA, evaluación y memoria. Incluye un visor propio. |
-| [`crisis-observatory/`](crisis-observatory/README.md) | **Alerta · Control Center**: mapa operativo, incidencias, hospitales, historial de decisiones e intervenciones del operador. Lee las ejecuciones del motor principal. |
-| [`backend/`](backend/README.md) | Simulador auxiliar e independiente con CLI y persistencia en `state.json`. No es el servidor del Control Center. |
+| [`observatory/src/engine/`](docs/engine.md) y los agentes (`coordinators/`, `masters/`, `phone/`, `triage/`, `memory/`, `lab/`) | Motor principal: escenarios, inundaciones, víctimas, flota, observación parcial, coordinadores por reglas y por IA, evaluación y memoria. Incluye un visor propio (`observatory/viewer/`). |
+| [`observatory/src/ui/`](observatory/README.md) y `observatory/server/` | **Alerta · Control Center**: incidencias, mapa operativo, hospitales, sala de decisión, políticas de escalado, balance de la noche y modo en vivo. Lee las ejecuciones del motor. |
+| `observatory/src/live.ts` | **Modo en vivo**: la única sesión en marcha, las aprobaciones del operador y el webhook de la línea 112. |
 
-Los tres paquetes se instalan por separado. No existe un `package.json` raíz ni un comando único que arranque todo.
+Todo vive en un solo paquete, `observatory/`: un `package.json`, un lockfile y npm para todo.
 
 ## Arranque rápido: demo local sin credenciales
 
 ### Requisitos
 
-- **Node.js 22.13 o posterior dentro de la rama 22, o Node.js 24.x.** El runner completo y el visor de `gabriel/` utilizan `node:sqlite`; Node 20 no sirve para esos componentes.
-- **npm** para el Control Center y el simulador auxiliar.
-- **pnpm 10** para seguir los comandos de `gabriel/`, que incluye su propio lockfile.
+- **Node.js 22.13 o posterior dentro de la rama 22, o Node.js 24.x.** El runner completo y el visor del motor utilizan `node:sqlite`; Node 20 no sirve para esos componentes.
+- **npm**, que viene con Node. Ya no hace falta pnpm.
 - Conexión para instalar dependencias y cargar las teselas del mapa. El grafo de calles de Valencia ya está incluido.
 
 ### 1. Obtener el repositorio
@@ -37,7 +36,7 @@ Si ya tienes una copia, entra en su carpeta raíz. Si el repositorio requiere ac
 ### 2. Instalar el panel y generar una simulación
 
 ```sh
-cd crisis-observatory
+cd observatory
 npm install
 npm run data:local
 npm run dev
@@ -45,7 +44,7 @@ npm run dev
 
 Abre **http://127.0.0.1:5173/**. Selecciona la ejecución generada y usa **Ir al final** para explorar su estado final, o reproduce su línea temporal.
 
-`data:local` ejecuta el motor de `gabriel/` con el coordinador por reglas, semilla `2` y `120` etapas de 30 segundos: **una hora simulada**. Escribe los datos en `gabriel/runs/`. Esta ruta no requiere instalar el paquete `gabriel/`, configurar HappyRobot ni disponer de Claude CLI; tampoco inicializa la memoria persistente.
+`data:local` ejecuta el motor de `observatory/` con el coordinador por reglas, semilla `2` y `120` etapas de 30 segundos: **una hora simulada**. Escribe los datos en `observatory/runs/`. Esta ruta no requiere instalar el paquete `observatory/`, configurar HappyRobot ni disponer de Claude CLI; tampoco inicializa la memoria persistente.
 
 Para variar el escenario:
 
@@ -156,15 +155,15 @@ En este repositorio se puede inspeccionar y ejecutar:
 Desde la raíz del repositorio:
 
 ```sh
-cd gabriel
-pnpm install --frozen-lockfile
-pnpm run-sim --coordinator greedy --seed 1 --ticks 120
+cd observatory
+npm ci
+npm run run-sim -- --coordinator greedy --seed 1 --ticks 120
 ```
 
-El runner crea una carpeta en `gabriel/runs/` y muestra el resultado en consola. Para seguir una ejecución con más tiempo entre etapas:
+El runner crea una carpeta en `observatory/runs/` y muestra el resultado en consola. Para seguir una ejecución con más tiempo entre etapas:
 
 ```sh
-pnpm run-sim --coordinator greedy --seed 7 --ticks 240 --tick-ms 300
+npm run run-sim -- --coordinator greedy --seed 7 --ticks 240 --tick-ms 300
 ```
 
 `--tick-ms` añade una pausa real entre etapas; cada una sigue representando 30 segundos de simulación.
@@ -172,33 +171,33 @@ pnpm run-sim --coordinator greedy --seed 7 --ticks 240 --tick-ms 300
 En otra terminal, abre uno de los visores:
 
 ```sh
-# Desde la raíz: Control Center
-cd crisis-observatory
+# Control Center
+cd observatory
 npm run dev
 ```
 
 ```sh
-# Desde la raíz: visor del simulador, con la vista de memoria
-cd gabriel
-pnpm ui
+# Visor del simulador, con la vista de memoria
+cd observatory
+npm run viewer
 ```
 
 Ambos usan el puerto `5173` por defecto. Para abrirlos a la vez, arranca el Control Center con `npm run dev -- --port 5174` y deja el visor en `5173`.
 
 ### Usar Claude
 
-Desde `gabriel/`, con Claude CLI instalado y autenticado:
+Desde `observatory/`, con Claude CLI instalado y autenticado:
 
 ```sh
 claude --version
-pnpm run-sim --coordinator claude --model haiku --seed 1 --ticks 120 --no-dream
+npm run run-sim -- --coordinator claude --model haiku --seed 1 --ticks 120 --no-dream
 ```
 
-`--model` selecciona el modelo que admite tu instalación de Claude CLI. `--no-dream` omite la revisión de memoria al terminar. Si ejecutas `pnpm run-sim` sin indicar coordinador, el valor predeterminado es **Claude**, no `greedy`.
+`--model` selecciona el modelo que admite tu instalación de Claude CLI. `--no-dream` omite la revisión de memoria al terminar. Si ejecutas `npm run run-sim` sin indicar coordinador, el valor predeterminado es **Claude**, no `greedy`.
 
 ### Usar HappyRobot
 
-Desde `gabriel/`:
+Desde `observatory/`:
 
 ```sh
 cp .env.example .env
@@ -222,29 +221,46 @@ El workflow de coordinación debe tener un trigger con el campo `data` y un nodo
 El repositorio incluye una herramienta para mantener el nodo alineado con el código:
 
 ```sh
-pnpm hr:sync --dry-run
-pnpm hr:sync
-pnpm run-sim --coordinator happyrobot --seed 1 --ticks 120 --no-dream
+npm run hr:sync -- --dry-run
+npm run hr:sync
+npm run run-sim -- --coordinator happyrobot --seed 1 --ticks 120 --no-dream
 ```
 
 `hr:sync --dry-run` consulta la configuración sin modificarla. **`hr:sync` actualiza el prompt, la entrada y el esquema del nodo y publica la versión del workflow**; no crea el workflow desde cero. El contrato está en `src/coordinators/protocol.ts`: en HappyRobot, `actions` viaja como una cadena que contiene un array JSON.
+
+## Modo en vivo: la demo
+
+Una noche jugándose en directo, con una persona al mando. Dos procesos, en dos terminales, desde `observatory/`:
+
+```sh
+npm run dev      # el Control Center
+npm run live     # la sesión en vivo y el webhook del 112 (:8112 llamadas, :8113 control, solo local)
+```
+
+En el Control Center, **Modo en vivo** → noche, quién coordina (el agente de HappyRobot o las reglas) y ritmo → **Empezar sesión en vivo**. Solo puede haber una sesión a la vez.
+
+- **El operador aprueba.** Cuando salta una política de escalado en vigor, la noche se para hasta que decides; tu orden se ejecuta en el motor y queda en `runs/<sesión>/operator.jsonl`. El catálogo se edita en la pestaña **Políticas de escalado** y rige desde la siguiente sesión.
+- **Llamadas reales al 112.** El workflow de voz de HappyRobot publica cada llamada en `/phone` al colgar (en local, a través de un túnel al 8112). La sesión se para y la llamada toma la pantalla: dónde es, qué dijo la persona y qué sacó el agente de voz. Entra en la noche cuando le das entrada.
+- **Ensayar sin telefonear.** En el panel de Modo en vivo: *Ver cómo se ve una llamada* (sin sesión) o *Simular una llamada ahora* (con la sesión en marcha, por el mismo camino que una real).
+
+Las grabaciones y cualquier otra ejecución solo se miran: no piden nada ni interrumpen.
 
 ## Evaluación, benchmark y memoria
 
 ### Comparar ejecuciones
 
-Desde `gabriel/`, la CLI ligera permite ejecutar varias semillas con la política por reglas:
+Desde `observatory/`, la CLI ligera permite ejecutar varias semillas con la política por reglas:
 
 ```sh
-pnpm sim --seed 1 --ticks 240 --runs 20 --quiet
+npm run sim -- --seed 1 --ticks 240 --runs 20 --quiet
 ```
 
 `sim` utiliza `greedy` y muestra resultados en consola; no genera las trazas que necesitan los visores. Para comparar coordinadores con trazas, usa `run-sim` con el mismo mapa, semilla, duración y recursos:
 
 ```sh
-pnpm run-sim --coordinator greedy --seed 7 --ticks 240
-pnpm run-sim --coordinator claude --model haiku --seed 7 --ticks 240 --no-memory --no-dream
-pnpm run-sim --coordinator happyrobot --seed 7 --ticks 240 --no-memory --no-dream
+npm run run-sim -- --coordinator greedy --seed 7 --ticks 240
+npm run run-sim -- --coordinator claude --model haiku --seed 7 --ticks 240 --no-memory --no-dream
+npm run run-sim -- --coordinator happyrobot --seed 7 --ticks 240 --no-memory --no-dream
 ```
 
 La semilla permite repetir la generación del escenario. Las decisiones del coordinador cambian su evolución y las respuestas de los modelos externos pueden variar. Mantén también fija la memoria si quieres aislar el efecto del coordinador.
@@ -264,20 +280,20 @@ Los coordinadores de IA pueden consultar una doctrina de principios, heurística
 La evaluación posterior puede ver información que el coordinador no tenía durante la ejecución. Este mecanismo modifica la memoria que se incorpora al prompt; **no entrena los pesos del modelo**.
 
 ```sh
-# Desde gabriel/: volver a revisar una ejecución
-pnpm dream <id-de-ejecucion> --dry-run
-pnpm dream <id-de-ejecucion>
+# Volver a revisar una ejecución
+npm run dream -- <id-de-ejecucion> --dry-run
+npm run dream -- <id-de-ejecucion>
 
 # Configurar el nodo del workflow de memoria ya creado
-pnpm hr:sync --dream --dry-run
-pnpm hr:sync --dream
+npm run hr:sync -- --dream --dry-run
+npm run hr:sync -- --dream
 ```
 
 El `--dry-run` de `dream` imprime la entrada que recibiría el modelo, sin llamarlo ni consolidar reglas; sí abre la base de memoria y registra el episodio evaluado. La revisión automática se activa al finalizar las ejecuciones con IA, salvo que se use `--no-dream` o `--no-memory`. Si no hay workflow de memoria configurado, utiliza Claude CLI; también puede recurrir a Claude si falla HappyRobot. El coordinador `greedy` no utiliza la doctrina ni lanza esta revisión por defecto.
 
 ### Archivos generados
 
-| Ruta, relativa a `gabriel/` | Contenido |
+| Ruta, relativa a `observatory/` | Contenido |
 | --- | --- |
 | `runs/<id>/meta.json` | Configuración, coordinador, estado y resumen de la ejecución. |
 | `runs/<id>/ticks.jsonl` | Snapshot, eventos, informes y decisiones de cada etapa. |
@@ -306,82 +322,53 @@ La UI consulta periódicamente estos endpoints. **Play, pausa y la línea tempor
 
 Las intervenciones del operador detectan excepciones y proponen respuestas a partir de los registros. Actualmente las decisiones se guardan en memoria del navegador y **no se envían al motor**. El motor ya expone `Simulation.order()` como punto de extensión para conectar ese control.
 
-El Control Center soporta el contrato actual de unidades e incidentes de `gabriel/`; las grabaciones antiguas con `frame.ambulances` o `patients` se rechazan explícitamente.
+El Control Center soporta el contrato actual de unidades e incidentes de `observatory/`; las grabaciones antiguas con `frame.ambulances` o `patients` se rechazan explícitamente.
 
 ### Build
 
 ```sh
-cd crisis-observatory
+cd observatory
 npm run build
 ```
 
-La salida está en `crisis-observatory/dist/`. Para desplegarla hay que proporcionar también los endpoints de lectura: el build estático y `vite preview` no incluyen el middleware de desarrollo que sirve las ejecuciones.
-
-## Simulador auxiliar de `backend/`
-
-Este módulo permite probar manualmente ambulancias, heridos, cortes y averías. Tiene su propio estado y una escala de aproximadamente un minuto por turno.
-
-```sh
-# Desde la raíz del repositorio
-cd backend
-npm install
-npm run sim -- init -n 4
-npm run sim -- spawn --ttl 8
-npm run sim -- step 5 --master none
-npm run sim -- status
-```
-
-El estado se guarda en `backend/state.json`; `init` inicia una nueva partida. Para usar su master de IA, configura `OPENROUTER_API_KEY` y, opcionalmente, `OPENROUTER_MODEL` en `backend/.env`, partiendo de `.env.example`, y ejecuta `npm run sim -- step 5 --master llm`.
-
-En este módulo el LLM desempeña el papel de **generador de problemas del escenario**; la coordinación de ambulancias se realiza por reglas. Sus datos no alimentan el Control Center.
+La salida está en `observatory/dist/`. Para desplegarla hay que proporcionar también los endpoints de lectura: el build estático y `vite preview` no incluyen el middleware de desarrollo que sirve las ejecuciones.
 
 ## Estructura técnica
 
 ```text
-gabriel/
-├── data/valencia.json          # Grafo viario incluido
-├── src/engine/                # Mundo, simulación, observación, incidentes y rutas
+observatory/
+├── src/engine/                # Mundo, simulación, observación, incidentes, rutas y escalado
 ├── src/coordinators/          # Claude, HappyRobot y contrato de órdenes
+├── src/masters/  src/phone/  src/triage/   # Quien decide la noche, la línea 112 y el triaje
 ├── src/memory/                # SQLite, evaluación y consolidación
+├── src/lab/                   # Noches congeladas, benchmark y entrenamiento de la doctrina
 ├── src/run.ts                 # Runner con trazas y evaluación
+├── src/live.ts                # Modo en vivo: sesión única, aprobaciones y webhook del 112
 ├── src/cli.ts                 # Simulaciones por reglas y múltiples semillas
+├── src/ui/                    # Control Center: incidencias, mapa, decisiones, políticas, balance, en vivo
+├── server/                    # API de lectura, políticas y paso hacia el modo en vivo
+├── viewer/                    # Visor propio del motor y grafo de memoria
 ├── scripts/                   # Descarga de mapas y sincronización de workflows
-├── test/                      # Pruebas del motor y la memoria
-└── ui/                        # Visor propio y grafo de memoria
-crisis-observatory/
-├── src/ui/                    # Mapa, incidencias, situación e intervenciones
-├── server/                    # API de lectura y generador de ejecución local
-├── tests/                     # Pruebas de datos y navegador
+├── tests/                     # Pruebas del motor, de datos y de navegador
+├── data/  lab/  policies/  memory/  runs/   # Callejero, noches, catálogo de escalado, memoria y grabaciones
 └── docs/data-integration.md   # Contrato de integración
-backend/
-├── src/                       # Simulador auxiliar y CLI
-└── data/valencia.json          # Mapa propio del módulo
+deploy/preview/                # El stack del VPS
+docs/engine.md                 # El simulador a fondo
 ```
 
-Para añadir otro coordinador, implementa `Coordinator.decide()`; para introducir otro generador de escenarios, implementa `Master.act()`. La configuración del mundo está en `gabriel/src/engine/engine.ts` y sus contratos en `types.ts`.
+Para añadir otro coordinador, implementa `Coordinator.decide()`; para introducir otro generador de escenarios, implementa `Master.act()`. La configuración del mundo está en `observatory/src/engine/engine.ts` y sus contratos en `types.ts`.
 
 ## Pruebas
 
-Cada bloque se ejecuta desde la raíz del repositorio, después de instalar las dependencias del paquete correspondiente:
+Desde la raíz del repositorio, después de `npm ci` en `observatory/`:
 
 ```sh
-cd gabriel
-pnpm test
-pnpm typecheck
-```
-
-```sh
-cd crisis-observatory
-npm test
-npm run build
-npm run test:gabriel
-npm run test:ui
-```
-
-```sh
-cd backend
-npm test
+cd observatory
+npm test              # modelos de datos del Control Center
+npm run test:engine   # motor, memoria, escalado y coordinadores
 npm run typecheck
+npm run build
+npm run test:ui       # navegador (Playwright)
 ```
 
 Las pruebas de navegador utilizan Playwright con el canal `chrome`, por lo que necesitan Google Chrome instalado. Para utilizar un puerto independiente: `PLAYWRIGHT_PORT=5180 npm run test:ui`. Las pruebas de UI usan escenarios locales y no requieren llamadas a modelos reales.
@@ -390,7 +377,7 @@ Las pruebas de navegador utilizan Playwright con el canal `chrome`, por lo que n
 
 | Síntoma | Qué comprobar |
 | --- | --- |
-| El panel no muestra ejecuciones | Ejecuta `npm run data:local` desde `crisis-observatory/` o `pnpm run-sim` desde `gabriel/`. `pnpm sim` solo imprime resultados. |
+| El panel no muestra ejecuciones | Ejecuta `npm run data:local` o `npm run run-sim` desde `observatory/`. `npm run sim` solo imprime resultados. |
 | Error con `node:sqlite` | Revisa `node --version` y cambia a una versión de Node compatible con los requisitos. |
 | No aparece el mapa de fondo | Comprueba la conexión a las teselas de OpenFreeMap y la consola del navegador. |
 | Error de formato al abrir una ejecución | Genera una nueva grabación: los contratos antiguos no se convierten automáticamente. |
@@ -403,4 +390,4 @@ Las pruebas de navegador utilizan Playwright con el canal `chrome`, por lo que n
 
 Alerta es un prototipo de simulación y experimentación del hackathon. La evolución de víctimas, el agua y los tiempos de operación son modelos simplificados; los resultados describen el comportamiento dentro de ese entorno. La telefonía externa de la presentación y la conexión de las órdenes del operador al motor requieren integración adicional.
 
-Para profundizar: [motor y memoria](gabriel/README.md), [Control Center](crisis-observatory/README.md), [contrato de datos](crisis-observatory/docs/data-integration.md) y [simulador auxiliar](backend/README.md).
+Para profundizar: [motor y memoria](docs/engine.md), [Control Center](observatory/README.md) y [contrato de datos](observatory/docs/data-integration.md).

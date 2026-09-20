@@ -1,11 +1,7 @@
-# The engine (gabriel) and the Control Center (crisis-observatory) in one image: build from the repo root.
+# The whole thing in one image: the simulator and the Control Center are one package now.
 FROM node:22-bookworm-slim
-RUN npm install -g pnpm@10
 WORKDIR /app
-COPY gabriel/package.json gabriel/pnpm-lock.yaml gabriel/
-RUN cd gabriel && pnpm install --frozen-lockfile
-COPY crisis-observatory/package.json crisis-observatory/package-lock.json crisis-observatory/
-RUN cd crisis-observatory && npm ci
-COPY gabriel gabriel
-COPY crisis-observatory crisis-observatory
-RUN cd crisis-observatory && npm run build
+COPY observatory/package.json observatory/package-lock.json observatory/
+RUN cd observatory && npm ci
+COPY observatory observatory
+RUN cd observatory && npm run build
