@@ -1,0 +1,80 @@
+[
+  {
+    "id": "ESC-01",
+    "kind": "stranded",
+    "severity": "critical",
+    "title": "Unidad bloqueada durante una intervención",
+    "body": "Solicitar una decisión humana cuando una unidad quede sin ruta conocida y tenga una víctima a bordo o se dirija a una incidencia abierta."
+  },
+  {
+    "id": "ESC-02",
+    "kind": "unassigned",
+    "severity": "critical",
+    "afterTicks": 3,
+    "title": "Incidencia urgente sin unidad asignada",
+    "body": "Escalar si una incidencia P0 o P1 permanece sin una dotación trabajando en ella durante tres registros consecutivos, pese a existir unidades libres."
+  },
+  {
+    "id": "ESC-03",
+    "kind": "loaded",
+    "severity": "critical",
+    "afterTicks": 2,
+    "title": "Víctima a bordo sin hospital de destino",
+    "body": "Escalar cuando una unidad con una víctima a bordo esté sin misión de traslado durante dos registros consecutivos, sin estar averiada ni bloqueada."
+  },
+  {
+    "id": "ESC-04",
+    "kind": "surge",
+    "severity": "critical",
+    "afterTicks": 3,
+    "minIncidents": 2,
+    "title": "Demanda urgente superior a los recursos disponibles",
+    "body": "Pedir una decisión humana cuando dos o más incidencias P0 o P1 estén sin atender y no haya unidades libres durante tres registros consecutivos."
+  },
+  {
+    "id": "ESC-05",
+    "kind": "fallback",
+    "severity": "warning",
+    "title": "El agente deja de estar disponible",
+    "body": "Escalar cuando el coordinador recurra al sistema de reglas de respaldo por un fallo de la IA. Mostrar el error registrado para que el operador revise la continuidad de la respuesta."
+  },
+  {
+    "id": "ESC-06",
+    "kind": "rejected",
+    "severity": "warning",
+    "title": "Una orden no puede ejecutarse",
+    "body": "Solicitar revisión humana cuando el motor rechace una orden. Presentar la acción propuesta, la unidad afectada y el motivo del rechazo."
+  },
+  {
+    "id": "ESC-07",
+    "kind": "unreachable",
+    "severity": "critical",
+    "afterTicks": 3,
+    "title": "Incidencia urgente que solo alcanzan el agua o el aire",
+    "body": "Escalar cuando una incidencia P0 o P1 sin ruta por carretera, o ya aislada por el agua, siga tres registros sin rescate acuático ni helicóptero trabajando en ella."
+  },
+  {
+    "id": "ESC-08",
+    "kind": "cutoff",
+    "severity": "critical",
+    "afterTicks": 3,
+    "withinTicks": 20,
+    "title": "El agua va a aislar una incidencia sin unidad",
+    "body": "Pedir una decisión cuando la previsión del agua deje menos de veinte registros de acceso a una incidencia abierta y nadie vaya de camino durante tres registros."
+  },
+  {
+    "id": "ESC-09",
+    "kind": "water",
+    "severity": "warning",
+    "afterTicks": 3,
+    "title": "Zonas menos urgentes aisladas sin unidad acuática",
+    "body": "Escalar una sola vez, como decisión de reparto, cuando queden incidencias P2 o P3 aisladas por el agua sin rescate acuático ni helicóptero durante tres registros."
+  },
+  {
+    "id": "ESC-10",
+    "kind": "not_found",
+    "severity": "warning",
+    "title": "La dotación no encuentra a nadie",
+    "body": "Solicitar revisión humana cuando una dotación llegue al lugar indicado por los avisos y no haya nadie, con la incidencia todavía abierta."
+  }
+]

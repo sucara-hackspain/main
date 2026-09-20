@@ -1,6 +1,8 @@
 import {
   elapsed,
   isFree,
+  type EscalationKind,
+  type EscalationRequest,
   sceneLabel,
   unitKind,
   UNIT_KINDS,
@@ -14,47 +16,31 @@ import {
 import { actionText } from "../audit/model";
 import type { Router } from "./routing";
 
-// Exceptions the system leaves open and a person should decide on, derived from the records
-// already received. interventionsAt() hides what later records say about how each one ended.
+// Exceptions the system leaves open and a person should decide on. The engine's escalation desk
+// decides which ones those are, from the catalogue in gabriel/policies/escalation.json, and writes
+// them into each record; detectInterventions() below reads runs recorded before that existed.
+// interventionsAt() hides what later records say about how each one ended.
 
-export type InterventionKind =
-  /** A unit with no known way to its incident, or stuck with a victim on board. */
-  | "stranded"
-  /** No road gets there, or the water has already cut it off, and no water or air unit is on it. */
-  | "unreachable"
-  /** The water is about to cut the place off and nobody is on the way. */
-  | "cutoff"
-  /** A P0/P1 incident waits while units are free. */
-  | "unassigned"
-  /** A victim on board and no hospital to go to. */
-  | "loaded"
-  /** Several urgent incidents and no unit left. */
-  | "surge"
-  /** Less urgent places the water has cut off, waiting for a water or air unit: one resource question. */
-  | "water"
-  /** A crew found nobody where the callers said. */
-  | "not_found"
-  | "fallback"
-  | "rejected";
+/** The exceptions the escalation catalogue covers: the engine's vocabulary, one word each. */
+export type InterventionKind = EscalationKind;
 
-export type Intervention = {
-  id: string;
-  kind: InterventionKind;
-  severity: "critical" | "warning";
-  openedTick: number;
-  /** First tick where the records show the situation is over. null = still open in the last record. */
-  closedTick: number | null;
-  /** How the records closed it, without operator input. */
-  outcome: string | null;
-  title: string;
-  incidentId: string | null;
-  /** The blocked, loaded or searching unit. */
-  units: string[];
-  /** Victim on board, for stranded or loaded units. */
-  victimId: string | null;
-  /** Evidence captured from the record that opened it. */
-  note?: string;
-};
+/** A request as the operator works with it. From the engine it carries the policy that raised it. */
+export type Intervention = Omit<EscalationRequest, "policyId"> & { policyId?: string };
+
+/**
+ * What the engine's escalation desk raised, as of the records received: each request in the state its
+ * last record left it. Null for runs recorded before the desk existed, which are read the old way.
+ */
+export function escalationsFrom(records: TickRecord[]): Intervention[] | null {
+  const byId = new Map<string, Intervention>();
+  let desk = false;
+  for (const record of records) {
+    if (!record.escalations) continue;
+    desk = true;
+    for (const request of record.escalations) byId.set(request.id, { ...request });
+  }
+  return desk ? [...byId.values()] : null;
+}
 
 export type Option = {
   id: string;

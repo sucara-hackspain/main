@@ -4,9 +4,9 @@
 
 `/escalation-policies` is the human-authored catalog defining when the AI should request an operator decision through the full-screen alert. Each draft has a stable ID, title, trigger category, condition text and alert severity. CRUD, soft deletion, restoration, text search and semantic search operate on this catalog.
 
-Drafts persist in browser localStorage under `crisis-escalation-policies-v1`. Six initial examples are based on existing triggers in `interventions/model.ts`. They are explicitly marked as drafts: saving does not change the intervention detector, call an AI service or update backend memory. Connecting authored conditions to runtime escalation is still pending.
+The catalogue is the engine's: `gabriel/policies/escalation.json`, read and written through `GET`/`PUT /api/policies`. The engine's escalation desk applies it at the end of every tick, so saving a policy changes what the next run escalates; alerts cite the policy that raised them and each recording keeps the catalogue it ran under in `meta.json`. A policy carries the thresholds the desk applies (`afterTicks`, `withinTicks`, `minIncidents`), a switch (`enabled`) and one of the ten situations the engine knows how to recognise; a condition the engine cannot detect cannot be authored here.
 
-The old `crisis-policies-v1` data is preserved but never loaded or migrated into escalation rules. This avoids treating prior coordination edits as human escalation instructions. IDs remain reserved after deletion and conflicting cross-tab writes are rejected.
+Nothing is kept in browser storage any more: the old `crisis-policies-v1` and `crisis-escalation-policies-v1` keys are ignored, so prior coordination edits are never treated as escalation instructions. IDs remain reserved after deletion, an invalid catalogue is refused with the reason, and a policy edited elsewhere since the editor opened it is not overwritten.
 
 ## Read-only coordination policies
 

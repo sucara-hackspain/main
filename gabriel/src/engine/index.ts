@@ -15,6 +15,7 @@ export * from "./signals";
 export * from "./reading";
 export * from "./water";
 export * from "./coordinator";
+export * from "./escalation";
 export * from "./sim";
 export * from "./describe";
 export * from "./briefing";

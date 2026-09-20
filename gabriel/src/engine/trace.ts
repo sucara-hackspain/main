@@ -3,6 +3,7 @@ import { unitLonLat, summarize, type Summary } from "./engine";
 import type { Graph } from "./graph";
 import { FLOOD_FRINGE_M } from "./engine";
 import { incidentLine } from "./incidents";
+import type { EscalationDesk, EscalationPolicy, EscalationRequest } from "./escalation";
 import { PRESS_EVERY_TICKS, pressNote, type PressNote } from "./press";
 import type { LeadDesk, ReadMessage } from "./reading";
 import { infoGaps } from "./recon";
@@ -26,6 +27,8 @@ export interface RunMeta {
   startedAt: string;
   status: "running" | "finished" | "failed";
   summary: Summary | null;
+  /** The escalation catalogue in force for this run: what the operator was asked about, and why. */
+  escalation?: EscalationPolicy[];
 }
 
 export interface UnitFrame {
@@ -120,6 +123,8 @@ export interface TickRecord {
   decision?: Omit<Decision, "actions">;
   /** The public statement put out this tick, if it was time for one. */
   press?: PressNote;
+  /** Exceptions the escalation desk opened or closed on this tick, each naming its policy. */
+  escalations?: EscalationRequest[];
 }
 
 const RECENT_TICKS = 20;
@@ -201,7 +206,7 @@ function unchanged(belief: Belief, i: Incident): boolean {
   return same;
 }
 
-export function makeTickRecord(result: TickResult, world: World, belief: Belief, graph: Graph, desk: LeadDesk | null = null): TickRecord {
+export function makeTickRecord(result: TickResult, world: World, belief: Belief, graph: Graph, desk: LeadDesk | null = null, escalation: EscalationDesk | null = null): TickRecord {
   const calls = result.reports.flatMap((r) => (r.event.type === "call_received" ? [r.event.call] : []));
   const record: TickRecord = {
     tick: result.tick,
@@ -221,6 +226,9 @@ export function makeTickRecord(result: TickResult, world: World, belief: Belief,
     calls,
     actions: result.actions,
   };
+  // The desk reads the same picture the coordinator had, once the tick is closed.
+  const raised = escalation?.review({ tick: result.tick, frame: record.frame, events: record.events, decisionSource: result.decision?.source, decisionError: result.decision?.error });
+  if (raised?.length) record.escalations = raised;
   if (result.tick > 0 && result.tick % PRESS_EVERY_TICKS === 0) record.press = pressNote(belief, graph, world.config, desk ? { received: desk.stats.received, leads: desk.leads.length } : null);
   if (result.decision) {
     const { actions: _actions, ...why } = result.decision;

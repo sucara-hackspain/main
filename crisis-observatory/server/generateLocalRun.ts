@@ -1,7 +1,8 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DanaMaster, Graph, GreedyCoordinator, makeTickRecord, Simulation, type GraphData, type RunMeta } from "../../gabriel/src/engine";
+import { DanaMaster, EscalationDesk, Graph, GreedyCoordinator, makeTickRecord, Simulation, type GraphData, type RunMeta } from "../../gabriel/src/engine";
+import { readEscalation } from "../../gabriel/src/escalationFile";
 
 // A reproducible UI recording using the real engine, without external agents or long-term memory.
 const engineRoot = fileURLToPath(new URL("../../gabriel/", import.meta.url));
@@ -12,8 +13,11 @@ const graph = new Graph(JSON.parse(readFileSync(resolve(engineRoot, "data/valenc
 const sim = new Simulation({ graph, seed, master: new DanaMaster(), coordinator: new GreedyCoordinator() });
 const dir = resolve(engineRoot, "runs", id);
 mkdirSync(dir, { recursive: true });
+// The same escalation catalogue the engine applies in a traced run, read from gabriel/policies/.
+const escalation = readEscalation(resolve(engineRoot, "policies/escalation.json"));
+const escalations = new EscalationDesk(escalation);
 const meta: RunMeta = {
-  id, map: "valencia", seed, ticks, coordinator: "greedy", model: null, startedAt,
+  id, map: "valencia", seed, ticks, coordinator: "greedy", model: null, startedAt, escalation,
   config: sim.world.config,
   hospitals: sim.world.hospitals.map(({ id, name, node, capacity, helipad }) => ({ id, name, node, capacity, helipad })),
   status: "running", summary: null,
@@ -24,7 +28,7 @@ saveMeta();
 try {
   for (let i = 0; i < ticks; i++) {
     const result = await sim.step();
-    appendFileSync(resolve(dir, "ticks.jsonl"), JSON.stringify(makeTickRecord(result, sim.world, sim.belief, graph)) + "\n");
+    appendFileSync(resolve(dir, "ticks.jsonl"), JSON.stringify(makeTickRecord(result, sim.world, sim.belief, graph, null, escalations)) + "\n");
   }
   meta.status = "finished";
 } catch (error) {

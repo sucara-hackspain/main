@@ -9,6 +9,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { ClaudeCliCoordinator } from "./coordinators/claude-cli";
+import { escalationDesk, ESCALATION_FILE, readEscalation } from "./escalationFile";
 import { consolidate, exportMemory, recordEpisode } from "./memory/consolidate";
 import { buildDreamInput } from "./memory/dream-protocol";
 import { pickDreamers } from "./memory/dreamers";
@@ -43,6 +44,8 @@ const { values } = parseArgs({
     seed: { type: "string", default: "1" },
     ticks: { type: "string", default: "120" },
     ambulances: { type: "string", default: "5" },
+    /** The escalation catalogue to apply: when the coordinator has to stop and ask a person. */
+    policies: { type: "string", default: ESCALATION_FILE },
     coordinator: { type: "string", default: "claude" },
     /** Ticks between the HappyRobot coordinator's decisions (each is taken in the background, ~20 s). */
     "decide-every": { type: "string", default: "6" },
@@ -160,6 +163,11 @@ const sim = new Simulation({
   config: { ambulances: Number(values.ambulances) },
 });
 
+// What has to reach a person, as the catalogue says today: recorded with the run, so an alert can
+// always be read against the policy that asked for it.
+const escalation = readEscalation(values.policies, log);
+const escalations = escalationDesk(escalation);
+
 const meta: RunMeta = {
   id,
   map: values.map,
@@ -172,6 +180,7 @@ const meta: RunMeta = {
   startedAt: new Date().toISOString(),
   status: "running",
   summary: null,
+  escalation,
 };
 const saveMeta = () => writeFileSync(`${dir}/meta.json`, JSON.stringify(meta, null, 2));
 saveMeta();
@@ -201,7 +210,7 @@ const records: TickRecord[] = [];
 try {
   for (let i = 0; i < ticks; i++) {
     const result = await sim.step();
-    const record = makeTickRecord(result, sim.world, sim.belief, graph, sim.desk);
+    const record = makeTickRecord(result, sim.world, sim.belief, graph, sim.desk, escalations);
     appendFileSync(`${dir}/ticks.jsonl`, JSON.stringify(record) + "\n");
     records.push(record);
     result.decision?.applies?.forEach((ids, i) => {

@@ -117,6 +117,12 @@ export default function DecisionRoom({
             <ShieldAlert size={15} />
             {item.severity === "critical" ? "Decisión requerida" : "Supervisión requerida"}
           </span>
+          {/* Which policy asked for this: the operator can open it and change when it happens again. */}
+          {item.policyId && (
+            <a className="decision-policy" href={`/escalation-policies#${item.policyId}`} target="_blank" rel="noreferrer">
+              Política {item.policyId}
+            </a>
+          )}
           {pending.length > 1 && (
             <span className="decision-pager">
               <button
