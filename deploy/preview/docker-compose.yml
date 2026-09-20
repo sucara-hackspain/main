@@ -8,7 +8,8 @@ services:
     build: { context: ../.., dockerfile: deploy/preview/Dockerfile }
     image: hackspain-sim:latest
     working_dir: /app/gabriel
-    command: ["sh", "-c", "while true; do node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 1200 --tick-ms 2000 --no-dream; sleep 10; done"]
+    # Night after night; before each one, only the twelve newest runs are kept (a night is tens of megabytes).
+    command: ["sh", "-c", "while true; do ls -td runs/*/ 2>/dev/null | tail -n +13 | xargs -r rm -rf; node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 180 --tick-ms 2000 --no-dream; sleep 10; done"]
     volumes:
       - /opt/hackspain/runs:/app/gabriel/runs
       - /opt/hackspain/memory:/app/gabriel/memory
@@ -17,7 +18,9 @@ services:
     restart: unless-stopped
     labels:
       caddy: hackspain.eighteen.sh
-      caddy.1_handle: /phone*
+      # The two webhooks of the voice workflows, open; everything else goes to the viewer, behind its password.
+      caddy.@hooks.path: /phone* /followup*
+      caddy.1_handle: "@hooks"
       caddy.1_handle.reverse_proxy: "{{upstreams 8112}}"
   ui:
     image: hackspain-sim:latest

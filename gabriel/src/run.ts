@@ -200,7 +200,7 @@ const takeCall = (call: PhoneCall, via: string) => {
 const phoneError = (error: string) => log(`TELÉFONO 112: ${error}`);
 const phoneLine = values.phone ? new HappyRobotPhoneLine({ sinceMinutes: Number(values["phone-since"]), onCall: (call, runId) => takeCall(call, `sondeo ${runId}`), onError: phoneError }) : null;
 const phonePort = Number(values["phone-port"]);
-const phoneHook = values.phone && phonePort > 0 ? startPhoneWebhook({ port: phonePort, onCall: (call) => takeCall(call, "webhook"), onPing: () => [0, 2000, 5000].forEach((ms) => setTimeout(() => void phoneLine?.poll(), ms)), onError: phoneError }) : null;
+const phoneHook = values.phone && phonePort > 0 ? startPhoneWebhook({ port: phonePort, onCall: (call) => takeCall(call, "webhook"), onPing: () => [0, 2000, 5000].forEach((ms) => setTimeout(() => void phoneLine?.poll(), ms)), onError: phoneError, onFollowup: (post) => log(`SEGUIMIENTO 112 (webhook): parte de ${String(post.callId ?? "?")}, ${String(post.callStatus ?? "")}; se toma del run`) }) : null;
 phoneLine?.start();
 if (phoneLine) log(`TELÉFONO 112: línea abierta${phoneHook ? `, webhook en http://localhost:${phonePort}/phone` : ""}`);
 
