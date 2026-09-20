@@ -3,13 +3,18 @@ import type { Action } from "../engineTrace";
 
 // The live mode as the page sees it: one session at a time, played by the engine's live server (gabriel: pnpm live).
 
+/** What the live session is stopped on: a request of the escalation desk, or a real call that has just come in. */
+export type LiveAwaited =
+  | { type: "escalation"; id: string; policyId: string; title: string; incidentId: string | null; since: string }
+  | { type: "call"; id: string; policyId: "112"; title: string; incidentId: null; since: string; street: string | null; text: string; via: string };
+
 export interface LiveSession {
   id: string; night: string; title: string; coordinator: "hr" | "reglas"; attention: string; tickMs: number;
   tick: number; ticks: number; dead: number; startedAt: string; stopping: boolean;
   /** The night stops on every escalation until the operator decides. */
   approvals: boolean;
   /** What it is stopped on right now. */
-  awaiting: { id: string; policyId: string; title: string; incidentId: string | null; since: string }[];
+  awaiting: LiveAwaited[];
 }
 
 export interface LiveState {
@@ -43,7 +48,7 @@ export function useLive() {
     state,
     start: (options: { night: string; coordinator: "hr" | "reglas"; tickMs: number; approvals: boolean }) => call("start", options),
     stop: () => call("stop", {}),
-    decide: (decision: { id: string; optionId?: string; label: string; approved?: boolean; action?: Action }) => call("decision", decision),
+    decide: (decision: { id: string; optionId?: string; label: string; approved?: boolean; action?: Action; accept?: boolean }) => call("decision", decision),
   };
 }
 export type Live = ReturnType<typeof useLive>;

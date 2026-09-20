@@ -118,6 +118,8 @@ export interface PlayOptions {
    * comes back is ordered on the next tick, over the coordinator's own orders.
    */
   onEscalations?: (raised: EscalationRequest[], tick: number) => Promise<Action[]>;
+  /** Waited on before every tick: the live session holds the night here while something needs the operator first. */
+  gate?: () => Promise<void>;
   onTick?: (tick: number, dead: number) => void;
 }
 
@@ -184,6 +186,7 @@ export async function play(scenario: Scenario, policy: Policy, graph: Graph, opt
   let thinkingMs = 0;
   options.onSim?.(sim);
   for (let i = 0; i < scenario.ticks; i++) {
+    await options.gate?.();
     if (options.signal?.aborted) break;
     const tickStarted = Date.now();
     const result = await sim.step();

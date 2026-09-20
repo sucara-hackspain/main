@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Layers,
   Map as MapIcon,
+  ShieldAlert,
   Pause,
   Play,
   Radio,
@@ -25,7 +26,9 @@ import "@fontsource-variable/geist-mono";
 import "../theme.css";
 import "./control-center.css";
 import "./session.css";
+import LiveCallAlert from "./live/LiveCallAlert";
 import LiveControl from "./live/LiveControl";
+import EscalationPoliciesPage from "./evidence/EscalationPoliciesPage";
 import { useLive } from "./live/useLive";
 import SituationSidebar from "./situation/SituationSidebar";
 import EntityCard from "./situation/EntityCard";
@@ -107,7 +110,7 @@ function RunSession({
     [follow, setFollow] = useState(false),
     [speed, setSpeed] = useState(2),
     // Incidents first: the operator starts from what is happening, then goes to the territory.
-    [view, setView] = useState<"map" | "tickets">("tickets"),
+    [view, setView] = useState<"map" | "tickets" | "policies">("tickets"),
     [ticketId, setTicketId] = useState<string | null>(null),
     [ticketFilter, setTicketFilter] = useState<TicketState | "all">("all"),
     [ticketQuery, setTicketQuery] = useState(""),
@@ -134,6 +137,8 @@ function RunSession({
   const live = useLive();
   const liveSession = live.state?.live?.id === id ? live.state.live : null;
   const awaited = useMemo(() => new Set((liveSession?.awaiting ?? []).map((r) => r.id)), [liveSession]);
+  // A real call stops the live session whatever is on screen, so it is shown whatever run is being looked at.
+  const ringing = useMemo(() => (live.state?.live?.awaiting ?? []).flatMap((a) => (a.type === "call" ? [a] : [])), [live.state]);
   const pending = useMemo(() => (awaited.size ? interventions.pending.filter((p) => awaited.has(p.item.id)) : NO_PENDING), [interventions.pending, awaited]);
   const sound = useAlertSound();
   const { chime } = sound;
@@ -337,6 +342,10 @@ function RunSession({
               <MapIcon size={14} />
               Territorio
             </button>
+            <button aria-pressed={view === "policies"} className={view === "policies" ? "is-active" : ""} onClick={() => setView("policies")}>
+              <ShieldAlert size={14} />
+              Políticas de escalado
+            </button>
           </div>
           <LiveControl live={live} runId={id} seconds={seconds} onWatch={onRun} />
           {current && (
@@ -376,7 +385,7 @@ function RunSession({
             {ticks.length > 0 && "Se conserva el último registro recibido."}
           </div>
         )}
-        {view !== "tickets" && <div className="app-scope">
+        {view === "map" && <div className="app-scope">
           <div>
             <button
               className={!selection && !filtered ? "is-active" : ""}
@@ -409,6 +418,8 @@ function RunSession({
                 ? "No hay registros compatibles disponibles."
                 : "Esperando el primer registro de actividad…"}
             </div>
+          ) : view === "policies" ? (
+            <div className="app-policies"><EscalationPoliciesPage /></div>
           ) : view === "tickets" ? (
             <TicketsView tickets={tickets} selected={selectedTicket?.id ?? null} onSelect={setTicketId}
               filter={ticketFilter} onFilter={setTicketFilter} query={ticketQuery} onQuery={setTicketQuery}
@@ -543,7 +554,8 @@ function RunSession({
           </div>
         </div>
       </section>
-      <div className="app-sidebar-slot" inert={blocked}>
+      <LiveCallAlert live={live} calls={ringing} onRing={sound.chime} />
+      {view !== "policies" && <div className="app-sidebar-slot" inert={blocked}>
         {view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
           onLocate={locateTicket} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} /> : <SituationSidebar
           id={id}
@@ -570,7 +582,7 @@ function RunSession({
           records={ticks.length}
           error={!!(error || listError)}
         />}
-      </div>
+      </div>}
       {room}
       {receipt && (
         <DecisionReceipt

@@ -62,7 +62,9 @@ export default function LiveControl({ live: api, runId, seconds, onWatch }: { li
               {waiting.length > 0 && <section className="live-waiting">
                 <h4><Hand size={12} />La sesión está parada: espera tu decisión</h4>
                 {waiting.map((w) => <p key={w.id}><span><b>{w.policyId}</b> · {w.title}{w.incidentId ? ` · ${w.incidentId}` : ""}</span>
-                  <button disabled={busy} title="Seguir sin dar ninguna orden" onClick={() => void api.decide({ id: w.id, label: "Continuar sin cambios", approved: false })}>Continuar sin cambios</button></p>)}
+                  {w.type === "call"
+                    ? <button disabled={busy} onClick={() => void api.decide({ id: w.id, label: "Dar entrada a la llamada", accept: true })}>Dar entrada</button>
+                    : <button disabled={busy} title="Seguir sin dar ninguna orden" onClick={() => void api.decide({ id: w.id, label: "Continuar sin cambios", approved: false })}>Continuar sin cambios</button>}</p>)}
                 <p className="live-muted">Decide en la bandeja de Intervenciones; o sigue sin cambios desde aquí.</p>
               </section>}
               <p className="live-muted">Registro {live.tick} de {live.ticks} · {live.dead} fallecidos hasta ahora{live.stopping ? " · parando…" : ""}</p>

@@ -39,10 +39,15 @@ interface Live {
   abort: AbortController;
   /** In the live mode an escalation stops the night until the operator has decided on it. */
   approvals: boolean;
-  awaiting: (EscalationRequest & { since: string })[];
+  awaiting: Awaited[];
   decided: Action[];
-  resume: (() => void) | null;
+  /** Whoever is stopped until nothing is awaited: the night itself, at most twice (before a tick, after an escalation). */
+  waiters: (() => void)[];
 }
+/** What the session is stopped on: a request of the escalation desk, or a real 112 call that has just come in. */
+type Awaited =
+  | (EscalationRequest & { type: "escalation"; since: string })
+  | { type: "call"; id: string; policyId: "112"; title: string; incidentId: null; since: string; call: PhoneCall; via: string };
 let live: Live | null = null;
 let last: { id: string; endedAt: string; dead: number; victims: number; stopped: boolean; error: string | null } | null = null;
 const calls: { at: string; street: string | null; text: string; via: string; session: string | null }[] = [];
@@ -67,7 +72,11 @@ function takeCall(call: PhoneCall, via: string) {
   heard.add(key);
   calls.unshift({ at: new Date().toISOString(), street: call.street, text: call.text, via, session: live?.id ?? null });
   calls.splice(30);
-  if (live?.sim) {
+  if (live?.sim && live.approvals) {
+    // A real person has just phoned: the night stops until the operator has looked at the call.
+    live.awaiting.push({ type: "call", id: `call:${Date.now()}`, policyId: "112", title: `Llamada real al 112${call.street ? ` · ${call.street}` : ""}`, incidentId: null, since: new Date().toISOString(), call, via });
+    log(`112: llamada real (${via}) → ${live.id} se para y espera al operador · ${call.street ?? "sin calle"} · ${call.text}`);
+  } else if (live?.sim) {
     live.sim.phone(call);
     log(`112: llamada real (${via}) → ${live.id} · ${call.street ?? "sin calle"} · ${call.text}`);
   } else {
@@ -101,10 +110,10 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
   const session: Live = {
     id: `live-${stamp}-${night.id}-${coordinator}`, night: night.id, title: night.title, coordinator, attention, tickMs,
     ticks: night.ticks, tick: 0, dead: 0, startedAt: new Date().toISOString(), sim: null, abort: new AbortController(),
-    approvals: body.approvals !== false, awaiting: [], decided: [], resume: null,
+    approvals: body.approvals !== false, awaiting: [], decided: [], waiters: [],
   };
   // Stopping the session also ends any wait for the operator.
-  session.abort.signal.addEventListener("abort", () => session.resume?.(), { once: true });
+  session.abort.signal.addEventListener("abort", () => release(session, true), { once: true });
   live = session;
   const policy: Policy = coordinator === "hr" ? { kind: "agent", doctrine: { rules: [] }, harness: "plan" } : { kind: "registry" };
   log(`EN VIVO: empieza ${session.id} (${night.title}) · ${coordinator === "hr" ? "coordina el agente de HappyRobot" : "coordinan las reglas"} · ${tickMs / 1000} s por tick`);
@@ -114,23 +123,23 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
     tickMs,
     signal: session.abort.signal,
     onTick: (tick, dead) => { session.tick = tick; session.dead = dead; },
-    onEscalations: session.approvals ? (raised, tick) => {
+    gate: () => settled(session),
+    onEscalations: session.approvals ? async (raised, tick) => {
       session.tick = tick;
-      session.awaiting.push(...raised.map((r) => ({ ...r, since: new Date().toISOString() })));
+      session.awaiting.push(...raised.map((r) => ({ ...r, type: "escalation" as const, since: new Date().toISOString() })));
       for (const r of raised) log(`OPERADOR: ${session.id} espera una decisión · ${r.policyId} · ${r.title}${r.incidentId ? ` · ${r.incidentId}` : ""}`);
-      return new Promise<Action[]>((resolve) => {
-        session.resume = () => {
-          session.resume = null;
-          session.awaiting = [];
-          resolve(session.decided.splice(0));
-        };
-      });
+      await settled(session);
+      return session.decided.splice(0);
     } : undefined,
     onSim: (sim) => {
       session.sim = sim;
       const fresh = waiting.filter((w) => Date.now() - w.at <= CALL_WAITS_MS);
       waiting = [];
-      for (const w of fresh) { sim.phone(w.call); log(`112: entra en ${session.id} una llamada que estaba esperando · ${w.call.street ?? "sin calle"}`); }
+      for (const w of fresh) {
+        if (session.approvals) session.awaiting.push({ type: "call", id: `call:${w.at}`, policyId: "112", title: `Llamada real al 112${w.call.street ? ` · ${w.call.street}` : ""}`, incidentId: null, since: new Date().toISOString(), call: w.call, via: "en espera" });
+        else sim.phone(w.call);
+        log(`112: ${session.approvals ? "espera al operador en" : "entra en"} ${session.id} una llamada que había llegado sin sesión · ${w.call.street ?? "sin calle"}`);
+      }
     },
   })
     .then((game) => {
@@ -147,22 +156,41 @@ function start(body: { night?: string; coordinator?: string; tickMs?: number; at
   return { status: 200, body: view() };
 }
 
-function decide(body: { id?: string; optionId?: string; label?: string; action?: Action; approved?: boolean }): { status: number; body: unknown } {
+/** Resolves once the session is waiting on nothing (or has been stopped). */
+function settled(session: Live): Promise<void> {
+  return new Promise((resolve) => (session.awaiting.length === 0 || session.abort.signal.aborted ? resolve() : session.waiters.push(resolve)));
+}
+function release(session: Live, force = false) {
+  if (!force && session.awaiting.length) return;
+  if (force) session.awaiting = [];
+  for (const go of session.waiters.splice(0)) go();
+}
+
+function decide(body: { id?: string; optionId?: string; label?: string; action?: Action; approved?: boolean; accept?: boolean }): { status: number; body: unknown } {
   const session = live;
   const request = session?.awaiting.find((r) => r.id === body.id);
   if (!session || !request) return { status: 409, body: { error: "La sesión en vivo no está esperando esa decisión.", ...view() } };
   session.awaiting = session.awaiting.filter((r) => r !== request);
+  if (request.type === "call") {
+    // The operator takes the call in, or sets it aside: only then does the night go on.
+    const accept = body.accept !== false;
+    if (accept) session.sim?.phone(request.call);
+    appendFileSync(`runs/${session.id}/operator.jsonl`, JSON.stringify({ at: new Date().toISOString(), tick: session.tick, requestId: request.id, kind: "call", accepted: accept, street: request.call.street, text: request.call.text, waitedMs: Date.now() - Date.parse(request.since) }) + "\n");
+    log(`OPERADOR: ${accept ? "da entrada a" : "descarta"} la llamada real · ${request.call.street ?? "sin calle"}`);
+    release(session);
+    return { status: 200, body: view() };
+  }
   if (body.action) session.decided.push(body.action);
   const decision = { at: new Date().toISOString(), tick: session.tick, requestId: request.id, policyId: request.policyId, kind: request.kind, incidentId: request.incidentId, optionId: body.optionId ?? null, label: body.label ?? null, approved: body.approved ?? null, action: body.action ?? null, waitedMs: Date.now() - Date.parse(request.since) };
   appendFileSync(`runs/${session.id}/operator.jsonl`, JSON.stringify(decision) + "\n");
   log(`OPERADOR: decide «${body.label ?? "continuar"}» sobre ${request.policyId}${request.incidentId ? ` · ${request.incidentId}` : ""}${body.action ? ` → ${JSON.stringify(body.action)}` : ""}`);
-  if (session.awaiting.length === 0) session.resume?.();
+  release(session);
   return { status: 200, body: view() };
 }
 
 function view() {
   return {
-    live: live && { id: live.id, night: live.night, title: live.title, coordinator: live.coordinator, attention: live.attention, tickMs: live.tickMs, tick: live.tick, ticks: live.ticks, dead: live.dead, startedAt: live.startedAt, stopping: live.abort.signal.aborted, approvals: live.approvals, awaiting: live.awaiting },
+    live: live && { id: live.id, night: live.night, title: live.title, coordinator: live.coordinator, attention: live.attention, tickMs: live.tickMs, tick: live.tick, ticks: live.ticks, dead: live.dead, startedAt: live.startedAt, stopping: live.abort.signal.aborted, approvals: live.approvals, awaiting: live.awaiting.map((a) => (a.type === "call" ? { type: a.type, id: a.id, policyId: a.policyId, title: a.title, incidentId: null, since: a.since, street: a.call.street, text: a.call.text, via: a.via } : a)) },
     last,
     nights: nights.map((n) => ({ id: n.id, title: n.title, family: n.family, ticks: n.ticks, victims: n.stats.victims, read: existsSync(`${READINGS_DIR}/${n.id}.json`) })),
     agent: Boolean(process.env.HAPPYROBOT_API_KEY),
