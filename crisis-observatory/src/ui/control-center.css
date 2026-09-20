@@ -20,8 +20,8 @@
 .app-toolbar { padding:16px 24px 0; display:flex; justify-content:space-between; align-items:center; gap:12px; }
 .app-toolbar > a { display:flex; gap:4px; align-items:center; color:var(--muted-foreground); font-size:12px; text-decoration:none; white-space:nowrap; }
 .app-toolbar > a:hover { color:var(--foreground); }
-.app-tabs { display:flex; gap:2px; min-width:0; max-width:100%; overflow-x:auto; scrollbar-width:thin; background:var(--muted); padding:1px; border-radius:var(--radius-lg); height:28px; }
-.app-tabs button { display:flex; flex-shrink:0; align-items:center; gap:6px; padding:0 7px; border:1px solid transparent; border-radius:var(--radius-md); color:var(--muted-foreground); font-size:12px; font-weight:500; white-space:nowrap; }
+.app-tabs { display:flex; gap:2px; background:var(--muted); padding:1px; border-radius:var(--radius-lg); height:28px; }
+.app-tabs button { display:flex; align-items:center; gap:6px; padding:0 7px; border:1px solid transparent; border-radius:var(--radius-md); color:var(--muted-foreground); font-size:12px; font-weight:500; white-space:nowrap; }
 .app-tabs .is-active { background:var(--card); border-color:var(--input); box-shadow:var(--input-shadow); color:var(--foreground); }
 .app-context { padding:16px 24px 12px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
 .app-eyebrow { font-size:10px; letter-spacing:.6px; color:var(--muted-foreground); font-weight:500; }

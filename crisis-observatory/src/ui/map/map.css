@@ -159,28 +159,3 @@
 .run-legend .swatch.water-real { height:9px; background:color-mix(in srgb,var(--info) 30%,transparent); }
 .run-legend .swatch.cut-unknown { border-top:2px dashed var(--muted-foreground); }
 .run-legend .swatch.scene { width:9px; height:9px; border-radius:50%; border:2px dashed var(--destructive); }
-
-/* Sites with people inside: grey = nothing coming yet, amber = not warned, blue = getting people out, green = everyone safe, red = the water caught them. */
-.run-site { display:flex; flex-direction:column; gap:1px; padding:4px 7px; border-radius:var(--radius-md); border:1px solid var(--border); border-left:3px solid var(--site, var(--muted-foreground)); background:var(--popover); box-shadow:var(--dropdown-shadow); white-space:nowrap; pointer-events:auto; }
-.run-site > strong { font-size:10px; font-weight:600; }
-.run-site > em { font:10px var(--font-mono); font-style:normal; color:var(--site, var(--muted-foreground)); }
-.run-site > i { font:9px var(--font-mono); font-style:normal; color:var(--muted-foreground); }
-.run-site[data-state="unwarned"] { --site:#d97706; }
-.run-site[data-state="moving"] { --site:#2563eb; }
-.run-site[data-state="clear"] { --site:#16a34a; opacity:.75; }
-.run-site[data-state="caught"] { --site:#dc2626; }
-
-/* A unit the coordinator is holding in reserve, while one of its decisions is being read. */
-.is-held { outline:2px dashed var(--info); outline-offset:3px; border-radius:50%; }
-.map-explain-legend { position:absolute; left:12px; bottom:12px; z-index:2; display:flex; flex-direction:column; gap:3px; padding:8px 10px; font-size:11px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--popover); box-shadow:var(--dropdown-shadow); }
-.map-explain-legend span { display:flex; align-items:center; gap:7px; }
-.map-explain-legend i { width:22px; height:0; border-top:3px solid var(--foreground); }
-.map-explain-legend i.own { border-top-color:var(--info); }
-.map-explain-legend i.rules { border-top:2px dotted var(--muted-foreground); }
-.map-explain-legend i.water { border-top:2px dashed var(--info); }
-
-/* A lead from the citizen channel: a speech-bubble pin, green once a crew confirmed it, red if nobody was there. */
-.run-lead { font:600 10px var(--font-mono); padding:2px 6px; border-radius:8px 8px 8px 2px; background:var(--info); color:#fff; box-shadow:var(--dropdown-shadow); pointer-events:auto; }
-.run-lead[data-tone="good"] { background:#16a34a; }
-.run-lead[data-tone="bad"] { background:var(--destructive); }
-.run-lead.is-focus { outline:3px solid color-mix(in srgb,var(--info) 40%,transparent); transform:scale(1.25); }

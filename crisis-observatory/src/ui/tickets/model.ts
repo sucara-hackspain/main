@@ -53,6 +53,11 @@ function entrySource(e: CaseEntry) {
   return `Según el aviso ${e.from}`;
 }
 
+/** The 112 triage agent's reading of an incident: a floor under the protocol's priority until a crew is there. */
+export type Triage112 = { priority: number; reasoning: string; tick: number; from: string };
+export const triageOf = (i: IncidentFrame): Triage112 | null =>
+  (i as { triaged?: Triage112 | null }).triaged ?? null;
+
 /** The engine's own case file, as steps: nothing here is inferred by the UI. */
 export function caseSteps(incident: IncidentFrame, seconds: number): TicketStep[] {
   const steps: TicketStep[] = [];
@@ -103,7 +108,11 @@ export function buildTickets(records: TickRecord[], seconds: number): Ticket[] {
         ticket.steps.push({ id: `${incident.id}:opened`, tick: incident.openedTick,
           title: "Incidencia abierta · triage inicial", source: "Centro de coordinación", kind: "update" });
       }
-      ticket.incident = incident;
+      // On a night with hundreds of incidents the engine sends the case file only in the frames where the incident
+      // changed: the rest carry its headline, and the file is the one from when it last moved.
+      const file = ticket.incident;
+      ticket.incident = incident.timeline?.length === 0 && file.timeline?.length
+        ? { ...incident, timeline: file.timeline, history: file.history, foci: file.foci } : incident;
       ticket.lastSeenTick = record.tick;
       ticket.calls = incident.callIds.flatMap((id) => calls.has(id) ? [calls.get(id)!] : []);
       ticket.title = incident.mechanism ? sceneLabel(incident.mechanism.value) : "Incidencia pendiente de valorar";

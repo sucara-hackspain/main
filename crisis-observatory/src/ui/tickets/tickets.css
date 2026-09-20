@@ -56,7 +56,6 @@
 .ticket-detail-top { display:flex; align-items:center; justify-content:space-between; padding:20px; }
 .ticket-detail-top > span { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:500; }
 .ticket-detail-top button { display:grid; place-items:center; width:26px; height:26px; border-radius:5px; }
-.ticket-detail-controls { display:flex; align-items:center; gap:4px; }
 .ticket-detail .run-picker { padding:0 20px 16px; border-bottom:1px solid var(--border); }
 .ticket-detail-body { flex:1; min-height:0; overflow-y:auto; scrollbar-width:thin; }
 .ticket-summary { padding:23px 22px 20px; }

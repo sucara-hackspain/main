@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { SCALE_ID, createScaleRun } from "./operations/demo";
 import {
   assertEngineRecords,
   type GraphData,
@@ -61,17 +60,6 @@ export function useRun(id: string) {
       mapName = "";
     async function poll() {
       try {
-        if (id === SCALE_ID) {
-          const next = await json<GraphData>("/api/graph/valencia", abort.signal);
-          if (!next.nodes?.length || !next.edges?.length) throw new Error("El callejero no está disponible para el escenario de escala.");
-          if (abort.signal.aborted) return;
-          const demo = createScaleRun(next);
-          setGraph(next);
-          setMeta(demo.meta);
-          setTicks(demo.records);
-          setError("");
-          return;
-        }
         const data = await json<{ meta: RunMeta; ticks: TickRecord[] }>(
           `/api/runs/${encodeURIComponent(id)}?from=${loaded}`,
           abort.signal,

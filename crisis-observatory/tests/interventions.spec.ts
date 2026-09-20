@@ -39,7 +39,7 @@ async function decisions(page: Page) {
   await page.getByText(/^Historial de decisiones/).click();
   return page.locator(".decision-history");
 }
-async function open(page: Page, index: number, path = "/?iteracion=2") {
+async function open(page: Page, index: number, path = "/") {
   await page.goto(path);
   await expect(
     page.getByText(`${records.length} registros recibidos`, { exact: true }),
@@ -210,7 +210,7 @@ test("a supervision request takes over the page the same way, in amber", async (
     i === quiet ? { ...r, decision: { source: "fallback" as const, error: "claude timed out" } } : r,
   );
   await serve(page, [{ meta: { ...run.meta, id: "fallback-run" }, records: ticks }]);
-  await page.goto("/?iteracion=2");
+  await page.goto("/");
   await expect(history(page)).toHaveAttribute("max", String(ticks.length - 1));
   await history(page).fill(String(quiet + 1));
   await expect(room(page)).toContainText("Supervisión requerida");
@@ -237,7 +237,7 @@ test("?iteracion=1 keeps the first iteration, a banner above the map", async ({ 
   await open(page, opened + 2, "/?iteracion=1");
   const banner = page.getByRole("region", { name: "Decisión requerida" }).first();
   await expect(banner.getByRole("heading")).toHaveText(title);
-  await expect(banner.getByRole("button", { name: /^Ver C\d+ en operaciones$/ })).toBeVisible();
+  await expect(banner.getByRole("button", { name: /^Ver C\d+ en el mapa$/ })).toBeVisible();
   await expect(banner).not.toHaveClass(/floating/);
   await expect(room(page)).toHaveCount(0);
   await expect(page.locator(".app-workspace")).not.toHaveAttribute("inert");
@@ -250,7 +250,7 @@ test("switching runs with a request pending keeps a single count in the tab titl
     { meta: { ...run.meta, id: "copy-a" }, records },
     { meta: { ...run.meta, id: "copy-b" }, records },
   ]);
-  await page.goto("/?iteracion=2");
+  await page.goto("/");
   await expect(history(page)).toHaveAttribute("max", String(records.length - 1));
   await history(page).fill(String(opened + 2));
   const title = await page.title();
