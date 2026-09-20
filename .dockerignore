@@ -3,7 +3,6 @@
 **/runs
 **/.env
 **/dist
-gabriel/memory
-backend
+observatory/memory
 docs
-gabriel/lab
+observatory/lab
