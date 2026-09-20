@@ -280,6 +280,14 @@ export const COLLECTION: ScenarioSpec[] = [
     config: { ambulances: 22, fireUnits: 10, rescueUnits: 8, helicopters: 3, drones: 6, hospitals: 8, hospitalCapacity: 40, outboundLines: 8 },
   },
 
+  // Its sister night, for the demo: the same scale from other fronts, an earlier blackout and one crossing less.
+  {
+    id: "X2", family: "X · 29 de octubre", split: "test", title: "Sant Isidre y La Torre: apagón, un puente caído y 12 centros en el camino", seed: 2911,
+    floods: [SANT_ISIDRE, LA_TORRE], floodTicks: [16, 30], sites: 12, blackoutTick: 20, bridges: [30], buried: 0.6, volume: 5, intensity: 8,
+    eventTicks: 90, ticks: 150, dana: { pSilent: 0.3, pSilentFlood: 0.45, pSilentInWater: 0.8 },
+    config: { ambulances: 22, fireUnits: 10, rescueUnits: 8, helicopters: 3, drones: 6, hospitals: 8, hospitalCapacity: 40, outboundLines: 8 },
+  },
+
   { id: "E1", family: "E · Dos focos y hospitales saturados", split: "test", title: "La Torre y Natzaret a la vez", seed: 501, floods: [LA_TORRE, NATZARET], config: SATURATED },
   { id: "E2", family: "E · Dos focos y hospitales saturados", split: "test", title: "Sant Isidre y La Punta a la vez", seed: 502, floods: [SANT_ISIDRE, LA_PUNTA], config: SATURATED },
 ];
