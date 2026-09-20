@@ -142,8 +142,8 @@ export function DecisionReceipt({
       <span>
         <strong>Decisión registrada · {label}</strong>
         <small>
-          El motor todavía no recibe órdenes del operador: la ejecución sigue
-          con el plan del sistema.
+          La sesión en vivo estaba esperando: la orden se da en el motor y la
+          noche continúa.
         </small>
       </span>
       <button

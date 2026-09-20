@@ -13,6 +13,7 @@ observatory/memory/*.db
 observatory/memory/*.db-*
 observatory/lab/status.json
 observatory/lab/loop.log
+observatory/lab/*.log
 observatory/lab/*/status.json
 observatory/lab/*/loop.log
 observatory/lab/*/ab.log

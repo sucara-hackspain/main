@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "data:local": "node --import tsx server/generateLocalRun.ts",
     "sim": "tsx src/cli.ts",
+    "live": "tsx --env-file-if-exists=.env src/live.ts",
     "run-sim": "tsx --env-file-if-exists=.env src/run.ts",
     "dream": "tsx --env-file-if-exists=.env src/dream.ts",
     "viewer": "vite viewer",

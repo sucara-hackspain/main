@@ -56,15 +56,33 @@ npm run run-sim -- --coordinator claude      # el agente decide con el CLI de Cl
 
 El agente decide con una doctrina que aprende de sus propias noches (`observatory/memory/`), y cita las reglas que sigue en cada orden. `npm run lab` entrena esa doctrina sobre noches congeladas; `docs/engine.md` lo explica entero.
 
+## Modo en vivo: la demo
+
+Una noche jugándose en directo, con una persona al mando. Dos procesos, en dos terminales, desde `observatory/`:
+
+```sh
+npm run dev      # el Control Center
+npm run live     # la sesión en vivo y el webhook del 112 (:8112 llamadas, :8113 control, solo local)
+```
+
+En el Control Center, **Modo en vivo** → noche, quién coordina (el agente de HappyRobot o las reglas) y ritmo → **Empezar sesión en vivo**. Solo puede haber una sesión a la vez.
+
+- **El operador aprueba.** Cuando una política de escalado en vigor salta, la noche se para hasta que decides; tu orden se ejecuta en el motor. El catálogo se edita en la pestaña **Políticas de escalado** y rige desde la siguiente sesión.
+- **Llamadas reales al 112.** El workflow de voz de HappyRobot publica cada llamada en `/phone` al colgar (en local, a través de un túnel al 8112). La sesión se para y la llamada toma la pantalla: dónde es, qué dijo la persona y qué sacó el agente de voz. Entra en la noche cuando le das entrada.
+- **Ensayar sin telefonear.** En el panel de Modo en vivo: *Ver cómo se ve una llamada* (sin sesión) o *Simular una llamada ahora* (con la sesión en marcha, por el mismo camino que una real).
+
+Las grabaciones y cualquier otra ejecución solo se miran: no piden nada ni interrumpen.
+
 ## Qué hay dónde
 
 | Directorio | Qué es |
 | --- | --- |
-| `observatory/src/ui/` | El Control Center: mapa, incidencias, sala de decisión. |
+| `observatory/src/ui/` | El Control Center: incidencias, mapa, sala de decisión, políticas de escalado, balance y modo en vivo. |
 | `observatory/src/engine/` | El simulador: mundo, víctimas, agua, llamadas, escalado. Sin dependencias del navegador. |
 | `observatory/src/coordinators/`, `masters/`, `phone/`, `triage/` | Los agentes: quien coordina, quien decide la noche, la línea 112 y el triaje. |
 | `observatory/src/memory/`, `src/lab/` | La doctrina del agente y el laboratorio que la entrena y la mide. |
-| `observatory/server/` | La API de lectura que sirve ejecuciones, callejero y políticas a la UI. |
+| `observatory/src/live.ts` | El modo en vivo: la única sesión en marcha, las aprobaciones del operador y el webhook del 112. |
+| `observatory/server/` | La API que sirve ejecuciones, callejero y políticas a la UI, y el paso hacia el modo en vivo. |
 | `observatory/data/`, `lab/`, `policies/`, `memory/`, `runs/` | Callejero, noches congeladas, catálogo de escalado, memoria y grabaciones. |
 | `observatory/viewer/` | Visor del motor, aparte del Control Center. |
 | `docs/` | `engine.md` (el simulador a fondo) e imágenes. |

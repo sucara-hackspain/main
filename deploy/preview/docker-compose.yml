@@ -8,7 +8,8 @@ services:
     build: { context: ../.., dockerfile: deploy/preview/Dockerfile }
     image: hackspain-sim:latest
     working_dir: /app/observatory
-    command: ["sh", "-c", "while true; do node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 1200 --tick-ms 2000 --no-dream; sleep 10; done"]
+    # Night after night; before each one, only the twelve newest runs are kept (a night is tens of megabytes).
+    command: ["sh", "-c", "while true; do ls -td runs/*/ 2>/dev/null | tail -n +13 | xargs -r rm -rf; node_modules/.bin/tsx --env-file=.env src/run.ts --coordinator happyrobot --master happyrobot --desk happyrobot --phone --phone-port 8112 --ticks 180 --tick-ms 2000 --no-dream; sleep 10; done"]
     volumes:
       - /opt/hackspain/runs:/app/observatory/runs
       - /opt/hackspain/memory:/app/observatory/memory
@@ -17,13 +18,19 @@ services:
     restart: unless-stopped
     labels:
       caddy: hackspain.eighteen.sh
-      caddy.1_handle: /phone*
+      # The two webhooks of the voice workflows, open; everything else goes to the viewer, behind its password.
+      caddy.@hooks.path: /phone* /followup*
+      caddy.1_handle: "@hooks"
       caddy.1_handle.reverse_proxy: "{{upstreams 8112}}"
   ui:
     image: hackspain-sim:latest
     depends_on: [engine]
     working_dir: /app/observatory
     command: ["node_modules/.bin/vite", "preview", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]
+    environment:
+      # Set in deploy/preview/.env on the host: the viewer then asks for it (user CONTROL_CENTER_USER, default hackspain).
+      CONTROL_CENTER_PASSWORD: ${CONTROL_CENTER_PASSWORD:-}
+      CONTROL_CENTER_USER: ${CONTROL_CENTER_USER:-hackspain}
     volumes:
       - /opt/hackspain/runs:/app/observatory/runs:ro
     networks: [previews]
