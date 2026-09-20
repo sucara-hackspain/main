@@ -25,7 +25,7 @@ export interface LiveState {
   last: { id: string; endedAt: string; dead: number; victims: number; stopped: boolean; error: string | null } | null;
   nights: { id: string; title: string; family: string; ticks: number; victims: number; read: boolean }[];
   agent: boolean;
-  phone: { port: number; line: boolean; waiting: number; calls: { at: string; street: string | null; text: string; via: string; session: string | null }[] };
+  phone: { port: number; line: boolean; waiting: number; calls: { at: string; street: string | null; text: string; via: string; session: string | null; call: PhoneCall; where: [number, number] | null; entered: boolean }[] };
 }
 
 const OFF: Omit<LiveState, "error"> = { off: true, live: null, last: null, nights: [], agent: false, phone: { port: 8112, line: false, waiting: 0, calls: [] } };

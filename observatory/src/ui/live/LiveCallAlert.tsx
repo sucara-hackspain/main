@@ -45,7 +45,7 @@ function Locator({ at, graph, record }: { at: [number, number]; graph: GraphData
   );
 }
 
-export default function LiveCallAlert({ live, calls, graph, record, onRing, onClosePreview }: { live: Live; calls: Ringing[]; graph: GraphData | null; record: TickRecord | null; onRing: () => void; onClosePreview: () => void }) {
+export default function LiveCallAlert({ live, calls, graph, record, onRing, onClosePreview, onDismiss }: { live: Live; calls: Ringing[]; graph: GraphData | null; record: TickRecord | null; onRing: () => void; onClosePreview: () => void; onDismiss?: (at: string) => void }) {
   const rung = useRef(new Set<string>());
   const first = useRef<HTMLButtonElement>(null);
   const [, beat] = useState(0);
@@ -62,7 +62,9 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing, onCl
   if (!calls.length) return null;
   const ringing = calls[0], call = ringing.call;
   const preview = ringing.id === "preview", rehearsal = ringing.via === "simulacro";
-  const answer = (accept: boolean) => (preview ? onClosePreview() : void live.decide({ id: ringing.id, label: accept ? "Dar entrada a la llamada" : "Descartar la llamada", accept }));
+  // The night was not stopped on it: it already went in, and this only tells the operator so.
+  const entered = ringing.id.startsWith("entered:");
+  const answer = (accept: boolean) => (preview ? onClosePreview() : entered ? onDismiss?.(ringing.since) : void live.decide({ id: ringing.id, label: accept ? "Dar entrada a la llamada" : "Descartar la llamada", accept }));
   const waited = ringing.since ? Math.max(0, Math.round((Date.now() - Date.parse(ringing.since)) / 1000)) : 18;
   const said = call.text.replace(/^Llamada real al 112:\s*/, "").replace(/^«|»$/g, "");
   const free = (record?.frame.units ?? []).filter((u) => u.mission === "idle" && !u.victimId && !u.broken && !u.stranded).length;
@@ -70,8 +72,8 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing, onCl
     { icon: UserRound, label: "Una persona llama al 112", done: true },
     { icon: Bot, label: "La atiende el agente de voz de HappyRobot", done: true },
     { icon: Webhook, label: "Al colgar, la ficha llega por webhook", done: true },
-    { icon: Pause, label: "La sesión se para y te avisa", now: true },
-    { icon: Radio, label: "El coordinador la recibe y decide", done: false },
+    entered ? { icon: Webhook, label: "Entra en la noche sin parar la sesión", done: true } : { icon: Pause, label: "La sesión se para y te avisa", now: true },
+    { icon: Radio, label: "El coordinador la recibe y decide", done: false, now: entered },
   ];
   return (
     <div className="call-room-backdrop">
@@ -80,7 +82,9 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing, onCl
           <span className="call-room-badge"><PhoneIncoming size={15} />LLAMADA REAL AL 112</span>
           {(preview || rehearsal) && <span className="call-room-mock">{preview ? "VISTA PREVIA · no hay ninguna sesión parada" : "SIMULACRO · la sesión sí está parada"}</span>}
           <strong id="call-room-title">{call.street ?? "Calle sin identificar"}</strong>
-          <span className="call-room-paused"><Pause size={13} />Sesión en pausa · {Math.floor(waited / 60)}:{String(waited % 60).padStart(2, "0")} esperando</span>
+          {entered
+            ? <span className="call-room-paused"><PhoneIncoming size={13} />Ha entrado en la noche hace {Math.floor(waited / 60)}:{String(waited % 60).padStart(2, "0")}</span>
+            : <span className="call-room-paused"><Pause size={13} />Sesión en pausa · {Math.floor(waited / 60)}:{String(waited % 60).padStart(2, "0")} esperando</span>}
         </header>
         <ol className="call-room-steps" aria-label="Recorrido de la llamada">
           {steps.map((s, n) => <li key={n} className={s.now ? "is-now" : s.done ? "is-done" : ""}><s.icon size={14} /><span>{s.label}</span>{n < steps.length - 1 && <ArrowRight size={12} className="call-room-arrow" />}</li>)}
@@ -105,11 +109,13 @@ export default function LiveCallAlert({ live, calls, graph, record, onRing, onCl
               <div data-alert={call.bleeding === "yes"}><dt>Sangra</dt><dd>{ANSWER[call.bleeding]}</dd></div>
               <div data-alert={call.trapped === "yes"}><dt>Atrapada</dt><dd>{ANSWER[call.trapped]}</dd></div>
             </dl>
-            <h3>Qué pasa si le das entrada</h3>
-            <p className="call-room-next">La llamada entra en la noche como un aviso más: en el siguiente registro el coordinador la recibe, abre una incidencia en ese punto y decide qué unidad manda. Si la descartas, la noche sigue como si no hubiera sonado.</p>
+            <h3>{entered ? "Qué está pasando" : "Qué pasa si le das entrada"}</h3>
+            <p className="call-room-next">{entered
+              ? "Ya ha entrado en la noche como un aviso más: en el siguiente registro el coordinador la recibe, abre una incidencia en ese punto y decide qué unidad manda. Si la persona dio su número y el caso no es grave, se la llamará de vuelta diez registros después."
+              : "La llamada entra en la noche como un aviso más: en el siguiente registro el coordinador la recibe, abre una incidencia en ese punto y decide qué unidad manda. Si la descartas, la noche sigue como si no hubiera sonado."}</p>
             <div className="call-room-actions">
-              <button ref={first} className="is-primary" onClick={() => answer(true)}><PhoneIncoming size={15} />{preview ? "Cerrar la vista previa" : "Dar entrada y reanudar"}</button>
-              {!preview && <button onClick={() => answer(false)}><PhoneOff size={14} />Descartar</button>}
+              <button ref={first} className="is-primary" onClick={() => answer(true)}><PhoneIncoming size={15} />{preview ? "Cerrar la vista previa" : entered ? "Entendido" : "Dar entrada y reanudar"}</button>
+              {!preview && !entered && <button onClick={() => answer(false)}><PhoneOff size={14} />Descartar</button>}
               {!preview && <button className="is-quiet" title="Terminar la sesión en vivo" onClick={() => void live.stop()}><Square size={12} />Parar la sesión</button>}
             </div>
             {calls.length > 1 && <p className="call-room-more">Hay {calls.length - 1} {calls.length === 2 ? "llamada más" : "llamadas más"} esperando detrás de esta.</p>}

@@ -141,10 +141,15 @@ function RunSession({
   const awaited = useMemo(() => new Set((liveSession?.awaiting ?? []).map((r) => r.id)), [liveSession]);
   // A real call stops the live session whatever is on screen, so it is shown whatever run is being looked at.
   const [previewCall, setPreviewCall] = useState(false);
+  const [dismissedCalls, setDismissedCalls] = useState<Set<string>>(() => new Set());
   const ringing = useMemo(() => {
     const real = (live.state?.live?.awaiting ?? []).flatMap((a) => (a.type === "call" ? [a] : []));
-    return real.length || !previewCall ? real : [SAMPLE_CALL];
-  }, [live.state, previewCall]);
+    if (real.length) return real;
+    // With approvals off a real call goes straight into the night: it is still shown, as news, until the operator has seen it.
+    const entered = (live.state?.phone.calls ?? []).filter((c) => c.entered && c.session === id && !dismissedCalls.has(c.at) && Date.now() - Date.parse(c.at) < 10 * 60_000);
+    if (entered.length) return entered.map((c) => ({ type: "call" as const, id: `entered:${c.at}`, policyId: "112" as const, title: `Llamada real al 112${c.street ? ` · ${c.street}` : ""}`, incidentId: null, since: c.at, street: c.street, text: c.text, via: c.via, call: c.call, at: c.where }));
+    return previewCall ? [SAMPLE_CALL] : [];
+  }, [live.state, previewCall, id, dismissedCalls]);
   const pending = useMemo(() => (awaited.size ? interventions.pending.filter((p) => awaited.has(p.item.id)) : NO_PENDING), [interventions.pending, awaited]);
   const sound = useAlertSound();
   const { chime } = sound;
@@ -577,7 +582,7 @@ function RunSession({
           </div>
         </div>
       </section>
-      <LiveCallAlert live={live} calls={ringing} graph={graph} record={liveSession ? (ticks.at(-1) ?? null) : null} onRing={sound.chime} onClosePreview={() => setPreviewCall(false)} />
+      <LiveCallAlert live={live} calls={ringing} graph={graph} record={liveSession ? (ticks.at(-1) ?? null) : null} onRing={sound.chime} onClosePreview={() => setPreviewCall(false)} onDismiss={(at) => setDismissedCalls((prev) => new Set(prev).add(at))} />
       {view !== "policies" && <div className="app-sidebar-slot" inert={blocked}>
         {view === "tickets" ? <TicketDetail ticket={selectedTicket} seconds={seconds} tick={current?.tick ?? 0}
           onLocate={locateTicket} onClose={() => setTicketId(null)} runs={runs} runId={id} onRun={onRun} records={ticks.length} /> : <SituationSidebar

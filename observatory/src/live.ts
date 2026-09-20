@@ -55,7 +55,7 @@ type Awaited =
   | { type: "call"; id: string; policyId: "112"; title: string; incidentId: null; since: string; call: PhoneCall; via: string };
 let live: Live | null = null;
 let last: { id: string; endedAt: string; dead: number; victims: number; stopped: boolean; error: string | null } | null = null;
-const calls: { at: string; street: string | null; text: string; via: string; session: string | null }[] = [];
+const calls: { at: string; street: string | null; text: string; via: string; session: string | null; call: PhoneCall; where: [number, number] | null; entered: boolean }[] = [];
 let waiting: { call: PhoneCall; at: number }[] = [];
 const heard = new Set<string>();
 
@@ -75,7 +75,8 @@ function takeCall(call: PhoneCall, via: string, again = false) {
   const key = `${call.street}|${call.text}`;
   if (heard.has(key) && !again) return;
   heard.add(key);
-  calls.unshift({ at: new Date().toISOString(), street: call.street, text: call.text, via, session: live?.id ?? null });
+  // `entered`: it went straight into the night (no approvals), so the page shows it as news rather than as a request.
+  calls.unshift({ at: new Date().toISOString(), street: call.street, text: call.text, via, session: live?.id ?? null, call, where: whereIs(call), entered: Boolean(live?.sim && !live.approvals) });
   calls.splice(30);
   if (live?.sim && live.approvals) {
     // A real person has just phoned: the night stops until the operator has looked at the call.
