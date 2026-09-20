@@ -2,11 +2,11 @@
 
 **HackSpain 2026 · Track HappyRobot · DANA de Valencia**
 
-Un entorno de simulación para poner a prueba agentes que reciben avisos, priorizan emergencias y coordinan recursos con información incompleta. Nuestro objetivo: **reducir el número de fallecidos en una catástrofe**.
+SUCARA combina un simulador de catástrofes, un agente coordinador de recursos y un sistema de atención telefónica con HappyRobot. Recibe avisos, prioriza emergencias y adapta la respuesta a medida que llega nueva información. Nuestro objetivo: **reducir el número de fallecidos en una catástrofe**.
 
-## 1. El problema: cada llamada puede cambiar una decisión
+## El problema
 
-En la presentación partimos de un dato de la DANA de Valencia: **40.000 llamadas sin atender en 48 horas**. Cuando la atención se satura, también se pierde información sobre quién necesita ayuda, dónde está y cómo está evolucionando su situación.
+Durante la DANA de Valencia quedaron **40.000 llamadas sin atender en 48 horas**. Cuando la atención se satura, también se pierde información sobre quién necesita ayuda, dónde está y cómo está evolucionando su situación.
 
 ![Noticia sobre las más de 40.000 llamadas que el 112 dejó sin atender durante la DANA de Valencia.](docs/readme-happyrobot/112-valencia.png)
 
@@ -14,7 +14,7 @@ En la presentación partimos de un dato de la DANA de Valencia: **40.000 llamada
 
 Una incidencia leve puede empeorar mientras espera. Una ambulancia puede encontrarse una calle cortada. Un barrio puede quedar aislado sin que nadie consiga avisar. Coordinar la respuesta exige actualizar continuamente lo que sabemos.
 
-## 2. La propuesta: un coordinador al que podemos poner a prueba
+## Simulación con información parcial
 
 Construimos una simulación sobre el callejero real de Valencia en la que un **agente coordinador** dispone de herramientas para asignar recursos y ejecutar planes: enviar ambulancias, movilizar bomberos, ordenar rescates o explorar una zona con drones.
 
@@ -34,13 +34,13 @@ flowchart LR
     F --> G["Panel de control y evaluación"]
 ```
 
-## 3. El experimento: qué hace que el agente decida mejor
+## Qué aprendimos al evaluar al agente
 
 Creamos un **benchmark de escenarios simulados** para comparar estrategias y distintas heurísticas de razonamiento bajo información parcial, con el número de fallecidos como criterio principal.
 
-La observación del equipo durante el hackathon fue que añadir muchas reglas no aportaba una mejora clara frente al comportamiento del agente con pocas instrucciones. **Lo que más marcaba la diferencia era la información disponible para decidir.**
+En nuestras pruebas, añadir muchas reglas no aportaba una mejora clara frente al comportamiento del agente con pocas instrucciones. **Lo que más marcaba la diferencia era la información disponible para decidir.**
 
-Ese aprendizaje orientó el proyecto hacia ampliar la capacidad de observar y escuchar:
+Por eso ampliamos las fuentes de información y la capacidad de atender avisos:
 
 | Fuente | Qué aporta |
 | --- | --- |
@@ -49,7 +49,7 @@ Ese aprendizaje orientó el proyecto hacia ampliar la capacidad de observar y es
 | Más capacidad de recepción | Incorporar más emergencias al sistema de atención telefónica. |
 | Llamadas de seguimiento | Actualizar incidencias pendientes y detectar si su prioridad ha aumentado. |
 
-## 4. HappyRobot: una mesa de atención 112 con agentes
+## Atención 112 con HappyRobot
 
 La integración con HappyRobot automatiza dos tareas del equipo de atención telefónica:
 
@@ -58,15 +58,15 @@ La integración con HappyRobot automatiza dos tareas del equipo de atención tel
 
 Un **agente de triaje** clasifica las incidencias por prioridad, mientras la **orquestación** coordina la ejecución de los distintos agentes. Así, la información recogida en una llamada puede modificar la siguiente decisión de despliegue.
 
-## 5. La demo: ver qué ocurre y qué sabe el agente
+## Control Center
 
 El **Control Center** permite seguir una simulación o reproducir una ejecución guardada: consultar el mapa, revisar incidencias, ver unidades y hospitales, y recorrer la cronología de avisos y decisiones.
 
-La demo conecta tres piezas: **simulación de la catástrofe, coordinación de recursos y atención telefónica con HappyRobot**. El panel permite inspeccionar cómo se comporta el sistema y dónde necesita intervención humana.
+El panel reúne la información de la simulación, los avisos recibidos y las decisiones del coordinador para inspeccionar cómo se comporta el sistema y dónde necesita intervención humana.
 
 El proyecto es un prototipo de hackathon evaluado en simulación. Las decisiones manuales del operador se registran en la interfaz; su envío al motor está pendiente de integración.
 
-## Guía rápida para levantar el repositorio
+## Cómo levantar el proyecto
 
 ### Demo local sin claves de API
 
