@@ -18,7 +18,9 @@ services:
     restart: unless-stopped
     labels:
       caddy: hackspain.eighteen.sh
-      caddy.1_handle: /phone*
+      # The two webhooks of the voice workflows, open; everything else goes to the viewer, behind its password.
+      caddy.@hooks.path: /phone* /followup*
+      caddy.1_handle: "@hooks"
       caddy.1_handle.reverse_proxy: "{{upstreams 8112}}"
   ui:
     image: hackspain-sim:latest
