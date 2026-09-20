@@ -1,10 +1,12 @@
-# SUCARA · ¿Puede una IA coordinar la respuesta a una catástrofe?
+# SUCARA · Comprender más información para decidir mejor
 
 **HackSpain 2026 · Track HappyRobot · DANA de Valencia**
 
-SUCARA combina un simulador de catástrofes, un agente coordinador de recursos y un sistema de atención telefónica con HappyRobot. Recibe avisos, prioriza emergencias y adapta la respuesta a medida que llega nueva información. Nuestro objetivo: **reducir el número de fallecidos en una catástrofe**.
+SUCARA es un sistema de agentes de IA que **procesa grandes volúmenes de información en paralelo y con rapidez para tomar mejores decisiones durante una emergencia**. Reúne llamadas, mensajes ciudadanos e informes del terreno, comprende qué está ocurriendo y utiliza esa información para priorizar incidencias y coordinar recursos.
 
-## El problema
+Con HappyRobot, ampliamos la capacidad de recibir avisos y hacer seguimiento de las personas afectadas. Cada actualización ayuda a construir una visión más completa de la situación y a decidir dónde hace más falta actuar. Nuestro objetivo: **reducir el número de fallecidos en una catástrofe**.
+
+## Cuando la información supera la capacidad de atenderla
 
 Durante la DANA de Valencia quedaron **40.000 llamadas sin atender en 48 horas**. Cuando la atención se satura, también se pierde información sobre quién necesita ayuda, dónde está y cómo está evolucionando su situación.
 
@@ -12,57 +14,58 @@ Durante la DANA de Valencia quedaron **40.000 llamadas sin atender en 48 horas**
 
 <sub>elDiario.es · Recorte aportado por el equipo.</sub>
 
-Una incidencia leve puede empeorar mientras espera. Una ambulancia puede encontrarse una calle cortada. Un barrio puede quedar aislado sin que nadie consiga avisar. Coordinar la respuesta exige actualizar continuamente lo que sabemos.
+En una catástrofe llegan muchos avisos a la vez, por canales distintos y con información incompleta. Atender cada llamada, leer cada mensaje y volver a contactar con cada persona exige tiempo. Mientras tanto, una incidencia leve puede empeorar, una calle puede quedar cortada o un barrio puede perder la comunicación.
 
-## Simulación con información parcial
+**La capacidad de comprender lo que ocurre condiciona la calidad de la respuesta.** Cuanta más información relevante podemos procesar y mantener actualizada, mejor podemos decidir a quién ayudar primero y qué recursos enviar.
 
-Construimos una simulación sobre el callejero real de Valencia en la que un **agente coordinador** dispone de herramientas para asignar recursos y ejecutar planes: enviar ambulancias, movilizar bomberos, ordenar rescates o explorar una zona con drones.
+## De muchos avisos a una situación comprensible
 
-La simulación hace avanzar la emergencia: aparecen incidentes, sube el agua, se cortan calles y las víctimas empeoran si no reciben ayuda. El coordinador debe adaptar sus decisiones a esa evolución.
+SUCARA amplía la capacidad de escuchar y observar a través de varias fuentes:
 
-**El agente no es omnisciente.** Solo conoce lo que le comunican las llamadas, las dotaciones y los sistemas de observación. La realidad completa queda en el simulador y permite evaluar sus decisiones después.
+| Fuente | Qué permite conocer |
+| --- | --- |
+| Llamadas de emergencia | Qué ha ocurrido, dónde se necesita ayuda y en qué estado están las personas afectadas. |
+| Llamadas de seguimiento | Si una incidencia pendiente sigue estable o está empeorando. |
+| Redes sociales y canales ciudadanos | Avisos dispersos que pueden revelar necesidades todavía desconocidas; esta fuente se explora en el laboratorio de evaluación. |
+| Drones e informes de las dotaciones | Qué sucede en zonas sin avisos y qué obstáculos encuentran los equipos sobre el terreno. |
+
+Los agentes convierten esa información en incidencias y prioridades que el coordinador puede utilizar. Relacionar avisos sobre un mismo lugar, interpretar la urgencia de lo que cuentan y reconocer un cambio de situación permite **pasar de datos dispersos a decisiones concretas**.
 
 ```mermaid
 flowchart LR
-    A["Llamadas y seguimiento"] --> B["Atención 112 y triaje"]
-    B --> C["Agente coordinador"]
-    D["Drones e informes de las dotaciones"] --> C
-    C --> E["Asignación de recursos"]
-    E --> F["Simulación de la emergencia"]
-    F --> A
-    F --> D
-    F --> G["Panel de control y evaluación"]
+    A["Llamadas y seguimiento"] --> D["Agentes: procesar y comprender"]
+    B["Mensajes ciudadanos"] --> D
+    C["Drones y dotaciones"] --> D
+    D --> E["Situación actualizada y prioridades"]
+    E --> F["Coordinador: decidir y asignar recursos"]
+    F --> G["Nuevos informes y seguimiento"]
+    G --> D
 ```
 
-## Qué aprendimos al evaluar al agente
+## HappyRobot: recibir, comprender y seguir en contacto
 
-Creamos un **benchmark de escenarios simulados** para comparar estrategias y distintas heurísticas de razonamiento bajo información parcial, con el número de fallecidos como criterio principal.
+Con HappyRobot automatizamos un equipo de atención telefónica de emergencias que trabaja en dos frentes:
 
-En nuestras pruebas, añadir muchas reglas no aportaba una mejora clara frente al comportamiento del agente con pocas instrucciones. **Lo que más marcaba la diferencia era la información disponible para decidir.**
+- **Recepción:** atender avisos, recoger lo ocurrido y convertir cada conversación en información útil para coordinar la respuesta.
+- **Seguimiento proactivo:** volver a llamar a personas con incidencias de menor prioridad para comprobar cómo evolucionan y detectar si necesitan ayuda más urgente.
 
-Por eso ampliamos las fuentes de información y la capacidad de atender avisos:
+La atención con agentes permite realizar estas tareas en paralelo: mantener el seguimiento de los casos abiertos mientras siguen llegando nuevas emergencias. Así, una llamada inicial se convierte en información que podemos actualizar durante la crisis.
 
-| Fuente | Qué aporta |
-| --- | --- |
-| Drones | Explorar zonas de las que no llegan llamadas y detectar agua, obstáculos o posibles emergencias. |
-| Redes sociales y canales ciudadanos | Buscar avisos relevantes entre mensajes dispersos, una vía explorada en el laboratorio de evaluación. |
-| Más capacidad de recepción | Incorporar más emergencias al sistema de atención telefónica. |
-| Llamadas de seguimiento | Actualizar incidencias pendientes y detectar si su prioridad ha aumentado. |
+Un **agente de triaje** clasifica las incidencias por prioridad y un **orquestador** coordina la ejecución de los agentes. La información recogida queda disponible para que el coordinador adapte sus decisiones.
 
-## Atención 112 con HappyRobot
+## Decidir con una visión más completa
 
-La integración con HappyRobot automatiza dos tareas del equipo de atención telefónica:
+El **agente coordinador** utiliza lo que sabe en cada momento para asignar recursos y ejecutar planes: enviar ambulancias, movilizar bomberos, ordenar rescates o explorar una zona con drones. Decide con información parcial y revisa su respuesta cuando recibe nuevos datos.
 
-- **Recepción de emergencias:** recoger lo ocurrido y convertir la conversación en un aviso que pueda utilizar el coordinador.
-- **Seguimiento de incidencias:** volver a contactar con casos de menor prioridad para comprobar si la situación sigue estable o necesita una respuesta más urgente.
+Por ejemplo, una llamada de seguimiento puede revelar que una persona que estaba estable ha empeorado. Ese dato cambia la prioridad de la incidencia y permite reconsiderar la asignación de recursos. Un aviso de una dotación sobre una calle inundada puede cambiar cómo llegar hasta ella.
 
-Un **agente de triaje** clasifica las incidencias por prioridad, mientras la **orquestación** coordina la ejecución de los distintos agentes. Así, la información recogida en una llamada puede modificar la siguiente decisión de despliegue.
+El **Control Center** permite consultar el mapa, las incidencias, las unidades y los hospitales, y recorrer la cronología de avisos y decisiones para entender cómo evoluciona la respuesta.
 
-## Control Center
+## Cómo lo evaluamos
 
-El **Control Center** permite seguir una simulación o reproducir una ejecución guardada: consultar el mapa, revisar incidencias, ver unidades y hospitales, y recorrer la cronología de avisos y decisiones.
+Para poner a prueba el sistema construimos un simulador sobre el callejero de Valencia y un **benchmark de escenarios de catástrofe**. Comparamos estrategias y heurísticas con el número de fallecidos como criterio principal. El coordinador solo recibe lo que le comunican sus fuentes; la realidad completa del escenario permite evaluar después sus decisiones.
 
-El panel reúne la información de la simulación, los avisos recibidos y las decisiones del coordinador para inspeccionar cómo se comporta el sistema y dónde necesita intervención humana.
+En nuestras pruebas, añadir muchas reglas no aportaba una mejora clara frente al agente con pocas instrucciones. **Lo que más marcaba la diferencia era disponer de más información para decidir.** Ese resultado orientó el desarrollo hacia ampliar la recepción de avisos, incorporar nuevas fuentes y mantener el contacto con las personas afectadas.
 
 El proyecto es un prototipo de hackathon evaluado en simulación. Las decisiones manuales del operador se registran en la interfaz; su envío al motor está pendiente de integración.
 
